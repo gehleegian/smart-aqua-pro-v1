@@ -353,6 +353,7 @@ export default function Monitoring() {
   const [selectedAquariumId, setSelectedAquariumId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [systemError, setSystemError] = useState('');
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [userName, setUserName] = useState('');
   const [savingSystemKey, setSavingSystemKey] = useState('');
@@ -361,6 +362,7 @@ export default function Monitoring() {
     try {
       setLoading(true);
       setError('');
+      setSystemError('');
 
       const currentUser = auth.currentUser;
 
@@ -433,6 +435,7 @@ export default function Monitoring() {
     } catch (err) {
       console.error(err);
       setError('Failed to load monitoring data.');
+      setSystemError('');
       setAquariums([]);
       setUsers([]);
       setSelectedOwnerId('');
@@ -528,7 +531,7 @@ export default function Monitoring() {
 
     updates[field] = nextValue;
     setSavingSystemKey(`${selectedAquarium.id}-${field}`);
-    setError('');
+    setSystemError('');
     updateAquariumStatusInState(selectedAquarium.id, updates);
 
     try {
@@ -537,7 +540,7 @@ export default function Monitoring() {
       console.error(err);
       updates[field] = previousValue;
       updateAquariumStatusInState(selectedAquarium.id, updates);
-      setError('Failed to update system status.');
+      setSystemError('Failed to update system status.');
     } finally {
       setSavingSystemKey('');
     }
@@ -1016,6 +1019,12 @@ export default function Monitoring() {
             </h3>
           </CardHeader>
           <CardContent>
+            {systemError && (
+              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {systemError}
+              </div>
+            )}
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
                 <div className="flex items-center gap-3">
