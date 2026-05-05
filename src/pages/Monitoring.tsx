@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Thermometer,
   Droplets,
@@ -11,12 +11,13 @@ import {
   Eye,
   ArrowLeft,
   RefreshCw,
-  MoreVertical,
   Pencil,
   X,
   Clock,
   Sun,
   Wind,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -26,8 +27,13 @@ import {
   getAllAquariums,
   getAquariumsByOwner,
   updateAquarium,
+  updateAquariumManualStatus,
 } from '../services/aquariumService';
-import type { Aquarium, AutomationSettings, FilterMode } from '../types/aquarium';
+import type {
+  Aquarium,
+  AutomationSettings,
+  ManualSystemStatus,
+} from '../types/aquarium';
 import type { UserData, UserRole } from '../types/user';
 import {
   getHealthStatus,
@@ -62,6 +68,19 @@ type MonitoringOwner = {
 };
 
 type SystemField = 'feeder' | 'light' | 'filter';
+type SystemMode = 'manual' | 'automation';
+
+type ManualActionLock = {
+  activeUntil: number;
+  cooldownUntil: number;
+};
+
+type ManualActionDisplay = {
+  status: string;
+  buttonLabel: string;
+  disabled: boolean;
+  tone: 'ready' | 'busy' | 'waiting';
+};
 
 const systemStatusConfig: Record<
   SystemField,
@@ -72,13 +91,20 @@ const systemStatusConfig: Record<
   filter: { activeValue: 'Active', inactiveValue: 'Inactive' },
 };
 
+const manualActionTiming: Record<SystemField, { activeMs: number; cooldownMs: number }> = {
+  feeder: { activeMs: 10000, cooldownMs: 20000 },
+  light: { activeMs: 2000, cooldownMs: 5000 },
+  filter: { activeMs: 3000, cooldownMs: 10000 },
+};
+
 const defaultAutomationSettings: AutomationSettings = {
-  feedingTime: '08:00',
+  enabled: true,
+  feedingTimes: ['08:00'],
   lightOnTime: '06:00',
   lightOffTime: '22:00',
-  filtrationMode: 'Medium',
   filtrationStartTime: '07:00',
   filtrationRuntimeHours: 8,
+  ammoniaThreshold: 0.25,
 };
 
 const getAutomationSettings = (
@@ -86,6 +112,15 @@ const getAutomationSettings = (
 ): AutomationSettings => ({
   ...defaultAutomationSettings,
   ...(aquarium?.automationSettings || {}),
+});
+
+const getManualSystemStatus = (
+  aquarium: Pick<Aquarium, SystemField | 'manualStatus'>
+): ManualSystemStatus => ({
+  feeder: aquarium.feeder,
+  light: aquarium.light,
+  filter: aquarium.filter,
+  ...(aquarium.manualStatus || {}),
 });
 
 const formatAutomationTime = (time: string) => {
@@ -106,6 +141,9 @@ const formatAutomationTime = (time: string) => {
     minute: '2-digit',
   }).format(new Date(2026, 0, 1, hour, minute));
 };
+
+const formatAutomationTimes = (times: string[]) =>
+  times.length > 0 ? times.map(formatAutomationTime).join(', ') : 'No feeding times';
 
 const buildOwnerStats = (ownerAquariums: MonitoringAquarium[]): OwnerStats => {
   const totalTanks = ownerAquariums.length;
@@ -387,6 +425,62 @@ function SystemToggle({
   );
 }
 
+function ManualSystemButton({
+  icon: Icon,
+  title,
+  status,
+  buttonLabel,
+  tone,
+  disabled,
+  iconColor,
+  onClick,
+}: {
+  icon: IconComponent;
+  title: string;
+  status: string;
+  buttonLabel: string;
+  tone: 'ready' | 'busy' | 'waiting';
+  disabled: boolean;
+  iconColor: string;
+  onClick: () => void;
+}) {
+  const statusColor =
+    tone === 'busy'
+      ? 'text-cyan-300'
+      : tone === 'waiting'
+      ? 'text-amber-300'
+      : 'text-slate-400';
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-lg bg-slate-900/70 flex items-center justify-center flex-shrink-0">
+            <Icon className={`w-5 h-5 ${iconColor}`} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{title}</p>
+            <p className={`text-xs mt-1 ${statusColor}`}>{status}</p>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={`mt-4 w-full rounded-lg px-3 py-2 text-center text-sm font-medium transition-all ${
+          disabled
+            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+            : 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg shadow-cyan-600/20'
+        }`}
+      >
+        {buttonLabel}
+      </button>
+    </div>
+  );
+}
+
 export default function Monitoring() {
   const [aquariums, setAquariums] = useState<MonitoringAquarium[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
@@ -398,13 +492,20 @@ export default function Monitoring() {
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [userName, setUserName] = useState('');
   const [savingSystemKey, setSavingSystemKey] = useState('');
-  const [systemMenuOpen, setSystemMenuOpen] = useState(false);
+  const [savingManualKey, setSavingManualKey] = useState('');
+  const [systemMode, setSystemMode] = useState<SystemMode>('manual');
   const [showAutomationModal, setShowAutomationModal] = useState(false);
   const [automationDraft, setAutomationDraft] = useState<AutomationSettings>(
     defaultAutomationSettings
   );
   const [automationError, setAutomationError] = useState('');
   const [savingAutomation, setSavingAutomation] = useState(false);
+  const [savingAutomationEnabled, setSavingAutomationEnabled] = useState(false);
+  const [manualActionLocks, setManualActionLocks] = useState<
+    Record<string, ManualActionLock>
+  >({});
+  const [manualNow, setManualNow] = useState(() => Date.now());
+  const manualTimersRef = useRef<number[]>([]);
 
   const loadMonitoringData = async () => {
     try {
@@ -500,6 +601,24 @@ export default function Monitoring() {
     return () => window.clearTimeout(loadTimer);
   }, []);
 
+  useEffect(() => {
+    const tickTimer = window.setInterval(() => {
+      setManualNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(tickTimer);
+  }, []);
+
+  useEffect(() => {
+    const manualTimers = manualTimersRef.current;
+
+    return () => {
+      for (const timer of manualTimers) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, []);
+
   const ownerCards = useMemo<MonitoringOwner[]>(() => {
     const aquariumsByOwner = new Map<string, MonitoringAquarium[]>();
 
@@ -576,6 +695,25 @@ export default function Monitoring() {
     );
   };
 
+  const updateAquariumManualStatusInState = (
+    aquariumId: string,
+    updates: Partial<ManualSystemStatus>
+  ) => {
+    setAquariums((prev) =>
+      prev.map((aquarium) =>
+        aquarium.id === aquariumId
+          ? {
+              ...aquarium,
+              manualStatus: {
+                ...getManualSystemStatus(aquarium),
+                ...updates,
+              },
+            }
+          : aquarium
+      )
+    );
+  };
+
   const openAutomationEditor = () => {
     if (!selectedAquarium) {
       return;
@@ -583,7 +721,6 @@ export default function Monitoring() {
 
     setAutomationDraft(getAutomationSettings(selectedAquarium));
     setAutomationError('');
-    setSystemMenuOpen(false);
     setShowAutomationModal(true);
   };
 
@@ -594,9 +731,68 @@ export default function Monitoring() {
     setAutomationDraft((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateFeedingTime = (index: number, value: string) => {
+    setAutomationDraft((prev) => ({
+      ...prev,
+      feedingTimes: prev.feedingTimes.map((time, timeIndex) =>
+        timeIndex === index ? value : time
+      ),
+    }));
+  };
+
+  const addFeedingTime = () => {
+    setAutomationDraft((prev) => ({
+      ...prev,
+      feedingTimes: [...prev.feedingTimes, '12:00'],
+    }));
+  };
+
+  const removeFeedingTime = (index: number) => {
+    setAutomationDraft((prev) => ({
+      ...prev,
+      feedingTimes:
+        prev.feedingTimes.length === 1
+          ? prev.feedingTimes
+          : prev.feedingTimes.filter((_, timeIndex) => timeIndex !== index),
+    }));
+  };
+
+  const getManualActionKey = (aquariumId: string, field: SystemField) =>
+    `${aquariumId}-${field}`;
+
+  const setManualActionLock = (
+    aquariumId: string,
+    field: SystemField,
+    startedAt: number
+  ) => {
+    const timing = manualActionTiming[field];
+    const key = getManualActionKey(aquariumId, field);
+
+    setManualNow(startedAt);
+    setManualActionLocks((prev) => ({
+      ...prev,
+      [key]: {
+        activeUntil: startedAt + timing.activeMs,
+        cooldownUntil: startedAt + timing.activeMs + timing.cooldownMs,
+      },
+    }));
+  };
+
+  const clearManualActionLock = (aquariumId: string, field: SystemField) => {
+    const key = getManualActionKey(aquariumId, field);
+
+    setManualActionLocks((prev) => {
+      const next = { ...prev };
+
+      delete next[key];
+
+      return next;
+    });
+  };
+
   const handleSystemToggle = async (field: SystemField) => {
     if (!selectedAquarium) {
-      return;
+      return false;
     }
 
     const statusConfig = systemStatusConfig[field];
@@ -615,13 +811,116 @@ export default function Monitoring() {
 
     try {
       await updateAquarium(selectedAquarium.id, updates);
+      return true;
     } catch (err) {
       console.error(err);
       updates[field] = previousValue;
       updateAquariumStatusInState(selectedAquarium.id, updates);
       setSystemError('Failed to update system status.');
+      return false;
     } finally {
       setSavingSystemKey('');
+    }
+  };
+
+  const handleManualFeeding = async () => {
+    if (!selectedAquarium) {
+      return false;
+    }
+
+    const previousStatus = getManualSystemStatus(selectedAquarium);
+    const aquariumId = selectedAquarium.id;
+
+    setSavingManualKey(`${aquariumId}-feeder`);
+    setSystemError('');
+    updateAquariumManualStatusInState(aquariumId, { feeder: 'Active' });
+
+    try {
+      await updateAquariumManualStatus(aquariumId, { feeder: 'Active' });
+
+      const resetTimer = window.setTimeout(() => {
+        updateAquariumManualStatusInState(aquariumId, { feeder: 'Inactive' });
+        void updateAquariumManualStatus(aquariumId, { feeder: 'Inactive' }).catch(
+          (err) => {
+            console.error(err);
+            setSystemError('Failed to reset feeder after manual feeding.');
+          }
+        );
+      }, manualActionTiming.feeder.activeMs);
+
+      manualTimersRef.current.push(resetTimer);
+      return true;
+    } catch (err) {
+      console.error(err);
+      updateAquariumManualStatusInState(aquariumId, {
+        feeder: previousStatus.feeder,
+      });
+      setSystemError('Failed to start manual feeding.');
+      return false;
+    } finally {
+      setSavingManualKey('');
+    }
+  };
+
+  const handleManualSystemCommand = async (field: Exclude<SystemField, 'feeder'>) => {
+    if (!selectedAquarium) {
+      return false;
+    }
+
+    const aquariumId = selectedAquarium.id;
+    const previousStatus = getManualSystemStatus(selectedAquarium);
+    const statusConfig = systemStatusConfig[field];
+    const currentValue = previousStatus[field];
+    const nextValue =
+      currentValue === statusConfig.activeValue
+        ? statusConfig.inactiveValue
+        : statusConfig.activeValue;
+
+    setSavingManualKey(`${aquariumId}-${field}`);
+    setSystemError('');
+    updateAquariumManualStatusInState(aquariumId, { [field]: nextValue });
+
+    try {
+      await updateAquariumManualStatus(aquariumId, { [field]: nextValue });
+      return true;
+    } catch (err) {
+      console.error(err);
+      updateAquariumManualStatusInState(aquariumId, {
+        [field]: previousStatus[field],
+      });
+      setSystemError('Failed to apply manual command.');
+      return false;
+    } finally {
+      setSavingManualKey('');
+    }
+  };
+
+  const handleManualAction = async (field: SystemField) => {
+    if (!selectedAquarium) {
+      return;
+    }
+
+    const actionKey = getManualActionKey(selectedAquarium.id, field);
+    const existingLock = manualActionLocks[actionKey];
+
+    if (
+      savingManualKey ||
+      (existingLock && existingLock.cooldownUntil > manualNow)
+    ) {
+      return;
+    }
+
+    const startedAt = Date.now();
+
+    setManualActionLock(selectedAquarium.id, field, startedAt);
+
+    const actionSucceeded =
+      field === 'feeder'
+        ? await handleManualFeeding()
+        : await handleManualSystemCommand(field);
+
+    if (!actionSucceeded) {
+      clearManualActionLock(selectedAquarium.id, field);
     }
   };
 
@@ -631,9 +930,13 @@ export default function Monitoring() {
     }
 
     const runtimeHours = Number(automationDraft.filtrationRuntimeHours);
+    const ammoniaThreshold = Number(automationDraft.ammoniaThreshold);
+    const feedingTimes = automationDraft.feedingTimes
+      .map((time) => time.trim())
+      .filter(Boolean);
 
     if (
-      !automationDraft.feedingTime ||
+      feedingTimes.length === 0 ||
       !automationDraft.lightOnTime ||
       !automationDraft.lightOffTime ||
       !automationDraft.filtrationStartTime
@@ -647,9 +950,16 @@ export default function Monitoring() {
       return;
     }
 
+    if (!Number.isFinite(ammoniaThreshold) || ammoniaThreshold < 0 || ammoniaThreshold > 8) {
+      setAutomationError('Ammonia threshold must be between 0 and 8 ppm.');
+      return;
+    }
+
     const nextSettings: AutomationSettings = {
       ...automationDraft,
+      feedingTimes,
       filtrationRuntimeHours: runtimeHours,
+      ammoniaThreshold,
     };
     const previousSettings = selectedAquarium.automationSettings;
 
@@ -668,6 +978,35 @@ export default function Monitoring() {
       setAutomationError('Failed to save automation settings.');
     } finally {
       setSavingAutomation(false);
+    }
+  };
+
+  const handleAutomationEnabledToggle = async () => {
+    if (!selectedAquarium) {
+      return;
+    }
+
+    const previousSettings = selectedAquarium.automationSettings;
+    const currentSettings = getAutomationSettings(selectedAquarium);
+    const nextSettings: AutomationSettings = {
+      ...currentSettings,
+      enabled: !currentSettings.enabled,
+    };
+
+    setSavingAutomationEnabled(true);
+    setSystemError('');
+    updateAquariumAutomationInState(selectedAquarium.id, nextSettings);
+
+    try {
+      await updateAquarium(selectedAquarium.id, {
+        automationSettings: nextSettings,
+      });
+    } catch (err) {
+      console.error(err);
+      updateAquariumAutomationInState(selectedAquarium.id, previousSettings);
+      setSystemError('Failed to update automation mode.');
+    } finally {
+      setSavingAutomationEnabled(false);
     }
   };
 
@@ -941,7 +1280,7 @@ export default function Monitoring() {
                   key={aquarium.id}
                   aquarium={aquarium}
                   onView={(viewedAquarium) => {
-                    setSystemMenuOpen(false);
+                    setSystemMode('manual');
                     setShowAutomationModal(false);
                     setAutomationError('');
                     setSelectedAquariumId(viewedAquarium.id);
@@ -963,6 +1302,84 @@ export default function Monitoring() {
   const levelLabel = getLevelLabel(selectedAquarium.level);
   const qualityLabel = getQualityLabel(selectedAquarium.quality);
   const automationSettings = getAutomationSettings(selectedAquarium);
+  const manualSystemStatus = getManualSystemStatus(selectedAquarium);
+  const automationEnabled = automationSettings.enabled;
+  const getRemainingSeconds = (until: number) =>
+    Math.max(1, Math.ceil((until - manualNow) / 1000));
+  const getManualActionDisplay = (field: SystemField): ManualActionDisplay => {
+    const actionKey = getManualActionKey(selectedAquarium.id, field);
+    const lock = manualActionLocks[actionKey];
+    const savingCurrentField = savingManualKey === actionKey;
+    const savingAnotherField = Boolean(savingManualKey) && !savingCurrentField;
+
+    if (savingCurrentField) {
+      return {
+        status: 'Sending command...',
+        buttonLabel: 'Working...',
+        disabled: true,
+        tone: 'busy',
+      };
+    }
+
+    if (lock && lock.cooldownUntil > manualNow) {
+      if (lock.activeUntil > manualNow) {
+        const seconds = getRemainingSeconds(lock.activeUntil);
+        const status =
+          field === 'feeder'
+            ? `Feeding now (${seconds}s)`
+            : `Applying command (${seconds}s)`;
+
+        return {
+          status,
+          buttonLabel: field === 'feeder' ? 'Feeding...' : 'Applying...',
+          disabled: true,
+          tone: 'busy',
+        };
+      }
+
+      return {
+        status: `Cooling down (${getRemainingSeconds(lock.cooldownUntil)}s)`,
+        buttonLabel: 'Please Wait',
+        disabled: true,
+        tone: 'waiting',
+      };
+    }
+
+    if (field === 'feeder') {
+      return {
+        status:
+          manualSystemStatus.feeder === 'Active'
+            ? 'Feeder is active'
+            : 'Ready for one feeding cycle',
+        buttonLabel: 'Feed Now',
+        disabled: savingAnotherField,
+        tone: 'ready',
+      };
+    }
+
+    if (field === 'light') {
+      return {
+        status: `Manual light is ${manualSystemStatus.light}`,
+        buttonLabel:
+          manualSystemStatus.light === 'On' ? 'Turn Off Light' : 'Turn On Light',
+        disabled: savingAnotherField,
+        tone: 'ready',
+      };
+    }
+
+    return {
+      status: `Manual filter is ${manualSystemStatus.filter}`,
+      buttonLabel:
+        manualSystemStatus.filter === 'Active'
+          ? 'Stop Filtration'
+          : 'Start Filtration',
+      disabled: savingAnotherField,
+      tone: 'ready',
+    };
+  };
+  const manualFeedingAction = getManualActionDisplay('feeder');
+  const manualLightAction = getManualActionDisplay('light');
+  const manualFilterAction = getManualActionDisplay('filter');
 
   return (
     <div className="space-y-6">
@@ -970,7 +1387,7 @@ export default function Monitoring() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              setSystemMenuOpen(false);
+              setSystemMode('manual');
               setShowAutomationModal(false);
               setAutomationError('');
               setSelectedAquariumId('');
@@ -1149,33 +1566,28 @@ export default function Monitoring() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <div className="relative flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                 <Cpu className="w-5 h-5 text-cyan-400" />
                 System Status
               </h3>
 
-              <button
-                type="button"
-                aria-label="Open system status options"
-                onClick={() => setSystemMenuOpen((prev) => !prev)}
-                className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-slate-300 hover:text-white flex items-center justify-center transition-all"
-              >
-                <MoreVertical className="w-5 h-5" />
-              </button>
-
-              {systemMenuOpen && (
-                <div className="absolute right-0 top-11 z-20 w-52 rounded-xl border border-slate-700 bg-slate-900 shadow-xl shadow-black/30 p-2">
+              <div className="inline-flex rounded-lg border border-slate-700 bg-slate-900/70 p-1">
+                {(['manual', 'automation'] as SystemMode[]).map((mode) => (
                   <button
+                    key={mode}
                     type="button"
-                    onClick={openAutomationEditor}
-                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition-all"
+                    onClick={() => setSystemMode(mode)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${
+                      systemMode === mode
+                        ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
                   >
-                    <Pencil className="w-4 h-4 text-cyan-400" />
-                    Edit automation
+                    {mode}
                   </button>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1185,100 +1597,177 @@ export default function Monitoring() {
               </div>
             )}
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <Fish className="w-5 h-5 text-cyan-400" />
-                  <span className="text-sm text-slate-300">Feeder</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-400">
-                    {savingSystemKey === `${selectedAquarium.id}-feeder`
-                      ? 'Saving...'
-                      : selectedAquarium.feeder}
-                  </span>
-                  <SystemToggle
-                    active={selectedAquarium.feeder === 'Active'}
-                    disabled={Boolean(savingSystemKey)}
-                    label="feeder"
-                    onToggle={() => void handleSystemToggle('feeder')}
-                  />
-                </div>
-              </div>
+            {systemMode === 'manual' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <ManualSystemButton
+                  icon={Fish}
+                  title="Manual Feeding"
+                  status={manualFeedingAction.status}
+                  buttonLabel={manualFeedingAction.buttonLabel}
+                  tone={manualFeedingAction.tone}
+                  disabled={manualFeedingAction.disabled}
+                  iconColor="text-cyan-400"
+                  onClick={() => void handleManualAction('feeder')}
+                />
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <Activity className="w-5 h-5 text-yellow-400" />
-                  <span className="text-sm text-slate-300">Light</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-400">
-                    {savingSystemKey === `${selectedAquarium.id}-light`
-                      ? 'Saving...'
-                      : selectedAquarium.light}
-                  </span>
-                  <SystemToggle
-                    active={selectedAquarium.light === 'On'}
-                    disabled={Boolean(savingSystemKey)}
-                    label="light"
-                    onToggle={() => void handleSystemToggle('light')}
-                  />
-                </div>
-              </div>
+                <ManualSystemButton
+                  icon={Activity}
+                  title="Light"
+                  status={manualLightAction.status}
+                  buttonLabel={manualLightAction.buttonLabel}
+                  tone={manualLightAction.tone}
+                  disabled={manualLightAction.disabled}
+                  iconColor="text-yellow-400"
+                  onClick={() => void handleManualAction('light')}
+                />
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <Waves className="w-5 h-5 text-emerald-400" />
-                  <span className="text-sm text-slate-300">Filter</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-400">
-                    {savingSystemKey === `${selectedAquarium.id}-filter`
-                      ? 'Saving...'
-                      : selectedAquarium.filter}
-                  </span>
-                  <SystemToggle
-                    active={selectedAquarium.filter === 'Active'}
-                    disabled={Boolean(savingSystemKey)}
-                    label="filter"
-                    onToggle={() => void handleSystemToggle('filter')}
-                  />
-                </div>
+                <ManualSystemButton
+                  icon={Waves}
+                  title="Filtration"
+                  status={manualFilterAction.status}
+                  buttonLabel={manualFilterAction.buttonLabel}
+                  tone={manualFilterAction.tone}
+                  disabled={manualFilterAction.disabled}
+                  iconColor="text-emerald-400"
+                  onClick={() => void handleManualAction('filter')}
+                />
               </div>
-            </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Automation Mode</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {automationEnabled
+                        ? 'Scheduled controls and sensor triggers are active'
+                        : 'Automation is paused; manual commands still work'}
+                    </p>
+                  </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-              <div className="rounded-lg bg-slate-800/60 p-3">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Clock className="w-4 h-4 text-cyan-400" />
-                  Feeding
-                </div>
-                <p className="text-sm font-medium text-white mt-2">
-                  {formatAutomationTime(automationSettings.feedingTime)}
-                </p>
-              </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+                      <span className="text-xs font-medium text-slate-300">
+                        {savingAutomationEnabled
+                          ? 'Saving...'
+                          : automationEnabled
+                          ? 'On'
+                          : 'Off'}
+                      </span>
+                      <SystemToggle
+                        active={automationEnabled}
+                        disabled={savingAutomationEnabled || savingAutomation}
+                        label="automation mode"
+                        onToggle={() => void handleAutomationEnabledToggle()}
+                      />
+                    </div>
 
-              <div className="rounded-lg bg-slate-800/60 p-3">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Sun className="w-4 h-4 text-yellow-400" />
-                  Light
+                    <button
+                      type="button"
+                      onClick={openAutomationEditor}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Settings
+                    </button>
+                  </div>
                 </div>
-                <p className="text-sm font-medium text-white mt-2">
-                  {formatAutomationTime(automationSettings.lightOnTime)} -{' '}
-                  {formatAutomationTime(automationSettings.lightOffTime)}
-                </p>
-              </div>
 
-              <div className="rounded-lg bg-slate-800/60 p-3">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Wind className="w-4 h-4 text-emerald-400" />
-                  Filtration
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
+                    <div className="flex items-center gap-3">
+                      <Fish className="w-5 h-5 text-cyan-400" />
+                      <span className="text-sm text-slate-300">Feeder</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400">
+                        {savingSystemKey === `${selectedAquarium.id}-feeder`
+                          ? 'Saving...'
+                          : selectedAquarium.feeder}
+                      </span>
+                      <SystemToggle
+                        active={selectedAquarium.feeder === 'Active'}
+                        disabled={Boolean(savingSystemKey) || !automationEnabled}
+                        label="feeder"
+                        onToggle={() => void handleSystemToggle('feeder')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
+                    <div className="flex items-center gap-3">
+                      <Activity className="w-5 h-5 text-yellow-400" />
+                      <span className="text-sm text-slate-300">Light</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400">
+                        {savingSystemKey === `${selectedAquarium.id}-light`
+                          ? 'Saving...'
+                          : selectedAquarium.light}
+                      </span>
+                      <SystemToggle
+                        active={selectedAquarium.light === 'On'}
+                        disabled={Boolean(savingSystemKey) || !automationEnabled}
+                        label="light"
+                        onToggle={() => void handleSystemToggle('light')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
+                    <div className="flex items-center gap-3">
+                      <Waves className="w-5 h-5 text-emerald-400" />
+                      <span className="text-sm text-slate-300">Filter</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400">
+                        {savingSystemKey === `${selectedAquarium.id}-filter`
+                          ? 'Saving...'
+                          : selectedAquarium.filter}
+                      </span>
+                      <SystemToggle
+                        active={selectedAquarium.filter === 'Active'}
+                        disabled={Boolean(savingSystemKey) || !automationEnabled}
+                        label="filter"
+                        onToggle={() => void handleSystemToggle('filter')}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm font-medium text-white mt-2">
-                  {automationSettings.filtrationMode}, {automationSettings.filtrationRuntimeHours}h
-                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+                  <div className="rounded-lg bg-slate-800/60 p-3">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Clock className="w-4 h-4 text-cyan-400" />
+                      Feeding
+                    </div>
+                    <p className="text-sm font-medium text-white mt-2">
+                      {formatAutomationTimes(automationSettings.feedingTimes)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-800/60 p-3">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Sun className="w-4 h-4 text-yellow-400" />
+                      Light
+                    </div>
+                    <p className="text-sm font-medium text-white mt-2">
+                      {formatAutomationTime(automationSettings.lightOnTime)} -{' '}
+                      {formatAutomationTime(automationSettings.lightOffTime)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-800/60 p-3">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Wind className="w-4 h-4 text-emerald-400" />
+                      Filtration
+                    </div>
+                    <p className="text-sm font-medium text-white mt-2">
+                      {automationSettings.filtrationRuntimeHours}h at {automationSettings.ammoniaThreshold} ppm
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1364,22 +1853,49 @@ export default function Monitoring() {
 
             <div className="space-y-5">
               <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Fish className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-sm font-semibold text-white">Feeding Schedule</h3>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Fish className="w-5 h-5 text-cyan-400" />
+                    <h3 className="text-sm font-semibold text-white">Feeding Schedule</h3>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addFeedingTime}
+                    className="w-9 h-9 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white flex items-center justify-center transition-all"
+                    aria-label="Add feeding time"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
 
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Feeding time
-                </label>
-                <input
-                  type="time"
-                  value={automationDraft.feedingTime}
-                  onChange={(event) =>
-                    updateAutomationDraft('feedingTime', event.target.value)
-                  }
-                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
+                <div className="space-y-3">
+                  {automationDraft.feedingTimes.map((feedingTime, index) => (
+                    <div key={`${feedingTime}-${index}`} className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          Feeding time {index + 1}
+                        </label>
+                        <input
+                          type="time"
+                          value={feedingTime}
+                          onChange={(event) => updateFeedingTime(index, event.target.value)}
+                          className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeFeedingTime(index)}
+                        disabled={automationDraft.feedingTimes.length === 1}
+                        className="w-10 h-10 rounded-lg bg-slate-700 hover:bg-red-600 disabled:opacity-50 disabled:hover:bg-slate-700 disabled:cursor-not-allowed text-slate-300 hover:text-white flex items-center justify-center transition-all"
+                        aria-label={`Remove feeding time ${index + 1}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
@@ -1461,22 +1977,22 @@ export default function Monitoring() {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">
-                      Flow mode
+                      Ammonia trigger (ppm)
                     </label>
-                    <select
-                      value={automationDraft.filtrationMode}
+                    <input
+                      type="number"
+                      min="0"
+                      max="8"
+                      step="0.05"
+                      value={automationDraft.ammoniaThreshold}
                       onChange={(event) =>
                         updateAutomationDraft(
-                          'filtrationMode',
-                          event.target.value as FilterMode
+                          'ammoniaThreshold',
+                          Number(event.target.value)
                         )
                       }
                       className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
+                    />
                   </div>
                 </div>
               </div>

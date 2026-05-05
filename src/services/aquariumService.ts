@@ -10,13 +10,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Aquarium, AutomationSettings, FilterMode } from '../types/aquarium';
-
-const filterModes: FilterMode[] = ['Low', 'Medium', 'High'];
-
-function isFilterMode(value: unknown): value is FilterMode {
-  return typeof value === 'string' && filterModes.includes(value as FilterMode);
-}
+import type {
+  Aquarium,
+  AutomationSettings,
+  ManualSystemStatus,
+} from '../types/aquarium';
 
 function readString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value : fallback;
@@ -26,6 +24,20 @@ function readNumber(value: unknown, fallback: number) {
   const numberValue = Number(value);
 
   return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function readStringArray(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const values = value.filter((item): item is string => typeof item === 'string' && Boolean(item));
+
+  return values.length > 0 ? values : fallback;
 }
 
 function mapAutomationSettings(
@@ -38,17 +50,32 @@ function mapAutomationSettings(
   }
 
   const settingsRecord = settings as Record<string, unknown>;
-  const filtrationMode = isFilterMode(settingsRecord.filtrationMode)
-    ? settingsRecord.filtrationMode
-    : 'Medium';
+  const legacyFeedingTime = readString(settingsRecord.feedingTime, '08:00');
 
   return {
-    feedingTime: readString(settingsRecord.feedingTime, '08:00'),
+    enabled: readBoolean(settingsRecord.enabled, true),
+    feedingTimes: readStringArray(settingsRecord.feedingTimes, [legacyFeedingTime]),
     lightOnTime: readString(settingsRecord.lightOnTime, '06:00'),
     lightOffTime: readString(settingsRecord.lightOffTime, '22:00'),
-    filtrationMode,
     filtrationStartTime: readString(settingsRecord.filtrationStartTime, '07:00'),
     filtrationRuntimeHours: readNumber(settingsRecord.filtrationRuntimeHours, 8),
+    ammoniaThreshold: readNumber(settingsRecord.ammoniaThreshold, 0.25),
+  };
+}
+
+function mapManualStatus(data: Record<string, unknown>): ManualSystemStatus | undefined {
+  const status = data.manualStatus;
+
+  if (!status || typeof status !== 'object' || Array.isArray(status)) {
+    return undefined;
+  }
+
+  const statusRecord = status as Record<string, unknown>;
+
+  return {
+    feeder: readString(statusRecord.feeder, 'Inactive'),
+    light: readString(statusRecord.light, 'Off'),
+    filter: readString(statusRecord.filter, 'Inactive'),
   };
 }
 
@@ -74,6 +101,7 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     automationSettings: mapAutomationSettings(data),
+    manualStatus: mapManualStatus(data),
   };
 }
 
@@ -114,6 +142,17 @@ export async function updateAquarium(
   data: Partial<Omit<Aquarium, 'id'>>
 ): Promise<void> {
   await updateDoc(doc(db, 'aquariums', aquariumId), data);
+}
+
+export async function updateAquariumManualStatus(
+  aquariumId: string,
+  data: Partial<ManualSystemStatus>
+): Promise<void> {
+  const updates = Object.fromEntries(
+    Object.entries(data).map(([field, value]) => [`manualStatus.${field}`, value])
+  );
+
+  await updateDoc(doc(db, 'aquariums', aquariumId), updates);
 }
 
 export async function deleteAquarium(aquariumId: string): Promise<void> {

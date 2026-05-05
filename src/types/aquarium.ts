@@ -1,12 +1,17 @@
-export type FilterMode = 'Low' | 'Medium' | 'High';
-
 export interface AutomationSettings {
-  feedingTime: string;
+  enabled: boolean;
+  feedingTimes: string[];
   lightOnTime: string;
   lightOffTime: string;
-  filtrationMode: FilterMode;
   filtrationStartTime: string;
   filtrationRuntimeHours: number;
+  ammoniaThreshold: number;
+}
+
+export interface ManualSystemStatus {
+  feeder: string;
+  light: string;
+  filter: string;
 }
 
 export interface Aquarium {
@@ -25,4 +30,5 @@ export interface Aquarium {
   ownerId: string;
   ownerName: string;
   automationSettings?: AutomationSettings;
+  manualStatus?: ManualSystemStatus;
 }
