@@ -36,7 +36,7 @@ type MenuItem = {
 const allMenuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
   { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['Admin', 'User'] },
-  { id: 'automation', label: 'Automation', icon: Cpu, roles: ['Admin', 'User'] },
+  { id: 'automation', label: 'Automation', icon: Cpu, roles: ['Admin'] },
   { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['Admin', 'User'] },
   { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['Admin', 'User'] },
   { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['Admin', 'User'] },

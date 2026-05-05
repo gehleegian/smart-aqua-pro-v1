@@ -16,7 +16,11 @@ import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import { auth } from '../firebase';
 import { getAllUsers, getCurrentUserProfile } from '../services/userService';
-import { getAllAquariums, getAquariumsByOwner } from '../services/aquariumService';
+import {
+  getAllAquariums,
+  getAquariumsByOwner,
+  updateAquarium,
+} from '../services/aquariumService';
 import type { Aquarium } from '../types/aquarium';
 import type { UserData, UserRole } from '../types/user';
 import {
@@ -49,6 +53,17 @@ type MonitoringOwner = {
   role: UserRole;
   aquariums: MonitoringAquarium[];
   stats: OwnerStats;
+};
+
+type SystemField = 'feeder' | 'light' | 'filter';
+
+const systemStatusConfig: Record<
+  SystemField,
+  { activeValue: string; inactiveValue: string }
+> = {
+  feeder: { activeValue: 'Active', inactiveValue: 'Inactive' },
+  light: { activeValue: 'On', inactiveValue: 'Off' },
+  filter: { activeValue: 'Active', inactiveValue: 'Inactive' },
 };
 
 const buildOwnerStats = (ownerAquariums: MonitoringAquarium[]): OwnerStats => {
@@ -163,6 +178,72 @@ function OwnerCard({
   );
 }
 
+function AquariumOverviewCard({
+  aquarium,
+  onView,
+}: {
+  aquarium: MonitoringAquarium;
+  onView: (aquarium: MonitoringAquarium) => void;
+}) {
+  const temperatureLabel = getTemperatureLabel(aquarium.temp, aquarium.minTemp, aquarium.maxTemp);
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-white truncate">{aquarium.name}</h3>
+            <p className="text-sm text-slate-400 mt-1 truncate">
+              {aquarium.species.length > 0 ? aquarium.species.join(', ') : 'No species set'}
+            </p>
+          </div>
+          <Badge variant={aquarium.healthStatus === 'healthy' ? 'success' : 'warning'}>
+            {aquarium.healthStatus}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mt-5">
+          <div className="rounded-lg bg-slate-800/60 p-3 text-center">
+            <Thermometer className="w-4 h-4 text-orange-400 mx-auto mb-1" />
+            <p className="text-base font-bold text-white">{aquarium.temp}&deg;C</p>
+            <p className="text-xs text-slate-500">{temperatureLabel}</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 p-3 text-center">
+            <Droplets className="w-4 h-4 text-blue-400 mx-auto mb-1" />
+            <p className="text-base font-bold text-white">{aquarium.level}%</p>
+            <p className="text-xs text-slate-500">Level</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 p-3 text-center">
+            <Waves className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
+            <p className="text-base font-bold text-white">{aquarium.quality}%</p>
+            <p className="text-xs text-slate-500">Quality</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap mt-4">
+          <Badge variant={aquarium.feeder === 'Active' ? 'success' : 'default'}>
+            Feeder: {aquarium.feeder}
+          </Badge>
+          <Badge variant={aquarium.light === 'On' ? 'info' : 'default'}>
+            Light: {aquarium.light}
+          </Badge>
+          <Badge variant={aquarium.filter === 'Active' ? 'success' : 'default'}>
+            Filter: {aquarium.filter}
+          </Badge>
+        </div>
+
+        <button
+          onClick={() => onView(aquarium)}
+          className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-cyan-600/20"
+        >
+          <Eye className="w-4 h-4" />
+          View
+        </button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TankCard({ aquarium }: { aquarium: MonitoringAquarium }) {
   const temperatureLabel = getTemperatureLabel(aquarium.temp, aquarium.minTemp, aquarium.maxTemp);
   const levelLabel = getLevelLabel(aquarium.level);
@@ -234,6 +315,37 @@ function TankCard({ aquarium }: { aquarium: MonitoringAquarium }) {
   );
 }
 
+function SystemToggle({
+  active,
+  disabled,
+  label,
+  onToggle,
+}: {
+  active: boolean;
+  disabled: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Toggle ${label}`}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`w-12 h-6 rounded-full transition-all duration-200 ${
+        active ? 'bg-cyan-600' : 'bg-slate-600'
+      } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+    >
+      <div
+        className={`w-5 h-5 bg-white rounded-full transition-all duration-200 ${
+          active ? 'translate-x-6' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
 export default function Monitoring() {
   const [aquariums, setAquariums] = useState<MonitoringAquarium[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
@@ -243,6 +355,7 @@ export default function Monitoring() {
   const [error, setError] = useState('');
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [userName, setUserName] = useState('');
+  const [savingSystemKey, setSavingSystemKey] = useState('');
 
   const loadMonitoringData = async () => {
     try {
@@ -312,7 +425,7 @@ export default function Monitoring() {
         setSelectedAquariumId((prev) =>
           prev && monitoringData.some((item) => item.id === prev)
             ? prev
-            : monitoringData[0].id
+            : ''
         );
       } else {
         setSelectedAquariumId('');
@@ -385,8 +498,50 @@ export default function Monitoring() {
   }, [ownerCards, selectedOwnerId]);
 
   const selectedAquarium = useMemo(() => {
-    return aquariums.find((item) => item.id === selectedAquariumId) || aquariums[0];
+    return aquariums.find((item) => item.id === selectedAquariumId) || null;
   }, [aquariums, selectedAquariumId]);
+
+  const updateAquariumStatusInState = (
+    aquariumId: string,
+    updates: Partial<Pick<Aquarium, SystemField>>
+  ) => {
+    setAquariums((prev) =>
+      prev.map((aquarium) =>
+        aquarium.id === aquariumId ? { ...aquarium, ...updates } : aquarium
+      )
+    );
+  };
+
+  const handleSystemToggle = async (field: SystemField) => {
+    if (!selectedAquarium) {
+      return;
+    }
+
+    const statusConfig = systemStatusConfig[field];
+    const currentValue = selectedAquarium[field];
+    const nextValue =
+      currentValue === statusConfig.activeValue
+        ? statusConfig.inactiveValue
+        : statusConfig.activeValue;
+    const previousValue = currentValue;
+    const updates: Partial<Pick<Aquarium, SystemField>> = {};
+
+    updates[field] = nextValue;
+    setSavingSystemKey(`${selectedAquarium.id}-${field}`);
+    setError('');
+    updateAquariumStatusInState(selectedAquarium.id, updates);
+
+    try {
+      await updateAquarium(selectedAquarium.id, updates);
+    } catch (err) {
+      console.error(err);
+      updates[field] = previousValue;
+      updateAquariumStatusInState(selectedAquarium.id, updates);
+      setError('Failed to update system status.');
+    } finally {
+      setSavingSystemKey('');
+    }
+  };
 
   if (loading) {
     return <div className="text-slate-300">Loading monitoring data...</div>;
@@ -538,7 +693,7 @@ export default function Monitoring() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <h3 className="text-lg font-semibold text-white">Tanks</h3>
+                <h3 className="text-lg font-semibold text-white">Aquariums</h3>
                 <Badge variant="default">{selectedOwner.aquariums.length} total</Badge>
               </div>
             </CardHeader>
@@ -609,13 +764,61 @@ export default function Monitoring() {
     );
   }
 
-  if (aquariums.length === 0 || !selectedAquarium) {
+  if (aquariums.length === 0) {
     return (
       <Card>
         <CardContent className="p-6">
           <p className="text-slate-300">No monitoring data available. Add an aquarium first.</p>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (!selectedAquarium) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Monitoring</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              {`User view: choose an aquarium to view monitoring details for ${
+                userName || 'your account'
+              }`}
+            </p>
+          </div>
+
+          <button
+            onClick={loadMonitoringData}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Fish className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-lg font-semibold text-white">Aquariums</h3>
+              </div>
+              <Badge variant="info">{aquariums.length} total</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {aquariums.map((aquarium) => (
+                <AquariumOverviewCard
+                  key={aquarium.id}
+                  aquarium={aquarium}
+                  onView={(viewedAquarium) => setSelectedAquariumId(viewedAquarium.id)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -630,30 +833,28 @@ export default function Monitoring() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Monitoring</h2>
-          <p className="text-sm text-slate-400 mt-1">
-            {`User view: monitoring data for ${userName || 'your aquariums'}`}
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelectedAquariumId('')}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Aquariums
+          </button>
+          <div>
+            <h2 className="text-xl font-semibold text-white">{selectedAquarium.name}</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Monitoring details and controls
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <select
-            value={selectedAquariumId}
-            onChange={(e) => setSelectedAquariumId(e.target.value)}
-            className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-          >
-            {aquariums.map((aquarium) => (
-              <option key={aquarium.id} value={aquarium.id}>
-                {aquarium.name}
-              </option>
-            ))}
-          </select>
-
           <button
             onClick={loadMonitoringData}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
           >
+            <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
         </div>
@@ -682,7 +883,7 @@ export default function Monitoring() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-slate-400">Temperature</p>
-                <p className="text-2xl font-bold text-white">{selectedAquarium.temp}°C</p>
+                <p className="text-2xl font-bold text-white">{selectedAquarium.temp}&deg;C</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
                 <Thermometer className="w-6 h-6 text-orange-400" />
@@ -693,7 +894,7 @@ export default function Monitoring() {
               <div className="flex justify-between text-slate-400">
                 <span>Range</span>
                 <span className="text-slate-300">
-                  {selectedAquarium.minTemp}°C - {selectedAquarium.maxTemp}°C
+                  {selectedAquarium.minTemp}&deg;C - {selectedAquarium.maxTemp}&deg;C
                 </span>
               </div>
               <div className="flex justify-between text-slate-400">
@@ -821,9 +1022,19 @@ export default function Monitoring() {
                   <Fish className="w-5 h-5 text-cyan-400" />
                   <span className="text-sm text-slate-300">Feeder</span>
                 </div>
-                <Badge variant={selectedAquarium.feeder === 'Active' ? 'success' : 'default'}>
-                  {selectedAquarium.feeder}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400">
+                    {savingSystemKey === `${selectedAquarium.id}-feeder`
+                      ? 'Saving...'
+                      : selectedAquarium.feeder}
+                  </span>
+                  <SystemToggle
+                    active={selectedAquarium.feeder === 'Active'}
+                    disabled={Boolean(savingSystemKey)}
+                    label="feeder"
+                    onToggle={() => void handleSystemToggle('feeder')}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
@@ -831,9 +1042,19 @@ export default function Monitoring() {
                   <Activity className="w-5 h-5 text-yellow-400" />
                   <span className="text-sm text-slate-300">Light</span>
                 </div>
-                <Badge variant={selectedAquarium.light === 'On' ? 'info' : 'default'}>
-                  {selectedAquarium.light}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400">
+                    {savingSystemKey === `${selectedAquarium.id}-light`
+                      ? 'Saving...'
+                      : selectedAquarium.light}
+                  </span>
+                  <SystemToggle
+                    active={selectedAquarium.light === 'On'}
+                    disabled={Boolean(savingSystemKey)}
+                    label="light"
+                    onToggle={() => void handleSystemToggle('light')}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60">
@@ -841,9 +1062,19 @@ export default function Monitoring() {
                   <Waves className="w-5 h-5 text-emerald-400" />
                   <span className="text-sm text-slate-300">Filter</span>
                 </div>
-                <Badge variant={selectedAquarium.filter === 'Active' ? 'success' : 'default'}>
-                  {selectedAquarium.filter}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400">
+                    {savingSystemKey === `${selectedAquarium.id}-filter`
+                      ? 'Saving...'
+                      : selectedAquarium.filter}
+                  </span>
+                  <SystemToggle
+                    active={selectedAquarium.filter === 'Active'}
+                    disabled={Boolean(savingSystemKey)}
+                    label="filter"
+                    onToggle={() => void handleSystemToggle('filter')}
+                  />
+                </div>
               </div>
             </div>
           </CardContent>
@@ -868,7 +1099,7 @@ export default function Monitoring() {
               <div className="flex justify-between border-b border-slate-700/50 pb-2">
                 <span className="text-slate-400">Temperature Range</span>
                 <span className="text-white font-medium">
-                  {selectedAquarium.minTemp}°C - {selectedAquarium.maxTemp}°C
+                  {selectedAquarium.minTemp}&deg;C - {selectedAquarium.maxTemp}&deg;C
                 </span>
               </div>
 
