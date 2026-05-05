@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e293b #0f172a;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #0f172a;
+}
+@import "tailwindcss";
+
+@theme {
+  --color-slate-50: #eaf1f7;
+  --color-slate-100: #d5e3ee;
+  --color-slate-200: #abc7dd;
+  --color-slate-300: #81abcc;
+  --color-slate-400: #578fbb;
+  --color-slate-500: #3d7ba8;
+  --color-slate-600: #2d5f87;
+  --color-slate-700: #1e4466;
+  --color-slate-800: #142e49;
+  --color-slate-900: #0a1a30;
+  --color-slate-950: #050d1a;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e4466 #050d1a;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #050d1a;
+}
+
+@keyframes swim {
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  25% { transform: translateX(60px) scaleX(1); }
+  26% { transform: translateX(62px) scaleX(-1); }
+  50% { transform: translateX(0) scaleX(-1); }
+  51% { transform: translateX(0) scaleX(1); }
+  75% { transform: translateX(-40px) scaleX(1); }
+  76% { transform: translateX(-42px) scaleX(-1); }
+}
+
+@keyframes swim2 {
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  30% { transform: translateX(-50px) scaleX(1); }
+  31% { transform: translateX(-52px) scaleX(-1); }
+  60% { transform: translateX(30px) scaleX(-1); }
+  61% { transform: translateX(32px) scaleX(1); }
+}
+
+@keyframes swim3 {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(40px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
