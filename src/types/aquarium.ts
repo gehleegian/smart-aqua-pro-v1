@@ -1,3 +1,14 @@
+export type FilterMode = 'Low' | 'Medium' | 'High';
+
+export interface AutomationSettings {
+  feedingTime: string;
+  lightOnTime: string;
+  lightOffTime: string;
+  filtrationMode: FilterMode;
+  filtrationStartTime: string;
+  filtrationRuntimeHours: number;
+}
+
 export interface Aquarium {
   id: string;
   name: string;
@@ -13,4 +24,5 @@ export interface Aquarium {
   maxTemp: number;
   ownerId: string;
   ownerName: string;
+  automationSettings?: AutomationSettings;
 }

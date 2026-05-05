@@ -10,24 +10,70 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Aquarium } from '../types/aquarium';
+import type { Aquarium, AutomationSettings, FilterMode } from '../types/aquarium';
 
-function mapAquarium(docId: string, data: any): Aquarium {
+const filterModes: FilterMode[] = ['Low', 'Medium', 'High'];
+
+function isFilterMode(value: unknown): value is FilterMode {
+  return typeof value === 'string' && filterModes.includes(value as FilterMode);
+}
+
+function readString(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function mapAutomationSettings(
+  data: Record<string, unknown>
+): AutomationSettings | undefined {
+  const settings = data.automationSettings;
+
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return undefined;
+  }
+
+  const settingsRecord = settings as Record<string, unknown>;
+  const filtrationMode = isFilterMode(settingsRecord.filtrationMode)
+    ? settingsRecord.filtrationMode
+    : 'Medium';
+
+  return {
+    feedingTime: readString(settingsRecord.feedingTime, '08:00'),
+    lightOnTime: readString(settingsRecord.lightOnTime, '06:00'),
+    lightOffTime: readString(settingsRecord.lightOffTime, '22:00'),
+    filtrationMode,
+    filtrationStartTime: readString(settingsRecord.filtrationStartTime, '07:00'),
+    filtrationRuntimeHours: readNumber(settingsRecord.filtrationRuntimeHours, 8),
+  };
+}
+
+function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
   return {
     id: docId,
-    name: data.name || 'Unnamed Aquarium',
-    species: Array.isArray(data.species) ? data.species : [],
-    bioload: data.bioload || 'low',
+    name: readString(data.name, 'Unnamed Aquarium'),
+    species: Array.isArray(data.species)
+      ? data.species.filter((species): species is string => typeof species === 'string')
+      : [],
+    bioload:
+      data.bioload === 'medium' || data.bioload === 'high'
+        ? data.bioload
+        : 'low',
     temp: Number(data.temp ?? 0),
     level: Number(data.level ?? 0),
     quality: Number(data.quality ?? 0),
-    feeder: data.feeder || 'Inactive',
-    light: data.light || 'Off',
-    filter: data.filter || 'Inactive',
+    feeder: readString(data.feeder, 'Inactive'),
+    light: readString(data.light, 'Off'),
+    filter: readString(data.filter, 'Inactive'),
     minTemp: Number(data.minTemp ?? 0),
     maxTemp: Number(data.maxTemp ?? 0),
-    ownerId: data.ownerId || '',
-    ownerName: data.ownerName || 'Unknown Owner',
+    ownerId: readString(data.ownerId, ''),
+    ownerName: readString(data.ownerName, 'Unknown Owner'),
+    automationSettings: mapAutomationSettings(data),
   };
 }
 

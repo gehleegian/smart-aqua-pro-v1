@@ -11,6 +11,12 @@ import {
   Eye,
   ArrowLeft,
   RefreshCw,
+  MoreVertical,
+  Pencil,
+  X,
+  Clock,
+  Sun,
+  Wind,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -21,7 +27,7 @@ import {
   getAquariumsByOwner,
   updateAquarium,
 } from '../services/aquariumService';
-import type { Aquarium } from '../types/aquarium';
+import type { Aquarium, AutomationSettings, FilterMode } from '../types/aquarium';
 import type { UserData, UserRole } from '../types/user';
 import {
   getHealthStatus,
@@ -64,6 +70,41 @@ const systemStatusConfig: Record<
   feeder: { activeValue: 'Active', inactiveValue: 'Inactive' },
   light: { activeValue: 'On', inactiveValue: 'Off' },
   filter: { activeValue: 'Active', inactiveValue: 'Inactive' },
+};
+
+const defaultAutomationSettings: AutomationSettings = {
+  feedingTime: '08:00',
+  lightOnTime: '06:00',
+  lightOffTime: '22:00',
+  filtrationMode: 'Medium',
+  filtrationStartTime: '07:00',
+  filtrationRuntimeHours: 8,
+};
+
+const getAutomationSettings = (
+  aquarium: Pick<Aquarium, 'automationSettings'> | null
+): AutomationSettings => ({
+  ...defaultAutomationSettings,
+  ...(aquarium?.automationSettings || {}),
+});
+
+const formatAutomationTime = (time: string) => {
+  if (!time) {
+    return 'Not set';
+  }
+
+  const [hourText, minuteText] = time.split(':');
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return time;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(2026, 0, 1, hour, minute));
 };
 
 const buildOwnerStats = (ownerAquariums: MonitoringAquarium[]): OwnerStats => {
@@ -357,6 +398,13 @@ export default function Monitoring() {
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [userName, setUserName] = useState('');
   const [savingSystemKey, setSavingSystemKey] = useState('');
+  const [systemMenuOpen, setSystemMenuOpen] = useState(false);
+  const [showAutomationModal, setShowAutomationModal] = useState(false);
+  const [automationDraft, setAutomationDraft] = useState<AutomationSettings>(
+    defaultAutomationSettings
+  );
+  const [automationError, setAutomationError] = useState('');
+  const [savingAutomation, setSavingAutomation] = useState(false);
 
   const loadMonitoringData = async () => {
     try {
@@ -515,6 +563,37 @@ export default function Monitoring() {
     );
   };
 
+  const updateAquariumAutomationInState = (
+    aquariumId: string,
+    automationSettings: AutomationSettings | undefined
+  ) => {
+    setAquariums((prev) =>
+      prev.map((aquarium) =>
+        aquarium.id === aquariumId
+          ? { ...aquarium, automationSettings }
+          : aquarium
+      )
+    );
+  };
+
+  const openAutomationEditor = () => {
+    if (!selectedAquarium) {
+      return;
+    }
+
+    setAutomationDraft(getAutomationSettings(selectedAquarium));
+    setAutomationError('');
+    setSystemMenuOpen(false);
+    setShowAutomationModal(true);
+  };
+
+  const updateAutomationDraft = <Field extends keyof AutomationSettings>(
+    field: Field,
+    value: AutomationSettings[Field]
+  ) => {
+    setAutomationDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleSystemToggle = async (field: SystemField) => {
     if (!selectedAquarium) {
       return;
@@ -543,6 +622,52 @@ export default function Monitoring() {
       setSystemError('Failed to update system status.');
     } finally {
       setSavingSystemKey('');
+    }
+  };
+
+  const handleAutomationSave = async () => {
+    if (!selectedAquarium) {
+      return;
+    }
+
+    const runtimeHours = Number(automationDraft.filtrationRuntimeHours);
+
+    if (
+      !automationDraft.feedingTime ||
+      !automationDraft.lightOnTime ||
+      !automationDraft.lightOffTime ||
+      !automationDraft.filtrationStartTime
+    ) {
+      setAutomationError('Please complete all automation times.');
+      return;
+    }
+
+    if (!Number.isFinite(runtimeHours) || runtimeHours < 1 || runtimeHours > 24) {
+      setAutomationError('Filtration runtime must be between 1 and 24 hours.');
+      return;
+    }
+
+    const nextSettings: AutomationSettings = {
+      ...automationDraft,
+      filtrationRuntimeHours: runtimeHours,
+    };
+    const previousSettings = selectedAquarium.automationSettings;
+
+    setSavingAutomation(true);
+    setAutomationError('');
+    updateAquariumAutomationInState(selectedAquarium.id, nextSettings);
+
+    try {
+      await updateAquarium(selectedAquarium.id, {
+        automationSettings: nextSettings,
+      });
+      setShowAutomationModal(false);
+    } catch (err) {
+      console.error(err);
+      updateAquariumAutomationInState(selectedAquarium.id, previousSettings);
+      setAutomationError('Failed to save automation settings.');
+    } finally {
+      setSavingAutomation(false);
     }
   };
 
@@ -815,7 +940,12 @@ export default function Monitoring() {
                 <AquariumOverviewCard
                   key={aquarium.id}
                   aquarium={aquarium}
-                  onView={(viewedAquarium) => setSelectedAquariumId(viewedAquarium.id)}
+                  onView={(viewedAquarium) => {
+                    setSystemMenuOpen(false);
+                    setShowAutomationModal(false);
+                    setAutomationError('');
+                    setSelectedAquariumId(viewedAquarium.id);
+                  }}
                 />
               ))}
             </div>
@@ -832,13 +962,19 @@ export default function Monitoring() {
   );
   const levelLabel = getLevelLabel(selectedAquarium.level);
   const qualityLabel = getQualityLabel(selectedAquarium.quality);
+  const automationSettings = getAutomationSettings(selectedAquarium);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setSelectedAquariumId('')}
+            onClick={() => {
+              setSystemMenuOpen(false);
+              setShowAutomationModal(false);
+              setAutomationError('');
+              setSelectedAquariumId('');
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1013,10 +1149,34 @@ export default function Monitoring() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-cyan-400" />
-              System Status
-            </h3>
+            <div className="relative flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-cyan-400" />
+                System Status
+              </h3>
+
+              <button
+                type="button"
+                aria-label="Open system status options"
+                onClick={() => setSystemMenuOpen((prev) => !prev)}
+                className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-slate-300 hover:text-white flex items-center justify-center transition-all"
+              >
+                <MoreVertical className="w-5 h-5" />
+              </button>
+
+              {systemMenuOpen && (
+                <div className="absolute right-0 top-11 z-20 w-52 rounded-xl border border-slate-700 bg-slate-900 shadow-xl shadow-black/30 p-2">
+                  <button
+                    type="button"
+                    onClick={openAutomationEditor}
+                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition-all"
+                  >
+                    <Pencil className="w-4 h-4 text-cyan-400" />
+                    Edit automation
+                  </button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {systemError && (
@@ -1086,6 +1246,39 @@ export default function Monitoring() {
                 </div>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+              <div className="rounded-lg bg-slate-800/60 p-3">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  Feeding
+                </div>
+                <p className="text-sm font-medium text-white mt-2">
+                  {formatAutomationTime(automationSettings.feedingTime)}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-slate-800/60 p-3">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Sun className="w-4 h-4 text-yellow-400" />
+                  Light
+                </div>
+                <p className="text-sm font-medium text-white mt-2">
+                  {formatAutomationTime(automationSettings.lightOnTime)} -{' '}
+                  {formatAutomationTime(automationSettings.lightOffTime)}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-slate-800/60 p-3">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Wind className="w-4 h-4 text-emerald-400" />
+                  Filtration
+                </div>
+                <p className="text-sm font-medium text-white mt-2">
+                  {automationSettings.filtrationMode}, {automationSettings.filtrationRuntimeHours}h
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1137,6 +1330,183 @@ export default function Monitoring() {
           </CardContent>
         </Card>
       </div>
+
+      {showAutomationModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-2xl p-6 shadow-2xl shadow-black/30">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  Edit Automation
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  {selectedAquarium.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutomationModal(false);
+                  setAutomationError('');
+                }}
+                className="w-9 h-9 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {automationError && (
+              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {automationError}
+              </div>
+            )}
+
+            <div className="space-y-5">
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Fish className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-sm font-semibold text-white">Feeding Schedule</h3>
+                </div>
+
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Feeding time
+                </label>
+                <input
+                  type="time"
+                  value={automationDraft.feedingTime}
+                  onChange={(event) =>
+                    updateAutomationDraft('feedingTime', event.target.value)
+                  }
+                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sun className="w-5 h-5 text-yellow-400" />
+                  <h3 className="text-sm font-semibold text-white">Light Schedule</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Turn on
+                    </label>
+                    <input
+                      type="time"
+                      value={automationDraft.lightOnTime}
+                      onChange={(event) =>
+                        updateAutomationDraft('lightOnTime', event.target.value)
+                      }
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Turn off
+                    </label>
+                    <input
+                      type="time"
+                      value={automationDraft.lightOffTime}
+                      onChange={(event) =>
+                        updateAutomationDraft('lightOffTime', event.target.value)
+                      }
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Wind className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-sm font-semibold text-white">Filtration Settings</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Start time
+                    </label>
+                    <input
+                      type="time"
+                      value={automationDraft.filtrationStartTime}
+                      onChange={(event) =>
+                        updateAutomationDraft('filtrationStartTime', event.target.value)
+                      }
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Runtime hours
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="24"
+                      value={automationDraft.filtrationRuntimeHours}
+                      onChange={(event) =>
+                        updateAutomationDraft(
+                          'filtrationRuntimeHours',
+                          Number(event.target.value)
+                        )
+                      }
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Flow mode
+                    </label>
+                    <select
+                      value={automationDraft.filtrationMode}
+                      onChange={(event) =>
+                        updateAutomationDraft(
+                          'filtrationMode',
+                          event.target.value as FilterMode
+                        )
+                      }
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutomationModal(false);
+                  setAutomationError('');
+                }}
+                disabled={savingAutomation}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed text-slate-300 rounded-lg text-sm font-medium transition-all"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleAutomationSave()}
+                disabled={savingAutomation}
+                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+              >
+                {savingAutomation ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
