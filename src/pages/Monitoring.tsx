@@ -7,14 +7,18 @@ import {
   Fish,
   Gauge,
   Cpu,
+  Users,
+  Eye,
+  ArrowLeft,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import { auth } from '../firebase';
-import { getCurrentUserProfile } from '../services/userService';
+import { getAllUsers, getCurrentUserProfile } from '../services/userService';
 import { getAllAquariums, getAquariumsByOwner } from '../services/aquariumService';
 import type { Aquarium } from '../types/aquarium';
-import type { UserRole } from '../types/user';
+import type { UserData, UserRole } from '../types/user';
 import {
   getHealthStatus,
   getQualityLabel,
@@ -26,8 +30,214 @@ type MonitoringAquarium = Aquarium & {
   healthStatus: 'healthy' | 'warning';
 };
 
+type OwnerStats = {
+  totalTanks: number;
+  healthyTanks: number;
+  warningTanks: number;
+  averageTemp: number;
+  averageLevel: number;
+  averageQuality: number;
+  activeFeeders: number;
+  activeFilters: number;
+  lightsOn: number;
+};
+
+type MonitoringOwner = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  aquariums: MonitoringAquarium[];
+  stats: OwnerStats;
+};
+
+const buildOwnerStats = (ownerAquariums: MonitoringAquarium[]): OwnerStats => {
+  const totalTanks = ownerAquariums.length;
+  const average = (field: 'temp' | 'level' | 'quality') =>
+    totalTanks === 0
+      ? 0
+      : ownerAquariums.reduce((sum, aquarium) => sum + aquarium[field], 0) / totalTanks;
+
+  return {
+    totalTanks,
+    healthyTanks: ownerAquariums.filter((aquarium) => aquarium.healthStatus === 'healthy').length,
+    warningTanks: ownerAquariums.filter((aquarium) => aquarium.healthStatus === 'warning').length,
+    averageTemp: average('temp'),
+    averageLevel: average('level'),
+    averageQuality: average('quality'),
+    activeFeeders: ownerAquariums.filter((aquarium) => aquarium.feeder === 'Active').length,
+    activeFilters: ownerAquariums.filter((aquarium) => aquarium.filter === 'Active').length,
+    lightsOn: ownerAquariums.filter((aquarium) => aquarium.light === 'On').length,
+  };
+};
+
+const getInitials = (name: string) =>
+  name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'U';
+
+const formatAverage = (value: number, total: number, suffix = '') =>
+  total === 0 ? 'No data' : `${value.toFixed(1)}${suffix}`;
+
+type IconComponent = React.ComponentType<{ className?: string }>;
+
+type StatCardProps = {
+  icon: IconComponent;
+  label: string;
+  value: React.ReactNode;
+  caption: string;
+  iconBg: string;
+  iconColor: string;
+};
+
+function StatCard({ icon: Icon, label, value, caption, iconBg, iconColor }: StatCardProps) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-slate-400">{label}</p>
+            <p className="text-2xl font-bold text-white mt-1">{value}</p>
+            <p className="text-xs text-slate-500 mt-1">{caption}</p>
+          </div>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg}`}>
+            <Icon className={`w-6 h-6 ${iconColor}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OwnerCard({
+  owner,
+  onView,
+}: {
+  owner: MonitoringOwner;
+  onView: (owner: MonitoringOwner) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-bold text-white">{getInitials(owner.name)}</span>
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-white truncate">{owner.name}</h3>
+              <p className="text-xs text-slate-500 truncate">{owner.email}</p>
+            </div>
+          </div>
+
+          <Badge variant={owner.role === 'Admin' ? 'danger' : 'info'}>{owner.role}</Badge>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mt-5">
+          <div className="rounded-lg bg-slate-800/60 p-3">
+            <p className="text-lg font-bold text-white">{owner.stats.totalTanks}</p>
+            <p className="text-xs text-slate-500">Tanks</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 p-3">
+            <p className="text-lg font-bold text-emerald-400">{owner.stats.healthyTanks}</p>
+            <p className="text-xs text-slate-500">Healthy</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 p-3">
+            <p className="text-lg font-bold text-amber-400">{owner.stats.warningTanks}</p>
+            <p className="text-xs text-slate-500">Warnings</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => onView(owner)}
+          className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-cyan-600/20"
+        >
+          <Eye className="w-4 h-4" />
+          View
+        </button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TankCard({ aquarium }: { aquarium: MonitoringAquarium }) {
+  const temperatureLabel = getTemperatureLabel(aquarium.temp, aquarium.minTemp, aquarium.maxTemp);
+  const levelLabel = getLevelLabel(aquarium.level);
+  const qualityLabel = getQualityLabel(aquarium.quality);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{aquarium.name}</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              {aquarium.species.length > 0 ? aquarium.species.join(', ') : 'No species set'}
+            </p>
+          </div>
+          <Badge variant={aquarium.healthStatus === 'healthy' ? 'success' : 'warning'}>
+            {aquarium.healthStatus}
+          </Badge>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center">
+            <Thermometer className="w-5 h-5 text-orange-400 mx-auto mb-1" />
+            <p className="text-lg font-bold text-white">
+              {aquarium.temp}&deg;C
+            </p>
+            <p className="text-xs text-slate-500">{temperatureLabel}</p>
+          </div>
+          <div className="text-center">
+            <Droplets className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+            <p className="text-lg font-bold text-white">{aquarium.level}%</p>
+            <p className="text-xs text-slate-500">{levelLabel}</p>
+          </div>
+          <div className="text-center">
+            <Waves className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+            <p className="text-lg font-bold text-white">{aquarium.quality}%</p>
+            <p className="text-xs text-slate-500">{qualityLabel}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+          <div className="rounded-lg bg-slate-800/60 p-3">
+            <p className="text-xs text-slate-500">Temperature Range</p>
+            <p className="text-white font-medium">
+              {aquarium.minTemp}&deg;C - {aquarium.maxTemp}&deg;C
+            </p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 p-3">
+            <p className="text-xs text-slate-500">Bioload</p>
+            <p className="text-white font-medium capitalize">{aquarium.bioload}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant={aquarium.feeder === 'Active' ? 'success' : 'default'}>
+            Feeder: {aquarium.feeder}
+          </Badge>
+          <Badge variant={aquarium.light === 'On' ? 'info' : 'default'}>
+            Light: {aquarium.light}
+          </Badge>
+          <Badge variant={aquarium.filter === 'Active' ? 'success' : 'default'}>
+            Filter: {aquarium.filter}
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Monitoring() {
   const [aquariums, setAquariums] = useState<MonitoringAquarium[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [selectedOwnerId, setSelectedOwnerId] = useState('');
   const [selectedAquariumId, setSelectedAquariumId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,6 +254,8 @@ export default function Monitoring() {
       if (!currentUser) {
         setError('No logged-in user found.');
         setAquariums([]);
+        setUsers([]);
+        setSelectedOwnerId('');
         return;
       }
 
@@ -52,16 +264,28 @@ export default function Monitoring() {
       if (!userProfile) {
         setError('User profile not found.');
         setAquariums([]);
+        setUsers([]);
+        setSelectedOwnerId('');
         return;
       }
 
       setUserRole(userProfile.role);
       setUserName(userProfile.name);
 
-      const aquariumData =
-        userProfile.role === 'Admin'
-          ? await getAllAquariums()
-          : await getAquariumsByOwner(currentUser.uid);
+      let aquariumData: Aquarium[] = [];
+      let userData: UserData[] = [];
+
+      if (userProfile.role === 'Admin') {
+        const [allAquariums, allUsers] = await Promise.all([
+          getAllAquariums(),
+          getAllUsers(),
+        ]);
+
+        aquariumData = allAquariums;
+        userData = allUsers;
+      } else {
+        aquariumData = await getAquariumsByOwner(currentUser.uid);
+      }
 
       const monitoringData: MonitoringAquarium[] = aquariumData.map((aquarium) => ({
         ...aquarium,
@@ -69,8 +293,22 @@ export default function Monitoring() {
       }));
 
       setAquariums(monitoringData);
+      setUsers(userData);
 
-      if (monitoringData.length > 0) {
+      if (userProfile.role === 'Admin') {
+        setSelectedOwnerId((prev) => {
+          if (!prev) {
+            return '';
+          }
+
+          const ownerStillExists =
+            userData.some((user) => user.id === prev) ||
+            monitoringData.some((aquarium) => aquarium.ownerId === prev);
+
+          return ownerStillExists ? prev : '';
+        });
+        setSelectedAquariumId('');
+      } else if (monitoringData.length > 0) {
         setSelectedAquariumId((prev) =>
           prev && monitoringData.some((item) => item.id === prev)
             ? prev
@@ -83,14 +321,68 @@ export default function Monitoring() {
       console.error(err);
       setError('Failed to load monitoring data.');
       setAquariums([]);
+      setUsers([]);
+      setSelectedOwnerId('');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadMonitoringData();
+    const loadTimer = window.setTimeout(() => {
+      void loadMonitoringData();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, []);
+
+  const ownerCards = useMemo<MonitoringOwner[]>(() => {
+    const aquariumsByOwner = new Map<string, MonitoringAquarium[]>();
+
+    for (const aquarium of aquariums) {
+      const ownerId = aquarium.ownerId || 'unknown';
+      const ownerAquariums = aquariumsByOwner.get(ownerId) || [];
+
+      ownerAquariums.push(aquarium);
+      aquariumsByOwner.set(ownerId, ownerAquariums);
+    }
+
+    const ownersFromUsers = users
+      .filter((user): user is UserData & { id: string } => Boolean(user.id))
+      .map((user) => {
+        const ownerAquariums = aquariumsByOwner.get(user.id) || [];
+
+        aquariumsByOwner.delete(user.id);
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          aquariums: ownerAquariums,
+          stats: buildOwnerStats(ownerAquariums),
+        };
+      });
+
+    const ownersFromAquariums = Array.from(aquariumsByOwner.entries()).map(
+      ([ownerId, ownerAquariums]) => ({
+        id: ownerId,
+        name: ownerAquariums[0]?.ownerName || 'Unknown Owner',
+        email: 'No account record',
+        role: 'User' as UserRole,
+        aquariums: ownerAquariums,
+        stats: buildOwnerStats(ownerAquariums),
+      })
+    );
+
+    return [...ownersFromUsers, ...ownersFromAquariums].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [aquariums, users]);
+
+  const selectedOwner = useMemo(() => {
+    return ownerCards.find((owner) => owner.id === selectedOwnerId);
+  }, [ownerCards, selectedOwnerId]);
 
   const selectedAquarium = useMemo(() => {
     return aquariums.find((item) => item.id === selectedAquariumId) || aquariums[0];
@@ -104,6 +396,215 @@ export default function Monitoring() {
     return (
       <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
         {error}
+      </div>
+    );
+  }
+
+  if (userRole === 'Admin') {
+    if (selectedOwner) {
+      const stats = selectedOwner.stats;
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedOwnerId('')}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-all"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Users
+              </button>
+              <div>
+                <h2 className="text-xl font-semibold text-white">{selectedOwner.name}</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Overall monitoring statistics and tanks
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={loadMonitoringData}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-lg font-bold text-white">
+                      {getInitials(selectedOwner.name)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-white truncate">
+                      {selectedOwner.name}
+                    </h3>
+                    <p className="text-sm text-slate-400 truncate">{selectedOwner.email}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={selectedOwner.role === 'Admin' ? 'danger' : 'info'}>
+                    {selectedOwner.role}
+                  </Badge>
+                  <Badge variant={stats.warningTanks > 0 ? 'warning' : 'success'}>
+                    {stats.warningTanks > 0 ? 'Needs Attention' : 'All Clear'}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <StatCard
+              icon={Fish}
+              label="Total Tanks"
+              value={stats.totalTanks}
+              caption="Aquariums owned"
+              iconBg="bg-cyan-500/20"
+              iconColor="text-cyan-400"
+            />
+            <StatCard
+              icon={Activity}
+              label="Healthy Tanks"
+              value={stats.healthyTanks}
+              caption={`${stats.warningTanks} warning tanks`}
+              iconBg="bg-emerald-500/20"
+              iconColor="text-emerald-400"
+            />
+            <StatCard
+              icon={Thermometer}
+              label="Average Temperature"
+              value={
+                stats.totalTanks === 0 ? (
+                  'No data'
+                ) : (
+                  <>
+                    {stats.averageTemp.toFixed(1)}&deg;C
+                  </>
+                )
+              }
+              caption="Across user tanks"
+              iconBg="bg-orange-500/20"
+              iconColor="text-orange-400"
+            />
+            <StatCard
+              icon={Waves}
+              label="Average Quality"
+              value={formatAverage(stats.averageQuality, stats.totalTanks, '%')}
+              caption="Water quality score"
+              iconBg="bg-emerald-500/20"
+              iconColor="text-emerald-400"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatCard
+              icon={Droplets}
+              label="Average Water Level"
+              value={formatAverage(stats.averageLevel, stats.totalTanks, '%')}
+              caption="Across user tanks"
+              iconBg="bg-blue-500/20"
+              iconColor="text-blue-400"
+            />
+            <StatCard
+              icon={Fish}
+              label="Active Feeders"
+              value={
+                stats.totalTanks === 0 ? 'No data' : `${stats.activeFeeders}/${stats.totalTanks}`
+              }
+              caption="Automated feeding"
+              iconBg="bg-cyan-500/20"
+              iconColor="text-cyan-400"
+            />
+            <StatCard
+              icon={Cpu}
+              label="Running Systems"
+              value={
+                stats.totalTanks === 0 ? 'No data' : `${stats.activeFilters}/${stats.totalTanks}`
+              }
+              caption={`${stats.lightsOn} lights on`}
+              iconBg="bg-slate-500/20"
+              iconColor="text-slate-300"
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <h3 className="text-lg font-semibold text-white">Tanks</h3>
+                <Badge variant="default">{selectedOwner.aquariums.length} total</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedOwner.aquariums.length === 0 ? (
+                <div className="py-8 text-center text-slate-400">
+                  This user does not have any aquariums yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {selectedOwner.aquariums.map((aquarium) => (
+                    <TankCard key={aquarium.id} aquarium={aquarium} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Monitoring</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Admin view: choose a user to view overall statistics and tanks
+            </p>
+          </div>
+
+          <button
+            onClick={loadMonitoringData}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-lg font-semibold text-white">Users</h3>
+              </div>
+              <Badge variant="info">{ownerCards.length} accounts</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {ownerCards.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">No users found.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {ownerCards.map((owner) => (
+                  <OwnerCard
+                    key={owner.id}
+                    owner={owner}
+                    onView={(viewedOwner) => setSelectedOwnerId(viewedOwner.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -132,9 +633,7 @@ export default function Monitoring() {
         <div>
           <h2 className="text-xl font-semibold text-white">Monitoring</h2>
           <p className="text-sm text-slate-400 mt-1">
-            {userRole === 'Admin'
-              ? 'Admin view: monitoring data for all aquariums'
-              : `User view: monitoring data for ${userName || 'your aquariums'}`}
+            {`User view: monitoring data for ${userName || 'your aquariums'}`}
           </p>
         </div>
 
@@ -168,9 +667,6 @@ export default function Monitoring() {
               <p className="text-sm text-slate-400 mt-1">
                 Species: {selectedAquarium.species.length > 0 ? selectedAquarium.species.join(', ') : 'No species set'}
               </p>
-              {userRole === 'Admin' && (
-                <p className="text-xs text-slate-500 mt-1">Owner: {selectedAquarium.ownerName}</p>
-              )}
             </div>
 
             <Badge variant={selectedAquarium.healthStatus === 'healthy' ? 'success' : 'warning'}>
