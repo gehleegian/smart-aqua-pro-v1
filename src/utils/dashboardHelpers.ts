@@ -1,0 +1,379 @@
+import {
+  AlertTriangle,
+  Droplets,
+  Fish,
+  Radio,
+  ShieldCheck,
+  Thermometer,
+  Users,
+  Waves,
+  Zap,
+} from 'lucide-react';
+import type { Aquarium } from '../types/aquarium';
+import {
+  getDeviceTelemetryStatusText,
+  getFreshTelemetrySnapshot,
+  getDeviceTelemetryState,
+  type DeviceShadow,
+} from '../types/device';
+import type {
+  DashboardAquarium,
+  DashboardData,
+  DashboardSummaryCard,
+  DashboardTankStat,
+  DashboardStatus,
+  OwnerGroup,
+} from '../types/dashboard';
+
+export function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return `${fallback} (${error.message})`;
+  }
+
+  return fallback;
+}
+
+export function getAquariumStatus(
+  aquarium: Pick<Aquarium, 'level' | 'minLevel' | 'quality' | 'minQuality' | 'tdsPpm'>,
+  hasFreshPurityTelemetry = true
+): DashboardStatus {
+  const purityIsHealthy =
+    typeof aquarium.tdsPpm === 'number' ? aquarium.tdsPpm <= 500 : aquarium.quality >= aquarium.minQuality;
+
+  if (
+    !hasFreshPurityTelemetry ||
+    aquarium.level < aquarium.minLevel ||
+    !purityIsHealthy
+  ) {
+    return 'warning';
+  }
+
+  return 'healthy';
+}
+
+export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[] {
+  return aquariums.map((aquarium) => ({
+    ...aquarium,
+    status: 'warning',
+    fishCount: Array.isArray(aquarium.species) ? aquarium.species.length : 0,
+    hasFreshTelemetry: false,
+    hasFreshPurityTelemetry: false,
+    telemetryState: 'unavailable',
+  }));
+}
+
+export function mergeDashboardAquariums(
+  aquariums: DashboardAquarium[],
+  deviceShadows: Record<string, DeviceShadow>,
+  now = Date.now()
+): DashboardAquarium[] {
+  return aquariums.map((aquarium) => {
+    const telemetry = deviceShadows[aquarium.id]?.telemetry;
+    const telemetryState = getDeviceTelemetryState(telemetry, now);
+    const snapshot = getFreshTelemetrySnapshot(telemetry, now);
+
+    const nextAquarium: Aquarium = {
+      ...aquarium,
+      temp: snapshot ? snapshot.temperatureC : aquarium.temp,
+      level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
+      tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+      quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
+    };
+
+    return {
+      ...nextAquarium,
+      status: snapshot ? getAquariumStatus(nextAquarium, snapshot.hasFreshPurityTelemetry) : 'warning',
+      fishCount: Array.isArray(nextAquarium.species) ? nextAquarium.species.length : 0,
+      hasFreshTelemetry: Boolean(snapshot),
+      hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
+      telemetryState,
+    };
+  });
+}
+
+export function buildOwnerGroups(aquariums: DashboardAquarium[]): OwnerGroup[] {
+  const groups = new Map<string, OwnerGroup>();
+
+  for (const aquarium of aquariums) {
+    const key = aquarium.ownerId || 'unknown';
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ownerId: aquarium.ownerId || '',
+        ownerName: aquarium.ownerName || 'Unknown Owner',
+        aquariums: [],
+        warningCount: 0,
+      });
+    }
+
+    const group = groups.get(key)!;
+    group.aquariums.push(aquarium);
+
+    if (aquarium.status === 'warning') {
+      group.warningCount += 1;
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
+}
+
+export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
+  if (!tank.hasFreshTelemetry) {
+    const message = getDeviceTelemetryStatusText(tank.telemetryState);
+
+    return [
+      {
+        title: 'Temperature',
+        value: '--',
+        icon: Thermometer,
+        change: message,
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+      {
+        title: 'Water Level',
+        value: '--',
+        icon: Droplets,
+        change: message,
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+      {
+        title: 'Water Purity (TDS)',
+        value: '--',
+        icon: Waves,
+        change: message,
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+      {
+        title: 'System Status',
+        value: tank.telemetryState === 'offline' ? 'Offline' : 'No live data',
+        icon: Zap,
+        change: message,
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+    ];
+  }
+
+  return [
+    {
+      title: 'Temperature',
+      value: `${tank.temp.toFixed(1)}\u00B0C`,
+      icon: Thermometer,
+      change:
+        tank.temp >= tank.minTemp && tank.temp <= tank.maxTemp ? 'Normal' : 'Check range',
+      trend:
+        tank.temp >= tank.minTemp && tank.temp <= tank.maxTemp ? 'good' : 'warning',
+      sparkline: [
+        tank.temp - 1.5,
+        tank.temp - 1,
+        tank.temp - 0.5,
+        tank.temp - 0.2,
+        tank.temp + 0.1,
+        tank.temp,
+      ],
+    },
+    {
+      title: 'Water Level',
+      value: `${tank.level}%`,
+      icon: Droplets,
+      change: tank.level >= tank.minLevel ? 'Normal' : 'Needs attention',
+      trend: tank.level >= tank.minLevel ? 'good' : 'warning',
+      sparkline: [
+        tank.level + 5,
+        tank.level + 3,
+        tank.level + 2,
+        tank.level + 1,
+        tank.level,
+        tank.level,
+      ],
+    },
+    {
+      title: 'Water Purity (TDS)',
+      value: tank.hasFreshPurityTelemetry ? `${tank.quality}%` : '--',
+      icon: Waves,
+      change: tank.hasFreshPurityTelemetry
+        ? typeof tank.tdsPpm === 'number'
+          ? tank.tdsPpm <= 300
+            ? 'Healthy'
+            : tank.tdsPpm <= 500
+              ? 'Moderate'
+              : 'Poor'
+          : tank.quality >= tank.minQuality
+            ? 'Healthy'
+            : tank.quality >= 65
+              ? 'Moderate'
+              : 'Poor'
+        : 'Sensor unavailable',
+      trend:
+        tank.hasFreshPurityTelemetry &&
+        (typeof tank.tdsPpm === 'number' ? tank.tdsPpm <= 500 : tank.quality >= tank.minQuality)
+          ? 'good'
+          : 'warning',
+      sparkline: [
+        tank.quality - 4,
+        tank.quality - 3,
+        tank.quality - 2,
+        tank.quality - 1,
+        tank.quality,
+        tank.quality,
+      ],
+    },
+    {
+      title: 'System Status',
+      value: tank.status === 'healthy' ? 'Stable' : 'Warning',
+      icon: Zap,
+      change: tank.status === 'healthy' ? 'All normal' : 'Check tank',
+      trend: tank.status === 'healthy' ? 'good' : 'warning',
+      sparkline: [100, 100, 100, 100, 100, tank.status === 'healthy' ? 100 : 85],
+    },
+  ];
+}
+
+export function buildAdminSummaryCards(options: {
+  totalUsers: number;
+  totalAquariums: number;
+  warningAquariums: number;
+  healthyAquariums: number;
+}): DashboardSummaryCard[] {
+  const { totalUsers, totalAquariums, warningAquariums, healthyAquariums } = options;
+
+  return [
+    {
+      title: 'Total Users',
+      value: totalUsers,
+      icon: Users,
+      iconClassName: 'text-cyan-400',
+      iconWrapperClassName: 'bg-cyan-500/20',
+    },
+    {
+      title: 'Total Aquariums',
+      value: totalAquariums,
+      icon: Fish,
+      iconClassName: 'text-blue-400',
+      iconWrapperClassName: 'bg-blue-500/20',
+    },
+    {
+      title: 'Warning Aquariums',
+      value: warningAquariums,
+      icon: AlertTriangle,
+      iconClassName: 'text-amber-400',
+      iconWrapperClassName: 'bg-amber-500/20',
+    },
+    {
+      title: 'Healthy Aquariums',
+      value: healthyAquariums,
+      icon: ShieldCheck,
+      iconClassName: 'text-emerald-400',
+      iconWrapperClassName: 'bg-emerald-500/20',
+    },
+  ];
+}
+
+export function buildUserSummaryCards(options: {
+  aquariumCount: number;
+  warningAquariums: number;
+  healthyAquariums: number;
+  selectedTankName: string;
+}): DashboardSummaryCard[] {
+  const { aquariumCount, warningAquariums, healthyAquariums, selectedTankName } = options;
+
+  return [
+    {
+      title: 'My Aquariums',
+      value: aquariumCount,
+      icon: Fish,
+      iconClassName: 'text-blue-400',
+      iconWrapperClassName: 'bg-blue-500/20',
+    },
+    {
+      title: 'Tanks Needing Attention',
+      value: warningAquariums,
+      icon: AlertTriangle,
+      iconClassName: 'text-amber-400',
+      iconWrapperClassName: 'bg-amber-500/20',
+    },
+    {
+      title: 'Healthy Tanks',
+      value: healthyAquariums,
+      icon: ShieldCheck,
+      iconClassName: 'text-emerald-400',
+      iconWrapperClassName: 'bg-emerald-500/20',
+    },
+    {
+      title: 'Selected Aquarium',
+      value: selectedTankName,
+      icon: Radio,
+      iconClassName: 'text-cyan-400',
+      iconWrapperClassName: 'bg-cyan-500/20',
+    },
+  ];
+}
+
+export function buildAdminAlerts(ownerGroups: OwnerGroup[]) {
+  const ownersNeedingAttention = ownerGroups.filter((group) => group.warningCount > 0);
+
+  if (ownersNeedingAttention.length === 0) {
+    return ['No owners currently have aquariums needing attention.'];
+  }
+
+  return ownersNeedingAttention.map(
+    (group) =>
+      `${group.ownerName} has ${group.warningCount} aquarium${
+        group.warningCount > 1 ? 's' : ''
+      } needing attention.`
+  );
+}
+
+export function buildUserAlerts(aquariums: DashboardAquarium[]) {
+  const warningAquariums = aquariums.filter((tank) => tank.status === 'warning');
+
+  if (warningAquariums.length === 0) {
+    return ['All of your aquariums are currently stable.'];
+  }
+
+  return warningAquariums.map(
+    (tank) =>
+      tank.hasFreshTelemetry
+        ? `${tank.name} needs attention based on current monitoring values.`
+        : `${tank.name} is ${getDeviceTelemetryStatusText(tank.telemetryState).toLowerCase()}.`
+  );
+}
+
+export function buildAdminActivities(ownerGroups: OwnerGroup[]) {
+  const ownersMostTanks = [...ownerGroups]
+    .sort((a, b) => b.aquariums.length - a.aquariums.length)
+    .slice(0, 5);
+
+  if (ownersMostTanks.length === 0) {
+    return ['No aquarium records available yet.'];
+  }
+
+  return ownersMostTanks.map(
+    (group) =>
+      `${group.ownerName} currently has ${group.aquariums.length} aquarium${
+        group.aquariums.length > 1 ? 's' : ''
+      } in the system.`
+  );
+}
+
+export function buildUserActivities(aquariums: DashboardAquarium[]) {
+  if (aquariums.length === 0) {
+    return ['You have not added any aquariums yet.'];
+  }
+
+  return aquariums.map(
+    (tank) =>
+      `${tank.name} is registered with ${tank.species.length} species entr${
+        tank.species.length !== 1 ? 'ies' : 'y'
+      }.`
+  );
+}
+
+export function getDashboardEmptyMessage(userRole: DashboardData['userProfile']['role']) {
+  return userRole === 'Admin'
+    ? 'No aquarium records exist yet.'
+    : 'You have not added any aquariums yet.';
+}
