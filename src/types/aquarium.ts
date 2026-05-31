@@ -5,7 +5,6 @@ export interface AutomationSettings {
   lightOffTime: string;
   filtrationStartTime: string;
   filtrationRuntimeHours: number;
-  ammoniaThreshold: number;
 }
 
 export interface ManualSystemStatus {
@@ -21,12 +20,15 @@ export interface Aquarium {
   bioload: 'low' | 'medium' | 'high';
   temp: number;
   level: number;
+  tdsPpm?: number;
   quality: number;
   feeder: string;
   light: string;
   filter: string;
   minTemp: number;
   maxTemp: number;
+  minLevel: number;
+  minQuality: number;
   ownerId: string;
   ownerName: string;
   automationSettings?: AutomationSettings;
