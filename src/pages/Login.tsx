@@ -1,22 +1,45 @@
-import { useState } from 'react';
-import { Waves, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { loginUser } from '../services/authService';
 import type { UserData } from '../types/user';
+import {
+  formatAuthRateLimitDuration,
+  getAuthRateLimitStatus,
+  isAuthRateLimitError,
+} from '../utils/authRateLimit';
 
 export default function Login({
   onLogin,
   onGoToSignup,
   onGoBack,
+  infoMessage = '',
 }: {
   onLogin: (user: UserData) => void;
   onGoToSignup: () => void;
   onGoBack: () => void;
+  infoMessage?: string;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const rateLimitStatus = useMemo(() => getAuthRateLimitStatus('login', now), [now]);
+  const rateLimitMessage = rateLimitStatus.blocked
+    ? `Too many sign-in attempts. Try again in ${formatAuthRateLimitDuration(
+        rateLimitStatus.retryAfterMs
+      )}.`
+    : '';
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
@@ -44,6 +67,11 @@ export default function Login({
       return;
     }
 
+    if (rateLimitStatus.blocked) {
+      setError(rateLimitMessage);
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -57,7 +85,9 @@ export default function Login({
 
       onLogin(userProfile);
     } catch (err: any) {
-      if (err.code === 'auth/invalid-credential') {
+      if (isAuthRateLimitError(err)) {
+        setError(err.message);
+      } else if (err.code === 'auth/invalid-credential') {
         setError('Invalid email or password.');
       } else if (err.code === 'auth/user-not-found') {
         setError('User not found.');
@@ -126,16 +156,19 @@ export default function Login({
               style={{
                 width: '72px',
                 height: '72px',
-                background: 'linear-gradient(135deg, #06b6d4, #2563eb)',
-                borderRadius: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 margin: '0 auto 18px',
-                boxShadow: '0 10px 30px rgba(37,99,235,0.28)',
+                overflow: 'hidden',
               }}
             >
-              <Waves style={{ width: '34px', height: '34px', color: 'white' }} />
+              <img
+                src="/smartaqua-logo.png"
+                alt="SmartAqua logo"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                }}
+              />
             </div>
 
             <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
@@ -187,6 +220,38 @@ export default function Login({
             </div>
           )}
 
+          {!error && infoMessage && (
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '13px 14px',
+                backgroundColor: 'rgba(59,130,246,0.14)',
+                border: '1px solid rgba(59,130,246,0.28)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                color: '#93c5fd',
+              }}
+            >
+              {infoMessage}
+            </div>
+          )}
+
+          {!error && rateLimitMessage && (
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '13px 14px',
+                backgroundColor: 'rgba(245,158,11,0.14)',
+                border: '1px solid rgba(245,158,11,0.28)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                color: '#fcd34d',
+              }}
+            >
+              {rateLimitMessage}
+            </div>
+          )}
+
           <div style={{ marginBottom: '16px' }}>
             <label style={labelStyle}>Email Address</label>
             <input
@@ -229,7 +294,7 @@ export default function Login({
 
           <button
             onClick={handleLogin}
-            disabled={loading}
+            disabled={loading || rateLimitStatus.blocked}
             style={{
               width: '100%',
               padding: '14px',
@@ -239,12 +304,18 @@ export default function Login({
               borderRadius: '14px',
               fontSize: '15px',
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: loading || rateLimitStatus.blocked ? 'not-allowed' : 'pointer',
               boxShadow: '0 12px 30px rgba(37,99,235,0.28)',
-              opacity: loading ? 0.75 : 1,
+              opacity: loading || rateLimitStatus.blocked ? 0.75 : 1,
             }}
           >
-            {loading ? 'Signing In...' : 'Sign In'}
+            {loading
+              ? 'Signing In...'
+              : rateLimitStatus.blocked
+                ? `Try Again In ${formatAuthRateLimitDuration(
+                    rateLimitStatus.retryAfterMs
+                  )}`
+                : 'Sign In'}
           </button>
 
           <p
