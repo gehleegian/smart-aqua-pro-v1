@@ -3,50 +3,51 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { UserData } from '../types/user';
-import { normalizeRole } from '../utils/roleHelpers';
+import { registerAuthAttempt, resetAuthRateLimit } from '../utils/authRateLimit';
+import { getCurrentUserProfile } from './userService';
 
 export async function registerUser(
   name: string,
   email: string,
   password: string
 ): Promise<void> {
+  registerAuthAttempt('signup');
+
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
+  const now = new Date().toISOString();
 
   await setDoc(doc(db, 'users', firebaseUser.uid), {
+    full_name: name,
     name,
     email,
+    contact_number: '',
     role: 'User',
-    createdAt: new Date().toISOString(),
+    account_status: 'active',
+    created_at: now,
+    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
   });
 
   await signOut(auth);
+  resetAuthRateLimit('signup');
 }
 
 export async function loginUser(
   email: string,
   password: string
 ): Promise<UserData | null> {
+  registerAuthAttempt('login');
+
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
+  const profile = await getCurrentUserProfile(firebaseUser.uid);
 
-  const userRef = doc(db, 'users', firebaseUser.uid);
-  const userSnap = await getDoc(userRef);
+  resetAuthRateLimit('login');
 
-  if (!userSnap.exists()) {
-    return null;
-  }
-
-  const data = userSnap.data();
-
-  return {
-    id: userSnap.id,
-    name: data.name || '',
-    email: data.email || '',
-    role: normalizeRole(data.role),
-    createdAt: data.createdAt || '',
-  };
+  return profile;
 }
