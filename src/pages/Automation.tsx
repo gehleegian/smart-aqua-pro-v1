@@ -30,9 +30,8 @@ const filterConfig = [
 const automationRules = [
   { id: 1, condition: 'IF Temperature > 28°C', action: 'Turn on cooling fan', enabled: true },
   { id: 2, condition: 'IF Water Level < 70%', action: 'Trigger water refill alert', enabled: true },
-  { id: 3, condition: 'IF Water Quality < 80%', action: 'Increase filter runtime by 2hrs', enabled: true },
+  { id: 3, condition: 'IF Water Purity (TDS Level) < 80%', action: 'Increase filter runtime by 2hrs', enabled: true },
   { id: 4, condition: 'IF pH < 6.5 OR pH > 7.8', action: 'Send alert notification', enabled: true },
-  { id: 5, condition: 'IF Turbidity > 25 NTU', action: 'Activate backup filter', enabled: false },
   { id: 6, condition: 'IF Power outage detected', action: 'Send SMS/Email alert', enabled: true },
 ];
 
