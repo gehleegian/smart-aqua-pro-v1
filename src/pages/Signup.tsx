@@ -1,6 +1,11 @@
-import { useState } from 'react';
-import { Waves, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { registerUser } from '../services/authService';
+import {
+  formatAuthRateLimitDuration,
+  getAuthRateLimitStatus,
+  isAuthRateLimitError,
+} from '../utils/authRateLimit';
 
 export default function Signup({
   onSignup,
@@ -17,6 +22,22 @@ export default function Signup({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const rateLimitStatus = useMemo(() => getAuthRateLimitStatus('signup', now), [now]);
+  const rateLimitMessage = rateLimitStatus.blocked
+    ? `Too many sign-up attempts. Try again in ${formatAuthRateLimitDuration(
+        rateLimitStatus.retryAfterMs
+      )}.`
+    : '';
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
@@ -54,6 +75,11 @@ export default function Signup({
       return;
     }
 
+    if (rateLimitStatus.blocked) {
+      setError(rateLimitMessage);
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -67,7 +93,9 @@ export default function Signup({
         onSignup();
       }, 1500);
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
+      if (isAuthRateLimitError(err)) {
+        setError(err.message);
+      } else if (err.code === 'auth/email-already-in-use') {
         setError('Email is already in use.');
       } else if (err.code === 'auth/invalid-email') {
         setError('Invalid email address.');
@@ -134,16 +162,19 @@ export default function Signup({
               style={{
                 width: '72px',
                 height: '72px',
-                background: 'linear-gradient(135deg, #06b6d4, #2563eb)',
-                borderRadius: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 margin: '0 auto 18px',
-                boxShadow: '0 10px 30px rgba(37,99,235,0.28)',
+                overflow: 'hidden',
               }}
             >
-              <Waves style={{ width: '34px', height: '34px', color: 'white' }} />
+              <img
+                src="/smartaqua-logo.png"
+                alt="SmartAqua logo"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                }}
+              />
             </div>
 
             <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
@@ -181,6 +212,22 @@ export default function Signup({
               }}
             >
               {error}
+            </div>
+          )}
+
+          {!error && rateLimitMessage && (
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '13px 14px',
+                backgroundColor: 'rgba(245,158,11,0.14)',
+                border: '1px solid rgba(245,158,11,0.28)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                color: '#fcd34d',
+              }}
+            >
+              {rateLimitMessage}
             </div>
           )}
 
@@ -264,7 +311,7 @@ export default function Signup({
 
           <button
             onClick={handleSignup}
-            disabled={loading}
+            disabled={loading || rateLimitStatus.blocked}
             style={{
               width: '100%',
               padding: '14px',
@@ -274,12 +321,18 @@ export default function Signup({
               borderRadius: '14px',
               fontSize: '15px',
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: loading || rateLimitStatus.blocked ? 'not-allowed' : 'pointer',
               boxShadow: '0 12px 30px rgba(37,99,235,0.28)',
-              opacity: loading ? 0.75 : 1,
+              opacity: loading || rateLimitStatus.blocked ? 0.75 : 1,
             }}
           >
-            {loading ? 'Creating Account...' : 'Create Account'}
+            {loading
+              ? 'Creating Account...'
+              : rateLimitStatus.blocked
+                ? `Try Again In ${formatAuthRateLimitDuration(
+                    rateLimitStatus.retryAfterMs
+                  )}`
+                : 'Create Account'}
           </button>
 
           <p
