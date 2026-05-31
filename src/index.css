@@ -12,27 +12,27 @@ body {
 @import "tailwindcss";
 
 @theme {
-  --color-slate-50: #eaf1f7;
-  --color-slate-100: #d5e3ee;
-  --color-slate-200: #abc7dd;
-  --color-slate-300: #81abcc;
-  --color-slate-400: #578fbb;
-  --color-slate-500: #3d7ba8;
-  --color-slate-600: #2d5f87;
-  --color-slate-700: #1e4466;
-  --color-slate-800: #142e49;
-  --color-slate-900: #0a1a30;
-  --color-slate-950: #050d1a;
+  --color-slate-50: #edf5fb;
+  --color-slate-100: #dceaf5;
+  --color-slate-200: #bdd8eb;
+  --color-slate-300: #95bfdc;
+  --color-slate-400: #6ea4c9;
+  --color-slate-500: #4f89b3;
+  --color-slate-600: #3b6d95;
+  --color-slate-700: #2a5275;
+  --color-slate-800: #1b3a59;
+  --color-slate-900: #11283f;
+  --color-slate-950: #0b1b2d;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #1e4466 #050d1a;
+  scrollbar-color: #2a5275 #0b1b2d;
 }
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background-color: #050d1a;
+  background-color: #0b1b2d;
 }
 
 @keyframes swim {
@@ -61,4 +61,27 @@ body {
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+
+@keyframes aquariumHeroDrift {
+  0% {
+    transform: scale(1.04) translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+
+  100% {
+    transform: scale(1.04) translate3d(0, 0, 0);
+  }
+}
+
+.aquarium-hero-motion {
+  animation: aquariumHeroDrift 24s ease-in-out infinite;
+}
+
+.app-aquarium-motion {
+  animation: aquariumHeroDrift 28s ease-in-out infinite;
+  filter: saturate(1.08);
 }
