@@ -9,12 +9,13 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import type {
   Aquarium,
   AutomationSettings,
   ManualSystemStatus,
 } from '../types/aquarium';
+import { getCurrentUserProfile } from './userService';
 
 function readString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value : fallback;
@@ -59,7 +60,6 @@ function mapAutomationSettings(
     lightOffTime: readString(settingsRecord.lightOffTime, '22:00'),
     filtrationStartTime: readString(settingsRecord.filtrationStartTime, '07:00'),
     filtrationRuntimeHours: readNumber(settingsRecord.filtrationRuntimeHours, 8),
-    ammoniaThreshold: readNumber(settingsRecord.ammoniaThreshold, 0.25),
   };
 }
 
@@ -92,12 +92,14 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
         : 'low',
     temp: Number(data.temp ?? 0),
     level: Number(data.level ?? 0),
-    quality: Number(data.quality ?? 0),
+    quality: readNumber(data.quality, 100),
     feeder: readString(data.feeder, 'Inactive'),
     light: readString(data.light, 'Off'),
     filter: readString(data.filter, 'Inactive'),
     minTemp: Number(data.minTemp ?? 0),
     maxTemp: Number(data.maxTemp ?? 0),
+    minLevel: readNumber(data.minLevel, 70),
+    minQuality: readNumber(data.minQuality, 80),
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     automationSettings: mapAutomationSettings(data),
@@ -105,13 +107,72 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
   };
 }
 
+async function requireAuthenticatedProfile() {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error('You must be logged in to perform this action.');
+  }
+
+  const currentProfile = await getCurrentUserProfile(currentUser.uid);
+
+  if (!currentProfile) {
+    throw new Error('User profile not found.');
+  }
+
+  return currentProfile;
+}
+
+async function requireAquariumAccess(
+  aquariumId: string,
+  action: 'view' | 'update' | 'delete'
+) {
+  const currentProfile = await requireAuthenticatedProfile();
+  const aquariumRef = doc(db, 'aquariums', aquariumId);
+  const aquariumSnap = await getDoc(aquariumRef);
+
+  if (!aquariumSnap.exists()) {
+    throw new Error('Aquarium not found.');
+  }
+
+  const aquariumData = aquariumSnap.data() as Record<string, unknown>;
+  const ownerId = readString(aquariumData.ownerId, '');
+  const isAdmin = currentProfile.role === 'Admin';
+  const isOwner = currentProfile.id === ownerId;
+
+  if (!isAdmin && !isOwner) {
+    throw new Error(`You are not allowed to ${action} this aquarium.`);
+  }
+
+  return {
+    aquariumRef,
+    aquariumData,
+    currentProfile,
+    isAdmin,
+    isOwner,
+  };
+}
+
 export async function getAllAquariums(): Promise<Aquarium[]> {
+  const currentProfile = await requireAuthenticatedProfile();
+
+  if (currentProfile.role !== 'Admin') {
+    throw new Error('Admin access is required to view all aquariums.');
+  }
+
   const snapshot = await getDocs(collection(db, 'aquariums'));
 
   return snapshot.docs.map((docSnap) => mapAquarium(docSnap.id, docSnap.data()));
 }
 
 export async function getAquariumsByOwner(ownerId: string): Promise<Aquarium[]> {
+  const currentProfile = await requireAuthenticatedProfile();
+  const isAdmin = currentProfile.role === 'Admin';
+
+  if (!isAdmin && ownerId !== currentProfile.id) {
+    throw new Error('You are not allowed to view aquariums for another user.');
+  }
+
   const aquariumsQuery = query(
     collection(db, 'aquariums'),
     where('ownerId', '==', ownerId)
@@ -123,43 +184,80 @@ export async function getAquariumsByOwner(ownerId: string): Promise<Aquarium[]> 
 }
 
 export async function getAquariumById(aquariumId: string) {
-  const aquariumRef = doc(db, 'aquariums', aquariumId);
-  const aquariumSnap = await getDoc(aquariumRef);
+  try {
+    const { aquariumData } = await requireAquariumAccess(aquariumId, 'view');
+    return aquariumData;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Aquarium not found.') {
+      return null;
+    }
 
-  if (!aquariumSnap.exists()) {
-    return null;
+    throw error;
   }
-
-  return aquariumSnap.data();
 }
 
 export async function createAquarium(data: Omit<Aquarium, 'id'>): Promise<void> {
-  await addDoc(collection(db, 'aquariums'), data);
+  const currentProfile = await requireAuthenticatedProfile();
+  const isAdmin = currentProfile.role === 'Admin';
+
+  if (!isAdmin && data.ownerId !== currentProfile.id) {
+    throw new Error('You can only create aquariums for your own account.');
+  }
+
+  const payload = isAdmin
+    ? data
+    : {
+        ...data,
+        ownerId: currentProfile.id,
+        ownerName: currentProfile.name,
+      };
+
+  await addDoc(collection(db, 'aquariums'), payload);
 }
 
 export async function updateAquarium(
   aquariumId: string,
   data: Partial<Omit<Aquarium, 'id'>>
 ): Promise<void> {
-  await updateDoc(doc(db, 'aquariums', aquariumId), data);
+  const { aquariumRef, aquariumData, isAdmin } = await requireAquariumAccess(
+    aquariumId,
+    'update'
+  );
+
+  const sanitizedData = { ...data } as Partial<Omit<Aquarium, 'id'>>;
+
+  if (!isAdmin) {
+    sanitizedData.ownerId = readString(aquariumData.ownerId, '');
+    sanitizedData.ownerName = readString(aquariumData.ownerName, '');
+  }
+
+  await updateDoc(aquariumRef, sanitizedData);
 }
 
 export async function updateAquariumManualStatus(
   aquariumId: string,
   data: Partial<ManualSystemStatus>
 ): Promise<void> {
+  const { aquariumRef } = await requireAquariumAccess(aquariumId, 'update');
   const updates = Object.fromEntries(
     Object.entries(data).map(([field, value]) => [`manualStatus.${field}`, value])
   );
 
-  await updateDoc(doc(db, 'aquariums', aquariumId), updates);
+  await updateDoc(aquariumRef, updates);
 }
 
 export async function deleteAquarium(aquariumId: string): Promise<void> {
-  await deleteDoc(doc(db, 'aquariums', aquariumId));
+  const { aquariumRef } = await requireAquariumAccess(aquariumId, 'delete');
+  await deleteDoc(aquariumRef);
 }
 
 export async function deleteAquariumsByOwner(ownerId: string): Promise<void> {
+  const currentProfile = await requireAuthenticatedProfile();
+
+  if (currentProfile.role !== 'Admin') {
+    throw new Error('Admin access is required to delete aquariums by owner.');
+  }
+
   const aquariumsQuery = query(
     collection(db, 'aquariums'),
     where('ownerId', '==', ownerId)
