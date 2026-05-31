@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Waves, Zap, ArrowRight, Mail, Phone, MapPin } from 'lucide-react';
+import aquariumHero from '../assets/aquarium-hero.jpg';
 
 type FeedPellet = {
   id: string;
@@ -410,8 +411,12 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
       <nav className="fixed top-0 w-full bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <Waves className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 overflow-hidden">
+              <img
+                src="/smartaqua-logo.png"
+                alt="SmartAqua logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="text-lg font-bold text-white">SmartAqua <span className="text-cyan-400">Pro</span></span>
           </div>
@@ -428,8 +433,19 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
       </nav>
 
       {/* Hero */}
-      <section id="home" className="pt-32 pb-20 px-6">
-        <div className="max-w-7xl mx-auto">
+      <section id="home" className="relative overflow-hidden pt-32 pb-20 px-6">
+        <div className="absolute inset-0">
+          <img
+            src={aquariumHero}
+            alt=""
+            className="aquarium-hero-motion h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-slate-950/55" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/35" />
+          <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-slate-950 to-transparent" />
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs text-cyan-400 mb-6">
@@ -606,7 +622,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: '🌡️', title: 'Real-time Monitoring', desc: 'Track temperature, water level, water quality, pH, and turbidity in real-time with live sensor data.', color: 'from-orange-500 to-red-500' },
+              { icon: '🌡️', title: 'Real-time Monitoring', desc: 'Track temperature, water level, water purity (TDS level), and pH in real-time with live sensor data.', color: 'from-orange-500 to-red-500' },
               { icon: '⚙️', title: 'Intelligent Automation', desc: 'Rule-based automation for feeding, lighting, and filtration with bioload-based fish classification.', color: 'from-purple-500 to-indigo-500' },
               { icon: '🔔', title: 'Alert & Notification', desc: 'Instant warnings for abnormal conditions, system risks, and power outage detection.', color: 'from-amber-500 to-orange-500' },
               { icon: '📊', title: 'Data Logging & Reports', desc: 'Historical data analysis, interactive charts, and exportable CSV reports for long-term management.', color: 'from-emerald-500 to-green-500' },
@@ -632,7 +648,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
             <h2 className="text-3xl font-bold text-white mb-3">About the Project</h2>
             <div className="w-16 h-1 bg-cyan-500 mx-auto rounded-full"></div>
           </div>
-          <p className="text-center max-w-3xl mx-auto text-slate-400 leading-relaxed mb-6">Aquarium management requires continuous monitoring of environmental conditions such as water temperature, water level, water quality, lighting, and feeding schedules to maintain a stable and healthy aquatic ecosystem.</p>
+          <p className="text-center max-w-3xl mx-auto text-slate-400 leading-relaxed mb-6">Aquarium management requires continuous monitoring of environmental conditions such as water temperature, water level, water purity (TDS level), lighting, and feeding schedules to maintain a stable and healthy aquatic ecosystem.</p>
           <p className="text-center max-w-3xl mx-auto text-slate-400 leading-relaxed">SmartAqua Pro addresses these challenges by integrating IoT-based sensing, rule-based automation, real-time alerts, and digital record management into a single platform.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
             <div className="text-center bg-slate-800/50 border border-slate-700/50 rounded-xl p-6">
@@ -663,7 +679,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
           </div>
           <div className="space-y-4">
             {[
-              { num: '01', text: 'Develop an IoT-based data collection and monitoring system that gathers real-time aquarium parameters such as temperature, water level, and water quality.' },
+              { num: '01', text: 'Develop an IoT-based data collection and monitoring system that gathers real-time aquarium parameters such as temperature, water level, and water purity (TDS level).' },
               { num: '02', text: 'Design and implement rule-based intelligent automation for feeding, lighting, and filtration using predefined thresholds, conditions, schedules, and bioload-based fish classification.' },
               { num: '03', text: 'Develop a centralized monitoring platform (web and mobile application) for real-time monitoring, remote control, user management, and improved accessibility.' },
               { num: '04', text: 'Integrate an alert and notification system that provides real-time warnings for abnormal conditions, system risks, and power outages.' },
@@ -764,7 +780,13 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
       <footer className="py-8 px-6 border-t border-slate-800">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center"><Waves className="w-4 h-4 text-white" /></div>
+            <div className="w-8 h-8 overflow-hidden">
+              <img
+                src="/smartaqua-logo.png"
+                alt="SmartAqua logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
             <span className="text-sm text-slate-400">SmartAqua Pro © 2026</span>
           </div>
           <div className="text-center">
