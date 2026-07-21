@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase';
 
@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import Dashboard from '../../pages/Dashboard';
 import Monitoring from '../../pages/Monitoring';
+import Automation from '../../pages/Automation';
 import Alerts from '../../pages/Alerts';
 import DataLogs from '../../pages/DataLogs';
 import Aquariums from '../../pages/Aquariums';
@@ -14,7 +15,6 @@ import Settings from '../../pages/Settings';
 import Login from '../../pages/Login';
 import Landing from '../../pages/Landing';
 import Signup from '../../pages/Signup';
-import aquariumHero from '../../assets/aquarium-hero.jpg';
 
 import { getCurrentUserProfile } from '../../services/userService';
 import type { UserData, UserRole } from '../../types/user';
@@ -23,6 +23,7 @@ import { normalizeRole } from '../../utils/roleHelpers';
 const pages: Record<string, React.FC> = {
   dashboard: Dashboard,
   monitoring: Monitoring,
+  automation: Automation,
   alerts: Alerts,
   datalogs: DataLogs,
   aquariums: Aquariums,
@@ -33,8 +34,8 @@ const pages: Record<string, React.FC> = {
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
 
 const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'aquariums', 'users', 'settings'],
-  User: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'aquariums', 'settings'],
+  Admin: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'users', 'settings'],
+  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings'],
 };
 
 export default function Layout() {
@@ -45,8 +46,6 @@ export default function Layout() {
   const [user, setUser] = useState<UserData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [authNotice, setAuthNotice] = useState('');
-  const logoutTargetRef = useRef<AppPage>('landing');
 
   useEffect(() => {
     localStorage.setItem('currentPage', currentPage);
@@ -57,8 +56,7 @@ export default function Layout() {
       try {
         if (!firebaseUser) {
           setUser(null);
-          setAppPage(logoutTargetRef.current);
-          logoutTargetRef.current = 'landing';
+          setAppPage('landing');
           setCurrentPage('dashboard');
           setLoadingAuth(false);
           return;
@@ -78,18 +76,13 @@ export default function Layout() {
         setUser({
           id: userProfile.id,
           name: userProfile.name,
-          fullName: userProfile.fullName,
           email: userProfile.email,
-          contactNumber: userProfile.contactNumber,
           role: normalizedRole,
           createdAt: userProfile.createdAt,
-          updatedAt: userProfile.updatedAt,
-          accountStatus: userProfile.accountStatus,
           status: userProfile.status,
         });
 
         setAppPage('app');
-        setAuthNotice('');
 
         const savedPage = localStorage.getItem('currentPage') || 'dashboard';
         const allowed = rolePermissions[normalizedRole] ?? rolePermissions.User;
@@ -112,69 +105,18 @@ export default function Layout() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const handleProfileUpdated = async () => {
-      const firebaseUser = auth.currentUser;
-
-      if (!firebaseUser) {
-        return;
-      }
-
-      try {
-        const userProfile = await getCurrentUserProfile(firebaseUser.uid);
-
-        if (!userProfile) {
-          return;
-        }
-
-        const normalizedRole = normalizeRole(userProfile.role);
-
-        setUser({
-          id: userProfile.id,
-          name: userProfile.name,
-          fullName: userProfile.fullName,
-          email: userProfile.email,
-          contactNumber: userProfile.contactNumber,
-          role: normalizedRole,
-          createdAt: userProfile.createdAt,
-          updatedAt: userProfile.updatedAt,
-          accountStatus: userProfile.accountStatus,
-          status: userProfile.status,
-        });
-      } catch (error) {
-        console.error('Failed to refresh updated user profile:', error);
-      }
-    };
-
-    window.addEventListener(
-      'smartaqua:userProfileUpdated',
-      handleProfileUpdated as EventListener
-    );
-
-    return () => {
-      window.removeEventListener(
-        'smartaqua:userProfileUpdated',
-        handleProfileUpdated as EventListener
-      );
-    };
-  }, []);
-
-  const handleLogout = useCallback(async (
-    options: { nextPage?: AppPage; notice?: string } = {}
-  ) => {
+  const handleLogout = async () => {
     try {
-      logoutTargetRef.current = options.nextPage || 'landing';
-      setAuthNotice(options.notice || '');
       await signOut(auth);
       localStorage.removeItem('currentPage');
       setUser(null);
-      setAppPage(options.nextPage || 'landing');
+      setAppPage('landing');
       setCurrentPage('dashboard');
       setSidebarOpen(false);
     } catch (error) {
       console.error('Logout failed:', error);
     }
-  }, []);
+  };
 
   const allowedPages = useMemo(() => {
     if (!user) return [];
@@ -217,13 +159,9 @@ export default function Layout() {
     return (
       <Signup
         onSignup={() => {
-          setAuthNotice('');
           setAppPage('login');
         }}
-        onGoToLogin={() => {
-          setAuthNotice('');
-          setAppPage('login');
-        }}
+        onGoToLogin={() => setAppPage('login')}
       />
     );
   }
@@ -232,22 +170,14 @@ export default function Layout() {
     return (
       <Login
         onLogin={(userData) => {
-          setAuthNotice('');
           setUser({
             ...userData,
             role: normalizeRole(userData.role),
           });
           setAppPage('app');
         }}
-        onGoToSignup={() => {
-          setAuthNotice('');
-          setAppPage('signup');
-        }}
-        onGoBack={() => {
-          setAuthNotice('');
-          setAppPage('landing');
-        }}
-        infoMessage={authNotice}
+        onGoToSignup={() => setAppPage('signup')}
+        onGoBack={() => setAppPage('landing')}
       />
     );
   }
@@ -275,28 +205,16 @@ export default function Layout() {
         />
       )}
 
-      <div className="relative min-h-screen overflow-hidden lg:ml-64">
-        <div className="pointer-events-none fixed inset-y-0 left-0 right-0 overflow-hidden lg:left-64">
-          <img
-            src={aquariumHero}
-            alt=""
-            className="app-aquarium-motion h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-slate-950/70" />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-950/65 to-slate-900/55" />
-        </div>
-
-        <div className="relative z-10">
-          <Header
-            currentPage={currentPage}
-            user={user}
-            onLogout={handleLogout}
-            onMenuClick={() => setSidebarOpen(true)}
-          />
-          <main className="p-6">
-            <PageComponent />
-          </main>
-        </div>
+      <div className="lg:ml-64">
+        <Header
+          currentPage={currentPage}
+          user={user}
+          onLogout={handleLogout}
+          onMenuClick={() => setSidebarOpen(true)}
+        />
+        <main className="p-6">
+          <PageComponent />
+        </main>
       </div>
     </div>
   );

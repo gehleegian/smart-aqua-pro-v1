@@ -1,9 +1,13 @@
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { UserData } from '../types/user';
 import { registerAuthAttempt, resetAuthRateLimit } from '../utils/authRateLimit';
-import { createAuthService } from '../../packages/shared/src/services/authService';
-
-const authService = createAuthService({ auth, db });
+import { getCurrentUserProfile } from './userService';
 
 export async function registerUser(
   name: string,
@@ -12,7 +16,24 @@ export async function registerUser(
 ): Promise<void> {
   registerAuthAttempt('signup');
 
-  await authService.registerUser(name, email, password);
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const firebaseUser = userCredential.user;
+  const now = new Date().toISOString();
+
+  await setDoc(doc(db, 'users', firebaseUser.uid), {
+    full_name: name,
+    name,
+    email,
+    contact_number: '',
+    role: 'User',
+    account_status: 'active',
+    created_at: now,
+    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await signOut(auth);
   resetAuthRateLimit('signup');
 }
 
@@ -22,7 +43,9 @@ export async function loginUser(
 ): Promise<UserData | null> {
   registerAuthAttempt('login');
 
-  const profile = await authService.loginUser(email, password);
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const firebaseUser = userCredential.user;
+  const profile = await getCurrentUserProfile(firebaseUser.uid);
 
   resetAuthRateLimit('login');
 

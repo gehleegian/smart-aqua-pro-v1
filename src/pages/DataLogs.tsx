@@ -4,6 +4,7 @@ import { HistoricalDataTable } from '../components/dataLogs/HistoricalDataTable'
 import { HistoryLineChart } from '../components/dataLogs/HistoryLineChart';
 import { QuickExportCard } from '../components/dataLogs/QuickExportCard';
 import { ReportSummaryCard } from '../components/dataLogs/ReportSummaryCard';
+import { WeeklyQualityChart } from '../components/dataLogs/WeeklyQualityChart';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import { useDataLogsController } from '../hooks/useDataLogsController';
 
@@ -103,16 +104,14 @@ export default function DataLogs() {
             <CardHeader>
               <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
                 <Waves className="h-5 w-5 text-emerald-400" />
-                Water Purity (TDS ppm)
+                Water Purity (TDS Level)
               </h3>
             </CardHeader>
             <CardContent>
-              <HistoryLineChart
+              <WeeklyQualityChart
                 data={dataLogs.weeklyQualityData}
-                color="#10b981"
-                label={`7d ending ${dataLogs.selectedDate}`}
-                unit=" ppm"
-                emptyMessage="No TDS history available yet."
+                emptyMessage="No water purity (TDS) history available yet."
+                barClassName="bg-emerald-500"
               />
             </CardContent>
           </Card>

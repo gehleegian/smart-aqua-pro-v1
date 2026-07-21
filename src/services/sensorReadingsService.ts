@@ -1,9 +1,11 @@
 import {
+  addDoc,
   collection,
   doc,
   writeBatch,
   getDocs,
   orderBy,
+  setDoc,
   query,
   where,
 } from 'firebase/firestore';
@@ -58,6 +60,10 @@ function readNumber(value: unknown, fallback?: number) {
   }
 
   return fallback;
+}
+
+function readString(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
 function readRecordedAtLabel(value: unknown, recordedAtEpoch: number) {

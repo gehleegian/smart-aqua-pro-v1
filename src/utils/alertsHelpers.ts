@@ -297,8 +297,7 @@ export function readAlertHistory(storageKey: string) {
       return [] as AquariumAlert[];
     }
 
-    return dedupeAlertsByFingerprint(
-      parsed.filter(
+    return parsed.filter(
       (alert) =>
         alert &&
         typeof alert.id === 'string' &&
@@ -306,7 +305,6 @@ export function readAlertHistory(storageKey: string) {
         typeof alert.aquariumId === 'string' &&
         typeof alert.firstDetectedAt === 'number' &&
         typeof alert.lastDetectedAt === 'number'
-      )
     );
   } catch {
     return [] as AquariumAlert[];
@@ -321,41 +319,12 @@ export function writeAlertHistory(storageKey: string, alerts: AquariumAlert[]) {
   window.localStorage.setItem(storageKey, JSON.stringify(alerts));
 }
 
-function getAlertRecency(alert: AquariumAlert) {
-  return Math.max(alert.lastDetectedAt, alert.resolvedAt ?? 0);
-}
-
-export function dedupeAlertsByFingerprint(alerts: AquariumAlert[]) {
-  const latestByFingerprint = new Map<string, AquariumAlert>();
-
-  for (const alert of alerts) {
-    const existing = latestByFingerprint.get(alert.fingerprint);
-
-    if (!existing) {
-      latestByFingerprint.set(alert.fingerprint, { ...alert });
-      continue;
-    }
-
-    const existingRecency = getAlertRecency(existing);
-    const nextRecency = getAlertRecency(alert);
-
-    if (
-      nextRecency > existingRecency ||
-      (nextRecency === existingRecency && existing.resolvedAt !== null && alert.resolvedAt === null)
-    ) {
-      latestByFingerprint.set(alert.fingerprint, { ...alert });
-    }
-  }
-
-  return sortAlertsByRecency(Array.from(latestByFingerprint.values()));
-}
-
 export function syncAlertHistory(
   previousAlerts: AquariumAlert[],
   activeCandidates: AlertCandidate[],
   now = Date.now()
 ) {
-  const nextAlerts = dedupeAlertsByFingerprint(previousAlerts);
+  const nextAlerts = [...previousAlerts];
   const activeFingerprints = new Set(activeCandidates.map((alert) => alert.fingerprint));
 
   function applyCandidateUpdate(alert: AquariumAlert, candidate: AlertCandidate) {
@@ -414,15 +383,13 @@ export function syncAlertHistory(
     }
   }
 
-  return dedupeAlertsByFingerprint(
-    nextAlerts
+  return nextAlerts
     .filter(
       (alert) =>
         now - Math.max(alert.lastDetectedAt, alert.resolvedAt ?? 0) <=
         ALERT_HISTORY_MAX_AGE_MS
     )
-      .slice(0, ALERT_HISTORY_LIMIT)
-  );
+    .slice(0, ALERT_HISTORY_LIMIT);
 }
 
 export function acknowledgeAlert(alerts: AquariumAlert[], alertId: string) {
