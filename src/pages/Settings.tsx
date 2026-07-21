@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Bell,
-  CalendarDays,
   Database,
   Cpu,
   Info,
-  Mail,
   PencilLine,
-  Phone,
-  Shield,
   Thermometer,
   Droplets,
   Waves,
@@ -24,8 +20,7 @@ import type { UserData } from '../types/user';
 
 export default function Settings() {
   const [notifications, setNotifications] = useState({
-    email: true,
-    push: true,
+    enabled: true,
     critical: true,
     warning: true,
     info: false,
@@ -190,65 +185,112 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { key: 'email', label: 'Email Notifications', desc: 'Receive alerts via email' },
-                { key: 'push', label: 'Push Notifications', desc: 'Browser push notifications' },
-                { key: 'critical', label: 'Critical Alerts', desc: 'Power outage, system failure' },
-                { key: 'warning', label: 'Warning Alerts', desc: 'Parameter out of range' },
-                { key: 'info', label: 'Info Notifications', desc: 'Feeding completed, routine events' },
-                { key: 'powerOutage', label: 'Power Outage Alerts', desc: 'Immediate notification on power loss' },
-              ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-white">Notifications Enabled</p>
+                  <p className="text-xs text-slate-500">Master switch for all notification types</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotifications((prev) => ({
+                      ...prev,
+                      enabled: !prev.enabled,
+                    }))
+                  }
+                  className={`h-6 w-12 rounded-full transition-all duration-200 ${
+                    notifications.enabled ? 'bg-cyan-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div
+                    className={`h-5 w-5 rounded-full bg-white transition-all duration-200 ${
+                      notifications.enabled ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div
+                className={`rounded-xl border border-slate-700/60 bg-slate-800/30 p-4 ${
+                  notifications.enabled ? '' : 'opacity-60'
+                }`}
+              >
+                <div className="mb-3">
+                  <p className="text-sm font-medium text-white">Severity</p>
+                  <p className="text-xs text-slate-500">Choose which alert levels you want</p>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { key: 'critical', label: 'Critical Alerts', desc: 'Power outage, system failure' },
+                    { key: 'warning', label: 'Warning Alerts', desc: 'Parameter out of range' },
+                    { key: 'info', label: 'Info Notifications', desc: 'Feeding completed, routine events' },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-white">{item.label}</p>
+                        <p className="text-xs text-slate-500">{item.desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!notifications.enabled}
+                        onClick={() =>
+                          setNotifications({
+                            ...notifications,
+                            [item.key]: !notifications[item.key as keyof typeof notifications],
+                          })
+                        }
+                        className={`h-6 w-12 rounded-full transition-all duration-200 ${
+                          notifications[item.key as keyof typeof notifications]
+                            ? 'bg-cyan-600'
+                            : 'bg-slate-600'
+                        } ${notifications.enabled ? '' : 'cursor-not-allowed opacity-60'}`}
+                      >
+                        <div
+                          className={`h-5 w-5 rounded-full bg-white transition-all duration-200 ${
+                            notifications[item.key as keyof typeof notifications]
+                              ? 'translate-x-6'
+                              : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-xl border border-slate-700/60 bg-slate-800/30 p-4 ${
+                  notifications.enabled ? '' : 'opacity-60'
+                }`}
+              >
+                <div className="mb-3">
+                  <p className="text-sm font-medium text-white">Advanced Events</p>
+                  <p className="text-xs text-slate-500">Extra system events outside the main severity levels</p>
+                </div>
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm text-white">{item.label}</p>
-                    <p className="text-xs text-slate-500">{item.desc}</p>
+                    <p className="text-sm text-white">Power Outage Alerts</p>
+                    <p className="text-xs text-slate-500">Immediate notification on power loss</p>
                   </div>
                   <button
                     type="button"
+                    disabled={!notifications.enabled}
                     onClick={() =>
                       setNotifications({
                         ...notifications,
-                        [item.key]: !notifications[item.key as keyof typeof notifications],
+                        powerOutage: !notifications.powerOutage,
                       })
                     }
                     className={`h-6 w-12 rounded-full transition-all duration-200 ${
-                      notifications[item.key as keyof typeof notifications]
-                        ? 'bg-cyan-600'
-                        : 'bg-slate-600'
-                    }`}
+                      notifications.powerOutage ? 'bg-cyan-600' : 'bg-slate-600'
+                    } ${notifications.enabled ? '' : 'cursor-not-allowed opacity-60'}`}
                   >
                     <div
                       className={`h-5 w-5 rounded-full bg-white transition-all duration-200 ${
-                        notifications[item.key as keyof typeof notifications]
-                          ? 'translate-x-6'
-                          : 'translate-x-0.5'
+                        notifications.powerOutage ? 'translate-x-6' : 'translate-x-0.5'
                       }`}
                     />
                   </button>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 border-t border-slate-700 pt-4">
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-                <Mail className="w-4 h-4 text-slate-400" />
-                Email Settings
-              </h4>
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">Notification Email</label>
-                  <input
-                    type="email"
-                    defaultValue="admin@smartaqua.pro"
-                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">SMS Number</label>
-                  <input
-                    type="tel"
-                    defaultValue="+63 900 000 0000"
-                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
                 </div>
               </div>
             </div>

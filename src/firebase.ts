@@ -1,18 +1,28 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { createFirebaseClients } from '../packages/shared/src/firebase';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBF2j50qUYt3Xwz0r6USMhDlwnaQI0fTlE",
-  authDomain: "practice-smartaqua.firebaseapp.com",
-  projectId: "practice-smartaqua",
-  storageBucket: "practice-smartaqua.firebasestorage.app",
-  messagingSenderId: "602265164540",
-  appId: "1:602265164540:web:a9ca2a3afda83606ef9579",
-  measurementId: "G-93GFT6WX67"
-};
+function requireFirebaseEnv(key: keyof ImportMetaEnv) {
+  const value = import.meta.env[key];
 
-const app = initializeApp(firebaseConfig);
+  if (!value) {
+    throw new Error(
+      `Missing required Firebase environment variable: ${key}. Add it to your .env file.`
+    );
+  }
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+  return value;
+}
+
+const clients = createFirebaseClients({
+  apiKey: requireFirebaseEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requireFirebaseEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireFirebaseEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: requireFirebaseEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireFirebaseEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireFirebaseEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || undefined,
+});
+
+export const auth = clients.auth;
+export const db = clients.db;
+export const rtdb = clients.rtdb;

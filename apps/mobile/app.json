@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "SmartAqua",
+    "slug": "smartaqua-mobile",
+    "scheme": "smartaqua",
+    "orientation": "portrait",
+    "platforms": ["ios", "android", "web"],
+    "userInterfaceStyle": "dark"
+  }
+}

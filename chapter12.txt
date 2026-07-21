@@ -1,0 +1,1250 @@
+SMARTAQUA PRO: IOT-BASED AQUARIUM MONITORING AND AUTOMATION
+                                                 SYSTEM
+
+                                            Presented to the
+                                        Institute of Computing
+                                   Davao del Norte State College
+                                   Panabo City, Davao del Norte
+
+                                          In Partial Fulfillment
+                               of the Requirements for the Degree
+             BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY
+
+                                       Wendyl Ziv S. Arellano
+                                          Gian Carlo R. Marin
+
+                                       Dennis Mark L. Jamero
+                                                   JUNE 2026
+                                                  CHAPTER 1
+
+INTRODUCTION
+Background of Study
+
+Aquarium management is an important practice in maintaining a healthy and balanced
+aquatic environment. It involves the regular monitoring of water temperature, pH level,
+turbidity, total dissolved solids, water level, and feeding schedules to ensure that
+aquatic organisms remain within suitable environmental conditions. Water quality is a
+major factor in fish health, growth, survival, and system stability because aquatic
+organisms depend on specific environmental conditions to thrive [1]­[3]. When water
+quality problems are not detected early, aquarium organisms may experience stress,
+disease, poor growth, or mortality.
+
+With the continuous advancement of technology, the Internet of Things (IoT) has
+become an effective approach for environmental and aquatic monitoring. IoT-based
+systems use sensors, microcontrollers, communication networks, databases, and
+software platforms to collect and transmit data in real time. In aquaculture and water
+quality monitoring, IoT systems have been used to measure important parameters such
+as temperature, pH, turbidity, dissolved oxygen, and total dissolved solids, allowing
+users to observe water conditions remotely and respond to abnormal readings more
+efficiently [4]­[7]. These technologies support more consistent monitoring compared
+with manual observation because sensor readings can be collected continuously and
+stored for review.
+
+The development of smart aquarium and aquaculture systems also supports broader
+sustainability goals. The proposed project is aligned with Sustainable Development
+Goal 14, Life Below Water, because it promotes the responsible monitoring and
+management of aquatic environments. It also supports the research, development, and
+extension direction of Davao del Norte State College by applying information technology
+and IoT concepts to environmental monitoring, aquaculture-related learning, and
+small-scale aquatic management. Through this alignment, the project demonstrates
+how computing solutions can contribute to sustainable and technology-driven practices
+in academic and local settings.
+
+Despite these developments, many aquarium owners and caretakers still rely on
+manual monitoring and routine inspection. Traditional aquarium maintenance requires
+users to personally check water conditions, monitor water levels, feed fish, and respond
+to possible problems. This process may become inconsistent because users may be
+unavailable, may forget routine tasks, or may fail to notice sudden changes in aquarium
+conditions. Studies on smart pond and aquaculture monitoring show that real-time
+sensor-based systems can help address these limitations by providing continuous
+readings, historical records, and decision support for water quality management [8], [9].
+
+Existing IoT-based aquarium systems commonly include sensor-based monitoring,
+automatic feeding, or remote access through web and mobile platforms. However,
+several systems focus only on selected functions such as displaying sensor readings,
+monitoring temperature, detecting water level, or controlling feeding schedules
+[10]­[13]. Although these systems show the usefulness of IoT in aquarium
+management, many of them do not fully integrate real-time monitoring, rule-based
+automation, alert notification, data logging, aquarium records, user-based access,
+power outage awareness, and bioload-based configuration in one centralized platform.
+
+In the local context, aquarium systems are commonly used in households, schools,
+laboratories, and small facilities for educational, recreational, and research purposes. At
+Davao del Norte State College, aquarium setups may support academic activities,
+demonstrations, and studies related to aquatic life, environmental monitoring, and
+technology-based experimentation. However, these setups are often managed
+manually, making them vulnerable to irregular checking, delayed response to abnormal
+water conditions, and limited recording of historical data. Local users such as aquarium
+hobbyists, students, caretakers, and laboratory personnel may also lack access to an
+affordable and centralized monitoring tool that combines real-time data, automation,
+alerts, and records in one system.
+
+A review of related literature shows that there is a need for a more integrated aquarium
+monitoring and automation system that is suitable for small-scale environments.
+Rule-based algorithms are commonly appropriate for prototype monitoring systems
+because they use predefined threshold values to trigger actions when sensor readings
+move outside acceptable ranges. More advanced approaches such as fuzzy logic and
+machine learning may improve classification and prediction, but these approaches
+require additional datasets, calibration, and validation [14], [15]. For the current project,
+a rule-based approach is more practical because the system needs to provide
+immediate alerts and selected automated responses based on measurable aquarium
+parameters.
+
+Therefore, this study aims to develop SmartAqua Pro: IoT-Based Aquarium
+Monitoring and Automation System. The proposed system is designed to monitor
+selected aquarium parameters, including pH level, total dissolved solids, turbidity, water
+temperature, and water level. It also aims to provide selected automation functions,
+real-time alerts, data logging, aquarium records, power outage awareness,
+bioload-based configuration, and a centralized web-based dashboard. Through this
+system, aquarium owners, caretakers, students, and administrators may monitor
+aquarium conditions more consistently, respond to abnormal readings more efficiently,
+and improve the overall management of small-scale aquarium environments.
+
+Objectives of the Study
+
+General Objective
+
+To design, develop, and evaluate SmartAqua Pro: IoT-Based Aquarium Monitoring
+and Automation System, a web-based and sensor-supported system that assists
+aquarium owners and caretakers in monitoring water conditions, managing aquarium
+records, receiving alerts, and automating selected aquarium tasks.
+
+Specific Objectives
+
+Input
+
+             1. To identify the hardware and software requirements needed for the
+                  development of the system, including the microcontroller, sensors,
+                  database, web application, and user roles.
+
+             2. To determine the aquarium parameters to be monitored by the system,
+                  including pH level, total dissolved solids, turbidity, water temperature, and
+                  water level.
+
+             3. To gather the functional requirements needed by users, administrators,
+                  and operators in managing aquariums, viewing sensor readings, and
+                  responding to system alerts.
+
+Process
+
+             4. To develop an IoT-based monitoring module that collects sensor readings
+                  from the aquarium and transmits the data to the system in real time.
+
+             5. To implement a rule-based automation process that evaluates sensor
+                  readings and triggers appropriate actions such as alerts, warnings, or
+                  selected automated responses based on predefined threshold values.
+
+             6. To develop a centralized web-based dashboard where users can view
+                  aquarium status, sensor values, alerts, aquarium records, and monitoring
+                  history.
+
+             7. To integrate a database that stores user accounts, aquarium information,
+                  sensor logs, alert records, and system activity.
+
+Output
+
+             8. To generate real-time monitoring results, alert notifications, and aquarium
+                  status summaries for users and administrators.
+             9. To produce a working prototype of SmartAqua Pro that supports aquarium
+                  monitoring and selected automation functions.
+
+             10.To evaluate the system in terms of functionality, accuracy, responsiveness,
+                  reliability, and usability.
+
+Significance of Study
+
+The proposed SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System
+is expected to provide significant benefits to different stakeholders by improving
+monitoring consistency, automation, accessibility, and decision-making in small-scale
+aquarium management.
+Aquarium Owners and Hobbyists. This group will benefit the most from the system
+because it provides real-time monitoring, automated support, and remote access to
+aquarium conditions. The system enables users to track water temperature, pH level,
+total dissolved solids, turbidity, and water level while receiving alerts when readings
+become abnormal. This helps users respond earlier to potential problems and reduce
+risks to aquatic life.
+Aquarium Caretakers and Facility Personnel. Caretakers will benefit from the system
+by reducing manual workload and improving consistency in aquarium maintenance.
+Through automation, alerts, and centralized monitoring, they can manage routine
+aquarium tasks more efficiently and check aquarium conditions without relying only on
+physical inspection.
+Schools and Academic Institutions. Educational institutions will benefit from the
+system because it can support aquarium setups used for teaching, demonstration, and
+research activities. The system provides sensor-based readings, historical records, and
+reports that may be used for academic observation, experimentation, and technology
+integration in learning environments.
+IT Personnel and System Administrators. IT personnel and system administrators
+will benefit from the centralized dashboard, user management, sensor logs, and system
+activity records. These features can support easier maintenance, troubleshooting,
+configuration, and monitoring of the web-based platform and connected IoT devices.
+Researchers and Future Developers. This study will benefit researchers and future
+developers by serving as a reference for projects related to IoT-based environmental
+monitoring, smart aquarium systems, sensor-based automation, and water quality
+monitoring. The system may also serve as a foundation for future enhancements such
+as artificial intelligence, predictive analytics, mobile application integration, and
+large-scale deployment.
+
+Scope and Limitation
+
+This study focuses on the design, development, and implementation of SmartAqua
+Pro: IoT-Based Aquarium Monitoring and Automation System for small-scale
+aquarium environments such as home aquariums, school laboratories, and selected
+academic facilities. The system is intended for aquarium owners, caretakers, students,
+IT personnel, and administrators who need real-time access to aquarium conditions. It
+covers the integration of IoT-based sensors for monitoring pH level, total dissolved
+solids, turbidity, water temperature, and water level, together with a centralized
+web-based dashboard for viewing sensor readings, aquarium status, alert notifications,
+user accounts, aquarium records, sensor logs, and monitoring history. The system also
+includes real-time data collection, sensor data transmission, rule-based evaluation of
+readings, alert generation, selected automation support, power outage awareness,
+bioload-based configuration, and data logging to produce monitoring results, alert
+notifications, aquarium status summaries, and historical records for user review and
+decision-making.
+
+The system is limited to monitoring selected aquarium parameters only, specifically pH
+level, total dissolved solids, turbidity, water temperature, and water level. It can notify
+users when readings are outside predefined threshold values, but it does not
+automatically perform chemical correction, pH balancing, water treatment, or complete
+water replacement. The automation component is limited to selected tasks supported by
+the prototype hardware and predefined rules. The current prototype uses rule-based
+automation and does not include artificial intelligence, machine learning, or predictive
+analytics. The system also depends on stable internet connectivity for real-time data
+transmission, remote access, and alert delivery. Furthermore, the system uses standard
+IoT components and low-cost sensors; therefore, its readings may have limitations
+compared with laboratory-grade or industrial-grade monitoring equipment. The system
+is intended for small-scale aquarium environments and is not designed for large
+commercial aquaculture operations, open-water fish farms, or fully automated water
+treatment facilities.
+
+Review of Related Literature
+
+This study focuses on the design, development, and implementation of SmartAqua
+Pro: IoT-Based Aquarium Monitoring and Automation System for small-scale
+aquarium environments such as home aquariums, school laboratories, and selected
+academic facilities. The system is intended for aquarium owners, caretakers, students,
+IT personnel, and administrators who need real-time access to aquarium conditions. It
+covers the integration of IoT-based sensors for monitoring pH level, total dissolved
+solids, turbidity, water temperature, and water level, together with a centralized
+web-based dashboard for viewing sensor readings, aquarium status, alert notifications,
+user accounts, aquarium records, sensor logs, and monitoring history. The system also
+includes real-time data collection, sensor data transmission, rule-based evaluation of
+readings, alert generation, selected automation support, power outage awareness,
+bioload-based configuration, and data logging to produce monitoring results, alert
+notifications, aquarium status summaries, and historical records for user review and
+decision-making.
+
+The system is limited to monitoring selected aquarium parameters only, specifically pH
+level, total dissolved solids, turbidity, water temperature, and water level. It can notify
+users when readings are outside predefined threshold values, but it does not
+automatically perform chemical correction, pH balancing, water treatment, or complete
+water replacement. The automation component is limited to selected tasks supported by
+the prototype hardware and predefined rules. The current prototype uses rule-based
+automation and does not include artificial intelligence, machine learning, or predictive
+analytics. The system also depends on stable internet connectivity for real-time data
+transmission, remote access, and alert delivery. Furthermore, the system uses standard
+IoT components and low-cost sensors; therefore, its readings may have limitations
+compared with laboratory-grade or industrial-grade monitoring equipment. The system
+is intended for small-scale aquarium environments and is not designed for large
+commercial aquaculture operations, open-water fish farms, or fully automated water
+treatment facilities.
+
+Related Works
+
+Various IoT-based aquarium monitoring and automation systems have been developed
+to improve aquarium management. These systems commonly include sensor-based
+monitoring, automatic feeding, and remote access through web or mobile platforms.
+Most implementations use threshold-based or rule-based algorithms to respond to
+aquarium conditions. However, existing systems often lack full integration of monitoring,
+automation, alert systems, data logging, user management, and centralized aquarium
+records [1]­[6].
+
+System  Real-Time Automation Mobile Alerts  Data     Centralized
+                                            Logging  System
+        Monitoring  Access
+IoT              
+
+Aquarium
+Monitoring
+
+System [1],
+
+[5]
+
+Smart            
+
+Feed
+Aquarium
+
+System [4]
+
+Basic            
+
+       IoT
+
+Aquarium
+
+System [3]
+
+IoT              
+
+Aquarium
+Care
+
+System [6]
+
+IoT                
+
+Monitoring
+with  Data
+Logging
+[17], [30]
+SmartAqua                                                              
+
+Pro
+
+ (Proposed
+ System)
+Table 1. Comparison table of existing system vs. the proposed system.
+
+Compared to existing systems, SmartAqua Pro provides a more integrated solution by
+combining real-time monitoring, rule-based automation, alert notification, data logging,
+and centralized aquarium management into one platform. While previous systems focus
+on selected features such as monitoring, automatic feeding, or water level detection, the
+proposed system includes aquarium records, user-based access, sensor logs, and alert
+history.
+
+In addition, SmartAqua Pro considers features such as power outage awareness and
+bioload-based configuration, which are not commonly addressed in existing systems.
+These additions make the system more practical for users who need to monitor
+aquarium conditions consistently and respond to possible problems early. Through its
+centralized web-based dashboard, the system aims to improve usability, accessibility,
+and reliability in aquarium management.
+
+Definition of Terms
+
+Alert System - Refers to the feature that notifies users through the application when
+abnormal aquarium conditions or system issues are detected.
+
+Automation - Refers to the system's ability to perform selected tasks such as feeding
+and alert-based responses without constant manual intervention based on predefined
+conditions.
+Bioload Configuration - Refers to the system setting that adjusts or guides monitoring
+and automation parameters based on the number and type of aquatic organisms in the
+aquarium.
+
+Dashboard - Refers to the graphical user interface that displays real-time data, system
+status, aquarium records, and alerts for user monitoring and control.
+
+Data Logging - Refers to the process of recording and storing sensor data over time for
+tracking, analysis, and reporting purposes.
+
+Internet of Things (IoT) - Refers to the network of interconnected sensors and devices
+used in the system to collect, transmit, and process aquarium data.
+
+Power Outage Detection - Refers to the system feature that identifies interruptions in
+power supply and sends notifications to the user.
+
+Real-Time Monitoring - Refers to the continuous collection and display of aquarium
+parameters such as pH level, total dissolved solids, turbidity, water temperature, and
+water level as they occur.
+
+Sensor - Refers to the hardware component used to measure environmental
+parameters such as pH level, total dissolved solids, turbidity, water temperature, and
+water level within the aquarium.
+
+SmartAqua Pro - Refers to the IoT-based aquarium monitoring and automation system
+developed in this study.
+
+Threshold-Based System - Refers to the rule-based approach used in the system
+where specific actions are triggered when sensor readings reach predefined limits.
+Water Level Monitoring - Refers to the system function that tracks the amount of water
+in the aquarium to help prevent overflow or depletion.
+
+Water Quality Monitoring - Refers to the system capability to assess the condition of
+water based on measurable indicators such as pH level, total dissolved solids, turbidity,
+and temperature.
+
+Water Temperature Monitoring - Refers to the system function that measures and
+monitors the appropriate temperature range for the aquarium environment.
+
+Web Application - Refers to the browser-based platform used for accessing the
+system's monitoring, control, records, and reporting features.
+                                                  CHAPTER 2
+
+METHODOLOGY
+
+The project adopts a Hybrid Project Management Methodology that combines the
+structured approach of the Waterfall model and the flexibility of Agile to effectively
+support the development of the SmartAqua Pro system, as illustrated in Figure 1. The
+Waterfall approach is applied during the initial stages, particularly in planning,
+requirements definition, and documentation, ensuring that all outputs such as proposals
+and system designs are clearly defined and validated before development begins.
+Meanwhile, Agile practices are utilized during the implementation and testing phases,
+allowing iterative development, continuous testing, and incremental improvement of
+system features such as real-time monitoring, automation, alert mechanisms, and data
+logging. This integration provides a balance between structure and adaptability, making
+it suitable for systems with both well-defined requirements and evolving components
+such as user interface enhancements and system optimization.
+
+The project begins with the Planning phase, where the proponents defined the project
+scope, objectives, timeline, and required resources based on the approved concept
+proposal. During this phase, the overall direction of the SmartAqua Pro system was
+established, including its key functionalities such as IoT-based monitoring, automation
+of aquarium processes, and centralized management. The feasibility of the system was
+also assessed to ensure that it can be completed within the given timeframe and
+available resources.
+
+In the Analysis phase, the proponents gathered and finalized system requirements by
+reviewing existing aquarium management practices, identifying user needs, and
+determining both functional and non-functional requirements. This includes identifying
+the necessary sensors for monitoring water temperature, water level, and water quality,
+as well as defining system features such as automation, alert notifications, mobile
+access, and data logging.
+In the Design phase, the proponents translated these requirements into a structured
+system architecture. This includes the design of the database, user interface, and
+overall system workflow. System diagrams, such as flowcharts and architectural
+diagrams, were developed to illustrate how the system components interact. Prototypes
+of the web and mobile interfaces were also created to visualize the user experience and
+system functionality.
+
+During the Implementation phase, the proponents developed the SmartAqua Pro
+system using an iterative approach. This phase involved coding, integration of IoT
+hardware components such as sensors and microcontrollers, and development of the
+web and mobile applications. Features such as real-time monitoring, automated
+feeding, lighting and filtration control, alert notifications, and data logging were
+implemented and tested incrementally. Continuous testing and refinement were
+conducted to ensure system accuracy, reliability, and responsiveness.
+
+Finally, in the Maintenance phase, the proponents conducted system evaluation,
+identified issues, and applied necessary improvements to enhance system performance
+and usability. Although limited within the project duration, this phase ensured that the
+SmartAqua Pro system remains stable, reliable, and capable of supporting future
+enhancements such as additional sensors or advanced analytics features.
+                   Figure 1. Integrated Hybrid Project Management Approach.
+
+SYSTEM PLANNING
+Project Team Organization
+
+         The project team, as shown in Figure 2, is organized to ensure effective
+coordination and clear distribution of responsibilities in the development of the
+SmartAqua Pro system. The Adviser provides overall guidance and ensures that the
+project meets academic and technical standards, particularly in IoT integration and
+system development. The Project Manager oversees planning, task coordination, and
+progress monitoring to ensure the timely completion of the project. The System
+Developer is responsible for coding, system implementation, and integration of IoT
+components such as sensors and microcontrollers for real-time aquarium monitoring
+and automation. The System Analyst and Documentation Specialist handles
+requirements analysis, system design documentation, and preparation of all
+project-related documents. This structure enables efficient collaboration and balanced
+management of both technical development and documentation aspects of the
+SmartAqua Pro system.
+
+                           Figure 2. Project Management Team Organization
+Work Breakdown Structure
+
+         The Work Breakdown Structure (WBS), presented in Figure 3, provides a
+structured, phase-based decomposition of the SmartAqua Pro: IoT-Based Aquarium
+Monitoring and Automation System following the PADIM framework. It outlines the key
+activities involved in each stage, from Planning, where the project scope and objectives
+are defined, to Analysis, which focuses on identifying user needs and system
+requirements. The Design phase details the development of the system architecture,
+hardware layout, web interface, and database, while the Implementation phase covers
+the actual assembly, coding, integration, and initial testing of both hardware and
+software. Lastly, the Maintenance phase ensures continuous evaluation, bug fixing, and
+improvement based on system testing and user feedback. This organized approach
+enables the team to efficiently manage tasks, monitor progress, and ensure the
+successful development of the smart aquarium monitoring and automation system.
+                                  Figure 3. Work Breakdown Structure.
+
+Gantt Chart
+         The Gantt chart shown in Figure 4 outlines the planned schedule for developing
+
+the SmartAqua Pro: IoTBased Aquarium Monitoring and Automation System, providing
+a clear timeline of tasks distributed across the PADIM framework. It clearly shows the
+sequence and duration of every phase from Planning and Analysis to Design,
+Implementation, and Maintenance. The chart visually organizes when each activity
+begins and ends, covering essential tasks such as project planning, user requirement
+analysis, system and interface design, hardware and software development, integration,
+testing, and final documentation. By mapping out these activities over a specific period,
+the chart helps the team coordinate their work, monitor ongoing progress, and adjust
+tasks when needed. It promotes better time management and coordination among team
+members by clearly assigning timeframes for each responsibility. This structured
+timeline ensures that both the IoT monitoring features and the webbased automation
+system are developed efficiently, supporting a wellmanaged and timely completion of
+the capstone project.
+
+                                       Figure 4. Gantt Chart of the system.
+SYSTEM ANALYSIS
+System Architecture
+The system architecture shown in Figure 5 presents a structured framework that
+illustrates how the different components of the SmartAqua Pro: IoT-Based Aquarium
+Monitoring and Automation System interact to support real-time monitoring, automation,
+and reporting. The architecture is composed of three main components: hardware (IoT
+devices and sensors), software (application system and user interface), and data
+management (server and cloud storage).
+At the hardware level, the system utilizes IoT-based sensors such as water temperature
+sensors, water level sensors, and water quality sensors installed within the aquarium
+environment. These sensors continuously collect environmental data and transmit it
+through communication protocols (e.g., MQTT or HTTP) to the central system. This
+enables real-time data acquisition and ensures that changes in aquarium conditions are
+immediately detected.
+At the software level, the system includes a centralized application that processes
+incoming sensor data using predefined threshold values and basic AI-based anomaly
+detection techniques. The system analyzes the data to identify abnormal conditions and
+automatically triggers alerts when necessary. A web or mobile-based dashboard is also
+provided, allowing administrators and aquarium owners or caretakers to monitor
+real-time data, receive alerts, and access system-generated reports.
+The data management component consists of a centralized server and cloud storage,
+where all sensor data, alerts, and historical records are stored and managed. This
+enables efficient data retrieval, analysis, and report generation. The system supports
+automated reporting features that summarize aquarium conditions, detected issues, and
+system performance, supporting better decision-making and improved aquarium
+management.
+
+                              Figure 5. System architecture of the project.
+Functional and Non-functional Requirements
+         The functional and nonfunctional requirements define the expected capabilities
+
+and performance qualities of the SmartAqua Pro: IoTBased Aquarium Monitoring and
+Automation System. The functional requirements describe the core features of the
+system, including realtime water quality monitoring, automated alerts, remote access,
+data logging, and user management. On the other hand, the nonfunctional
+requirements focus on how effectively the system performs, emphasizing aspects such
+as reliability, usability, security, and efficiency based on ISO/IEC 25010 standards.
+These requirements ensure that the system provides accurate environmental
+monitoring, maintains consistent performance, and supports realtime data access for
+improved aquarium management.
+
+         The system shall provide the following functionalities:
+             1. The system shall continuously collect realtime water quality data,
+                  including pH level, total dissolved solids (TDS), turbidity, water
+                  temperature, and water level, using integrated IoT sensors.
+             2. The system shall transmit sensor data from the aquarium hardware to the
+                  central server via WiFi or MQTT protocol for processing and storage.
+             3. The system shall evaluate sensor readings against predefined threshold
+                  values and trigger automated alerts when parameters fall outside
+                  acceptable ranges.
+             4. The system shall send realtime notifications and alerts to aquarium
+                  owners and caretakers through the web interface when abnormal
+                  conditions or power interruptions are detected.
+             5. The system shall provide a centralized webbased dashboard where users
+                  can view live sensor readings, aquarium status, alert history, and
+                  monitoring logs.
+             6. The system shall support rolebased user management, allowing
+                  administrators and caretakers to create, update, and manage user
+                  accounts and access privileges.
+         7. The system shall allow users to configure aquarium profiles, including
+             bioload settings, threshold values, and automation preferences (e.g.,
+             feeding schedules, filtration control).
+
+         8. The system shall record and store all sensor data, alerts, system events,
+             and user activities in a centralized database for historical tracking and
+             report generation.
+
+         9. The system shall generate summary reports and logs showing water
+             quality trends, alert frequency, and system performance over a selected
+             period.
+
+         10. The system shall support power outage detection and notify users
+             immediately when the device loses main power, ensuring timely response
+             to potential hardware failures.
+
+    The following are the system's nonfunctional requirements:
+
+1. Performance Efficiency ­ The system shall process and display sensor data in
+    real time with minimal latency, ensuring that users receive timely updates on
+    aquarium conditions.
+
+2. 2.Reliability ­ The system shall consistently provide accurate sensor readings
+    and maintain stable operation with minimal downtime or system failures.
+
+3. Usability ­ The system shall have a simple, intuitive, and accessible web
+    interface that is easy for aquarium owners, caretakers, and administrators to
+    navigate and operate.
+
+4. Security ­ The system shall ensure secure user authentication, rolebased
+    access control, and encrypted data transmission between the IoT device and the
+    web server.
+
+5. Compatibility ­ The system shall be accessible across multiple devices, including
+    desktops, tablets, and smartphones, through a responsive webbased platform.
+
+6. Maintainability ­ The system shall allow easy updates, troubleshooting, and
+    replacement of both hardware components and software modules without major
+    redesign.
+    7. Scalability (Portability/Adaptability) ­ The system shall support the addition of
+         more sensors, aquariums, or users without significant degradation in
+         performance.
+
+    8. Availability ­ The system shall remain accessible to authorized users at all times,
+         supported by stable internet connectivity and appropriate backup mechanisms for
+         critical data.
+
+Use Case Diagram
+
+The use case diagram presents the interaction between the users, external device, and
+the proposed SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System.
+As shown in Figure 6, the identified actors of the system are the System
+Administrator, User/Caretaker, and IoT Device/Sensor Module. These actors
+perform specific functions that support the operation, monitoring, configuration, and
+maintenance of the system.
+
+The System Administrator is responsible for managing and maintaining the system.
+The administrator interacts with the system by logging in, viewing the dashboard,
+managing user accounts, managing aquarium records, configuring threshold values,
+viewing sensor logs and monitoring history, viewing alert history, and monitoring device
+status. These functions allow the administrator to control system access, maintain
+accurate aquarium records, set acceptable parameter ranges, and ensure that the IoT
+components are functioning properly. The configuration and management data provided
+by the administrator are processed and stored by the system to support reliable
+aquarium monitoring and automation.
+
+The User/Caretaker interacts with the system by logging in, viewing the dashboard,
+managing aquarium records, configuring aquarium settings, configuring bioload, viewing
+real-time sensor data, viewing aquarium status, viewing sensor logs and monitoring
+history, viewing alert history, and receiving alerts. These interactions allow the user or
+caretaker to monitor aquarium conditions, review previous readings, and respond to
+abnormal water conditions. Through the dashboard and alert features, the system
+provides updated information that helps users maintain suitable aquarium conditions
+and respond promptly to possible issues.
+
+The IoT Device/Sensor Module serves as an external actor that supplies
+sensor-related data to the system. It interacts with the system by sending sensor
+readings and detecting power interruptions. The transmitted data are processed by the
+system and displayed through the dashboard as real-time monitoring information. When
+sensor readings exceed the predefined threshold values or when a power interruption is
+detected, the system generates alerts and updates the aquarium status. These
+interactions demonstrate how SmartAqua Pro integrates user management, sensor data
+processing, alert generation, and centralized monitoring to support efficient aquarium
+management.
+                           Figure 6. Use Case Diagram of the system.
+
+Context Flow Diagram
+
+The Context Flow Diagram shown in Figure 7 presents a high-level view of the
+SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System, illustrating
+how the system interacts with external entities and how data flows across the system
+boundary. It focuses on the logical flow of processes, highlighting key inputs and
+outputs without detailing the internal structure of the system.
+
+In the diagram, the main external entities include the System Administrator, Aquarium
+Owner/Caretaker, and IoT Sensors (Smart Devices). The IoT sensors serve as the
+primary source of input by continuously collecting aquarium environmental data such as
+water temperature, water level, and water quality parameters. This sensor data is
+transmitted to the system through communication protocols, where it is processed and
+evaluated based on predefined threshold values.
+
+The System Administrator interacts with the system by providing configuration data,
+managing user accounts, and defining system parameters such as threshold values and
+automation settings. These inputs ensure that the system operates according to
+user-defined requirements and adapts to different aquarium conditions. The system
+processes and stores this information to support continuous monitoring and operation.
+
+On the other hand, the Aquarium Owner/Caretaker receives outputs from the system,
+including real-time alerts, monitoring dashboards, and aquarium status updates. When
+the system detects abnormal conditions, such as temperature fluctuations or low water
+levels, it generates automated alerts and notifications that enable immediate response
+and corrective action. The caretaker can also access historical data, sensor logs, and
+monitoring records through the centralized system interface.
+
+The diagram also presents key data flows such as sensor readings, configuration data,
+alert notifications, and aquarium records. These flows illustrate how data is collected,
+processed, and transformed into meaningful outputs that support decision-making and
+improve the overall efficiency and consistency of aquarium management.
+                            Figure 7. Context flow diagram of the system.
+
+Data Flow Diagram
+
+The Level 1 Data Flow Diagram (DFD) in Figure 8 presents a more detailed
+representation of the SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation
+System by expanding the processes identified in the Level 0 Context Diagram. This
+level breaks down the system into major sub-processes, showing how data flows
+between components while maintaining the same external entities, data inputs, and
+data outputs from the previous diagram.
+
+In this diagram, the system is decomposed into several key processes, including user
+access management, aquarium record management, sensor data processing, aquarium
+condition evaluation, and alert generation and monitoring reports. The IoT
+Device/Sensor Module remains the primary source of input, continuously sending
+aquarium-related data such as pH level, total dissolved solids, turbidity, water
+temperature, water level, device status, and power interruption status to the system.
+These data are received and handled by the sensor data processing module, which
+stores the readings in the sensor logs and forwards the processed data to the aquarium
+condition evaluation process for assessment using predefined threshold values.
+
+The System Administrator interacts with the system by providing inputs such as login
+credentials, user account information, aquarium records, threshold values, and updated
+system settings. These inputs are processed through the user access management,
+aquarium record management, and threshold configuration processes. This ensures
+that user accounts, aquarium records, and system parameters are properly maintained
+and stored for operational use.
+
+The User/Caretaker interacts with the system by providing login credentials, aquarium
+information, aquarium settings, bioload configuration, and monitoring requests. The
+system processes these inputs and provides dashboard data, real-time sensor
+readings, aquarium status, monitoring history, alert notifications, and alert history. These
+outputs allow the User/Caretaker to monitor aquarium conditions, review previous
+readings, and respond to abnormal water conditions or system issues.
+
+The processed sensor data then flows into the aquarium condition evaluation process,
+where the latest readings are compared with the predefined threshold values. Once
+abnormal water conditions or power interruptions are detected, the system generates
+alert triggers and updates the aquarium status. In addition, the system stores relevant
+monitoring data, sensor logs, and alert records in the database, which are used by the
+alert generation and monitoring reports process to provide real-time notifications,
+monitoring history, and alert history to the System Administrator and User/Caretaker.
+                              Figure 8. Data flow diagram of the system.
+
+SYSTEM DESIGN
+Entity Relationship Diagram
+
+The Entity Relationship Diagram (ERD) illustrated in Figure 9 presents the database
+structure of the SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation
+System, showing how data entities are organized and related to one another. In this
+system, entities represent the major data components required for monitoring,
+automation, and system management, including Users, Sensors, Sensor Data, Alerts,
+Reports, and System Settings.
+
+The Users entity stores information about system users, such as administrators and
+aquarium owners or caretakers, including their login credentials, roles, and access
+privileges. The Sensors entity represents the IoT devices installed in the aquarium,
+which are responsible for collecting environmental data such as water temperature,
+water level, and water quality parameters. Each sensor is associated with specific
+configurations and identification details.
+
+The Sensor Data entity stores the real-time readings collected from the sensors. These
+data are continuously recorded and used by the system to monitor aquarium conditions
+and evaluate whether they fall within predefined threshold values. This enables the
+system to maintain consistent monitoring and support automated decision-making
+processes.
+
+Based on the processed sensor data, the system generates alerts, which are stored in
+the Alerts entity. These alerts are linked to both the sensor data and the users who
+receive notifications, allowing timely response to abnormal conditions. Additionally, the
+Reports entity contains summarized information derived from historical sensor data and
+alerts, supporting monitoring, analysis, and decision-making.
+
+The System Settings entity stores configurable parameters such as threshold values,
+automation rules, and notification preferences, which are defined and managed by the
+system administrator. The relationships among these entities are established using
+primary and foreign keys to ensure data integrity and consistency. For example, one
+sensor can generate multiple sensor data records, while one user can receive multiple
+alerts and access multiple reports, forming one-to-many relationships within the system.
+                        Figure 9. Entity relationship diagram of the system.
+
+JSON Schema Diagram
+         Figure 10, JSON schemas are used to represent key data components such as
+
+sensor readings, user information, alerts, and reports. For instance, a sensor data
+schema specifies required fields such as sensor ID, timestamp, temperature, smoke
+level, and gas concentration, along with their corresponding data types (e.g., string,
+number, or boolean). Similarly, the alert schema defines the structure of generated fire
+alerts, including alert type, severity level, timestamp, and associated sensor information.
+
+         The diagram also illustrates validation rules such as required fields, data types,
+value constraints, and formatting standards. These rules ensure that incoming data from
+IoT sensors and user inputs are properly validated before being processed by the
+system. This reduces errors, prevents invalid data entry, and enhances system
+reliability.
+
+          Moreover, the use of JSON Schema supports interoperability between different
+  system components and external services. Since the system relies on real-time data
+
+    transmission (e.g., via APIs or MQTT), having a standardized data format ensures
+                  seamless communication between devices and applications.
+
+                                   Figure 10. JSON Schema Diagram.
+Data Dictionary
+The Data Dictionary presents a detailed description of all data elements used in the
+SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System, serving
+as a reference for the system's database structure and data organization. It defines the
+collections, field names, data types, constraints, and descriptions to ensure that data is
+stored, retrieved, and processed consistently. This section guides database
+implementation, system development, maintenance, and future enhancements.
+
+The database consists of the following core collections: Users, Aquariums, Device
+Controls, Feeder Logs, and Filtration Logs. Each collection represents a critical
+component of the system, supporting monitoring, automation, and reporting. The
+paragraphs below describe each collection in detail, and the corresponding tables (to be
+included as images) present the field names, data types, constraints, and descriptions.
+
+Table 1 Users Collection
+
+The Users collection stores essential information about individuals who can access the
+SmartAqua Pro system. This includes administrators, aquarium owners, and caretakers.
+Key attributes include user identification, full name, email address, password, contact
+number, role, and account creation timestamp. This collection supports user
+authentication, access control, and user management, and serves as the reference
+point for other collections that depend on user information.
+Table 2. Aquariums Collection
+The Aquariums collection contains data related to each registered aquarium. Attributes
+include aquarium identification, name, owner ID, feeder status, filtration status, lighting
+status, water level, temperature thresholds, water quality, and species information. This
+collection establishes the link between the aquarium and its owner and serves as the
+main source of data for monitoring and automation activities within the system.
+
+Table 3. Device Controls Collection
+The Device Controls collection stores the configuration and current status of automated
+devices connected to the aquariums. Fields include control ID, linked aquarium ID,
+feeder status, filter status, light status, control mode, and timestamp of last update. This
+collection allows the system to monitor, record, and execute both manual and
+automated device actions, supporting the automation features of SmartAqua Pro.
+Table 4. Feeder Logs Collection
+
+The Feeder Logs collection records all feeding events performed by the system.
+Attributes include log ID, aquarium ID, feeding action, schedule type, timestamp, status,
+and remarks. This collection ensures historical tracking of feeding activity, enabling
+users to verify that feeding events were properly executed and to analyze feeding
+patterns over time.
+Table 5. Filtration Logs Collection
+
+The Filtration Logs collection maintains a history of filtration-related activities. Fields
+include log ID, aquarium ID, filtration action, filter status, timestamp, operation duration,
+and remarks. This collection supports monitoring the performance and operation of the
+filtration system and ensures that water treatment activities are recorded and tracked
+accurately.
+Technologies, Concepts, and Theories
+
+The SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System utilizes a
+combination of Internet of Things (IoT) technologies, environmental monitoring
+concepts, and rule-based decision-making models to enable real-time observation and
+automation of aquarium conditions. The system follows a structured workflow that
+processes data from acquisition to decision-making, ensuring accurate monitoring of
+water quality and stable aquatic environments. By integrating sensing devices,
+communication protocols, and web-based systems, the solution transforms raw
+environmental data into meaningful information that supports efficient aquarium
+management.
+
+Data Collection
+
+The system begins with data collection through IoT-based sensors installed in the
+aquarium, including sensors for water temperature, pH level, turbidity, total dissolved
+solids (TDS), and water level. These sensors continuously gather real-time
+environmental data and transmit it to the system using communication protocols such
+as MQTT or HTTP. This process applies the concept of continuous environmental
+sensing in IoT systems, where physical conditions are converted into digital signals for
+monitoring and analysis [1], [24]. Continuous data collection is essential to ensure that
+the system can respond immediately to changes in aquarium conditions, allowing users
+to maintain safe and stable aquatic environments.
+
+Data Pre-Processing
+
+The collected data then undergoes pre-processing, where noise filtering, handling of
+missing values, and standardization of sensor readings are performed to ensure
+reliability. Raw sensor outputs may contain inconsistencies due to environmental factors
+or hardware limitations; thus, pre-processing is necessary to ensure that only valid and
+accurate data is used for system evaluation. This stage improves data quality and
+ensures more reliable monitoring results [6], [12].
+
+Feature Extraction
+
+After pre-processing, feature extraction is conducted to identify meaningful aquarium
+parameters that influence water quality and aquatic health. These include water
+temperature, pH level, turbidity, total dissolved solids, and water level. These
+parameters serve as key indicators of aquarium conditions and are commonly used in
+water quality monitoring systems to assess environmental stability [3], [7]. By extracting
+these relevant features, the system can determine whether aquarium conditions remain
+within safe operational thresholds.
+
+Classification
+
+The system then applies classification and decision-making processes using a
+rule-based threshold algorithm. This algorithm evaluates the collected sensor
+readings by comparing each value with predefined minimum and maximum threshold
+values for key aquarium parameters, including water temperature, pH level, turbidity,
+total dissolved solids, and water level. Through this process, the system determines
+whether the current aquarium condition is within the acceptable range or requires user
+attention.
+
+The rule-based threshold algorithm follows a simple conditional evaluation model:
+
+If sensor value < minimum threshold  Low Alert
+If sensor value > maximum threshold  High Alert
+If minimum threshold  sensor value  maximum threshold  Normal Condition
+
+This evaluation framework enables SmartAqua Pro to detect abnormal aquarium
+conditions in real time and generate appropriate responses such as alert notifications,
+aquarium status updates, and selected automation actions. Rule-based monitoring is
+suitable for IoT-based water quality and aquarium monitoring systems because it
+provides fast decision-making, requires low computational resources, and does not
+depend on large training datasets [4], [6], [21]. These characteristics make the
+rule-based threshold algorithm appropriate for SmartAqua Pro, particularly since the
+system is designed as a prototype focused on real-time monitoring, alert generation,
+and selected automation for small-scale aquarium environments.
+
+Based on the classification results, the system provides outputs such as water quality
+alerts, monitoring updates, feeder or filtration activity records, and real-time aquarium
+status information displayed through the web-based dashboard.
+
+Technologies Used in the System
+Internet of Things (IOT)
+
+The SmartAqua Pro system primarily relies on Internet of Things (IoT) technology, which
+enables continuous monitoring and automation of the aquarium environment. The
+system uses interconnected sensors installed within each aquarium to collect essential
+data such as water temperature, water level, pH, turbidity, and total dissolved solids
+(TDS). These sensors operate in real time and transmit data to a central processing
+system for evaluation and decision-making.
+Data communication between the sensors and the central system is handled through
+lightweight protocols such as MQTT or HTTP, ensuring efficient, reliable, and
+low-latency transmission. Through IoT integration, SmartAqua Pro can perform
+functions such as automated feeding, filtration control, water quality monitoring, and
+real-time alert generation when parameters exceed predefined thresholds. This
+real-time capability enhances aquarium management and supports timely intervention
+to maintain optimal aquatic conditions.
+
+                                                      Figure 11. IoT
+
+Web and Mobile Applications
+The system is implemented as both a web-based and mobile application, providing
+users including administrators, aquarium owners, and caretakers with access to a
+centralized dashboard on multiple platforms. Through these applications, users can
+monitor real-time aquarium conditions, receive automated alerts, review historical data,
+and track system performance.
+The mobile application allows users to access system information remotely, ensuring
+timely responses even when they are away from the physical location of the aquariums.
+This multi-platform approach increases accessibility and convenience while supporting
+efficient aquarium management and maintenance.
+
+                                     Figure 12. Web and Mobile Application
+Firebase
+In the SmartAqua Pro system, Firebase is used as a cloud-based platform that supports
+real-time data synchronization and remote accessibility. It is essential for features that
+require fast and continuous updates, such as real-time aquarium monitoring, alert
+notifications, and system status tracking. Since the system involves communication
+between IoT sensors and the web or mobile interface, Firebase enables efficient data
+transmission and instant updates without requiring complex server configuration.
+It supports real-time monitoring by allowing users, such as administrators and aquarium
+owners or caretakers, to view updated sensor readings including water temperature,
+water level, and water quality through the system interface. Additionally, Firebase can
+be utilized for user authentication, cloud data storage, and notification services,
+ensuring secure access, reliable data management, and timely alerts within the
+SmartAqua Pro system.
+
+                                                                                           
+                                             Figure 13. Firebase
+SYSTEM TESTING AND IMPLEMENTATION
+       The system testing and implementation phase focuses on ensuring that the
+
+SmartAqua Pro: IoT-Based Aquarium Monitoring and Automation System operates
+correctly and meets all specified requirements. During this phase, comprehensive
+testing is conducted to validate the integration of system components, including IoT
+sensors, data transmission, data processing, automation functions, alert notifications,
+and data logging. The testing process evaluates system performance using key metrics
+such as accuracy, response time, and reliability to ensure proper monitoring and timely
+response to changes in aquarium conditions. Test cases are designed to simulate both
+normal and abnormal conditions, such as stable aquarium environments, temperature
+fluctuations, low water levels, and poor water quality, to verify that the system responds
+appropriately.
+
+SYSTEM MAINTENANCE
+
+The System Maintenance phase focuses on ensuring the continuous operation,
+reliability, and improvement of the SmartAqua Pro: IoT-Based Aquarium Monitoring and
+Automation System after deployment. This phase involves monitoring system
+performance, identifying and resolving issues, and implementing necessary updates to
+enhance functionality and adaptability. Maintenance activities include regular system
+checks, updating software components, recalibrating IoT sensors when necessary, and
+improving system features such as monitoring, automation, and alert notifications based
+on user feedback and evaluation results.
+
+System Security Plan
+         To ensure the protection of system data and resources, a System Security Plan
+
+will be implemented. The system will enforce user authentication and role-based access
+control to restrict unauthorized access. Data transmitted between IoT devices and the
+server will be secured using appropriate communication protocols, and stored data will
+be protected through encryption and backup mechanisms. Regular security
+assessments and updates will be conducted to address potential vulnerabilities and
+ensure compliance with data privacy and security standards.
+
+         The table 4 presents the System Security Plan aligned with ISO/IEC 27001
+standards, ensuring that the proposed system implements structured and internationally
+recognized security controls. These measures will help protect system data, maintain
+integrity, and ensure secure and reliable operation of the Smart Campus Fire Detection
+and Monitoring System.
+
+Security Domain Control Area       Description / Implementation in
+
+(ISO 27001)                        the System
+
+A.5  Information Security Policy The system will implement formal
+
+Security Policies                  security policies to guide data
+
+                                   protection, access control, and
+
+                                   system usage.
+
+A.6 Organization of Roles          and Roles such as Administrator and
+
+Information Security Responsibilities Security Personnel will be clearly
+
+                                   defined with corresponding access
+
+                                   privileges.
+
+A.9 Access Control User    Access The system will enforce role-based
+
+                   Management      access control (RBAC), requiring
+
+                                   secure login credentials and limiting
+
+                                   access based on user roles.
+
+A.9 Access Control Authentication  Strong password policies and
+
+                   Mechanism       authentication mechanisms will be
+
+                                   implemented    to            prevent
+
+                                   unauthorized access.
+
+A.10 Cryptography  Data Encryption Data transmission between IoT
+
+                                   devices and the server will be
+
+                                   secured using encryption protocols
+
+                                   such as HTTPS and TLS.
+A.12          Operations Data Processing Input validation and error handling
+
+Security             Integrity    will be implemented to ensure data
+
+                                  accuracy and prevent system
+
+                                  vulnerabilities.
+
+A.12          Operations Logging  and The system will maintain audit logs
+
+Security             Monitoring   to track user activities, system
+
+                                  events, and potential security
+
+                                  incidents.
+
+A.13 Communications Network Security Secure communication protocols
+
+Security                          (e.g., MQTT with TLS, HTTPS) will
+
+                                  be used, and firewall configurations
+
+                                  will restrict unauthorized access.
+
+A.11 Physical and Device Protection IoT devices and servers will be
+
+Environmental                     installed in secure locations with
+
+Security                          restricted physical access.
+
+A.17      Information Data Backup and Regular data backups will be
+
+Security Aspects of Recovery      performed to ensure data
+
+Business Continuity               availability and recovery in case of
+
+                                  system failure.
+
+A.16      Information Incident    Procedures will be established to
+
+Security       Incident Response  detect, report, and respond to
+
+Management                        security incidents, including system
+
+                                  isolation and recovery steps.
+
+A.14           System Secure      Security measures such as input
+
+Acquisition,         Development  validation, secure coding practices,
+
+Development, and                  and regular updates will be applied
+
+Maintenance                       during system development and
+
+                                  maintenance.
+A.18 Compliance  Legal             and The system will comply with
+
+                 Regulatory        applicable   data  protection
+
+                 Compliance        regulations and institutional policies.
+
+Table 4. System Security Plan
+
+System Maintenance Plan
+         In addition, a System Maintenance Plan will be established to guide ongoing
+
+support and system improvements. This plan will include scheduled maintenance
+activities such as system updates, database optimization, and performance monitoring.
+It will also define procedures for troubleshooting, bug fixing, and handling system errors.
+Furthermore, documentation will be maintained to record system changes, updates, and
+maintenance activities, ensuring continuity and ease of future enhancements.
+
+         The System Maintenance Plan as shown in table 5, ensures the continuous
+operation, improvement, and sustainability of the AI-Assisted Smart Campus Fire
+Detection and Monitoring System by aligning maintenance activities with ISO/IEC 25010
+quality attributes. This approach guarantees that the system remains reliable, efficient,
+secure, and adaptable over time.
+
+ISO          25010 Maintenance     Description        Frequency
+
+Attribute        Activity
+
+Reliability      System            Continuous monitoring of Daily
+                                   system uptime, alerts, and
+                 Monitoring        failures
+                                   Improving response time As needed
+Performance      Performance       and processing speed
+Efficiency       Optimization      Updating dashboard design Periodically
+Usability        Interface         based on user feedback
+                 Improvement       Applying patches, encryption Regularly
+Security         Security Updates  updates, and vulnerability
+                                   fixes
+Maintainability Code Refactoring Fixing bugs and improving As needed
+
+             & Debugging           system structure for easier
+
+                                   maintenance
+
+Compatibility System Updates Ensuring compatibility with Periodically
+
+                                   browsers, devices, and
+
+                                   network environments
+
+Reliability  Sensor                Ensuring accuracy of IoT Monthly
+
+             Calibration           sensor readings
+
+Performance Database               Data cleanup, indexing, and Weekly
+
+Efficiency   Optimization          backup
+
+Table 5. System Maintenance Plan.
+REFERENCES
+
+[1] J. Colt, "Water quality requirements for reuse systems," Aquacultural Engineering,
+vol. 34, no. 3, pp. 143­156, 2006, doi: 10.1016/j.aquaeng.2005.08.011.
+
+[2] M. Badiola, O. Mendiola, and J. Bostock, "Recirculating aquaculture systems (RAS)
+analysis: Main issues on management and future challenges," Aquacultural
+Engineering, vol. 51, pp. 26­35, 2012, doi: 10.1016/j.aquaeng.2012.07.004.
+
+[3] C. I. M. Martins, E. H. Eding, M. C. J. Verdegem, L. T. N. Heinsbroek, O. Schneider,
+J. P. Blancheton, E. R. d'Orbcastel, and J. A. J. Verreth, "New developments in
+recirculating aquaculture systems in Europe: A perspective on environmental
+sustainability," Aquacultural Engineering, vol. 43, no. 3, pp. 83­93, 2010, doi:
+10.1016/j.aquaeng.2010.09.002.
+
+[4] O. O. Olanubi, T. T. Akano, and O. S. Asaolu, "Design and development of an
+IoT-based intelligent water quality management system for aquaculture," Journal of
+Electrical Systems and Information Technology, vol. 11, article 15, 2024, doi:
+10.1186/s43067-024-00139-z.
+
+[5] N. A. M. Jais, A. F. Abdullah, M. S. M. Kassim, M. M. A. Karim, Abdulsalam M., and
+N. A. Muhadi, "Improved accuracy in IoT-based water quality monitoring for aquaculture
+tanks using low-cost sensors: Asian seabass fish farming," Heliyon, vol. 10, no. 8,
+article e29022, 2024, doi: 10.1016/j.heliyon.2024.e29022.
+
+[6] R. P. Shete, A. M. Bongale, and D. Dharrao, "IoT-enabled effective real-time water
+quality monitoring method for aquaculture," MethodsX, vol. 13, article 102906, 2024,
+doi: 10.1016/j.mex.2024.102906.
+
+[7] F. Jan, N. Min-Allah, and D. Dütegör, "IoT based smart water quality monitoring:
+Recent techniques, trends and challenges for domestic applications," Water, vol. 13, no.
+13, article 1729, 2021, doi: 10.3390/w13131729.
+[8] M. M. Hemal, A. Rahman, Nurjahan, F. Islam, S. Ahmed, M. S. Kaiser, and M. R.
+Ahmed, "An integrated smart pond water quality monitoring and fish farming
+recommendation AquaBot system," Sensors, vol. 24, no. 11, article 3682, 2024, doi:
+10.3390/s24113682.
+
+[9] I. Arasu M., S. Rani S., T. K., and A. A., "AQUASENSE: Aquaculture water quality
+monitoring framework using autonomous sensors," Aquaculture International, vol. 32,
+pp. 9119­9135, 2024, doi: 10.1007/s10499-024-01606-0.
+
+[10] C. H. Chen, Y. C. Wu, J. X. Zhang, and Y. H. Chen, "IoT-based fish farm water
+quality monitoring system," Sensors, vol. 22, no. 17, article 6700, 2022, doi:
+10.3390/s22176700.
+
+[11] J. Y. Lin, H. L. Tsai, and W. H. Lyu, "An integrated wireless multi-sensor system for
+monitoring the water quality of aquaculture," Sensors, vol. 21, no. 24, article 8179,
+2021, doi: 10.3390/s21248179.
+
+[12] Y. Singh and T. Walingo, "Smart water quality monitoring with IoT wireless sensor
+networks," Sensors, vol. 24, no. 9, article 2871, 2024, doi: 10.3390/s24092871.
+
+[13] M. C. Chiu, W. M. Yan, S. A. Bhat, and N. F. Huang, "Development of smart
+aquaculture farm management system using IoT and AI-based surrogate models,"
+Journal of Agriculture and Food Research, vol. 9, article 100357, 2022, doi:
+10.1016/j.jafr.2022.100357.
+
+[14] H. C. Li, K. W. Yu, C. H. Lien, C. Lin, C. R. Yu, and S. Vaidyanathan, "Improving
+aquaculture water quality using dual-input fuzzy logic control for ammonia nitrogen
+management," Journal of Marine Science and Engineering, vol. 11, no. 6, article 1109,
+2023, doi: 10.3390/jmse11061109.
+
+[15] S. K. Nagothu, P. B. Sri, G. Anitha, S. Vincent, and O. P. Kumar, "Advancing
+aquaculture: Fuzzy logic-based water quality monitoring and maintenance system for
+precision aquaculture," Aquaculture International, vol. 33, article 32, 2025, doi:
+10.1007/s10499-024-01701-2.
+[16] R. Baena-Navarro, Y. Carriazo-Regino, F. Torres-Hoyos, and J. Pinedo-López,
+"Intelligent prediction and continuous monitoring of water quality in aquaculture:
+Integration of machine learning and Internet of Things for sustainable management,"
+Water, vol. 17, no. 1, article 82, 2025, doi: 10.3390/w17010082.
+
+[17] G. Dharmarathne, A. M. S. R. Abekoon, M. Bogahawaththa, J. Alawatugoda, and
+D. P. P. Meddage, "A review of machine learning and Internet-of-Things on the water
+quality assessment: Methods, applications and future trends," Results in Engineering,
+vol. 26, article 105182, 2025, doi: 10.1016/j.rineng.2025.105182.
+
+[18] E. Eze, S. Kirby, J. Attridge, and T. Ajmal, "Aquaculture 4.0: Hybrid neural network
+multivariate water quality parameters forecasting model," Scientific Reports, vol. 13,
+article 16129, 2023, doi: 10.1038/s41598-023-41602-7.
+
+[19] J. Yang, L. Jia, Z. Guo, Y. Shen, X. Li, and Z. Mou, "Prediction and control of water
+quality in recirculating aquaculture system based on hybrid neural network,"
+Engineering Applications of Artificial Intelligence, vol. 121, article 106002, 2023, doi:
+10.1016/j.engappai.2023.106002.
+
+[20] S. Kouadri, A. Elbeltagi, S. Islam, and I. Kateb, "A review of the application of
+artificial intelligence in water quality prediction," Applied Water Science, vol. 11, article
+184, 2021, doi: 10.1007/s13201-021-01505-2.
+
+[21] W. T. Sung, S. C. Tsai, and S. J. Hsiao, "Aquarium monitoring system based on
+Internet of Things," Intelligent Automation & Soft Computing, vol. 32, no. 3, pp.
+1649­1666, 2022.
+
+[22] M. A. Al Mamun Hridoy, C. Bordin, A. Masood, and K. Masood, "Predictive
+modelling of aquaculture water quality using IoT and advanced machine learning
+algorithms," Results in Chemistry, vol. 16, article 102456, 2025.
+
+[23] J. H. Kwon, S. H. Park, and J. H. Lee, "Water quality monitoring in recirculating
+aquaculture systems," Water Biology and Security, vol. 3, no. 2, pp. 113­131, 2024.
+
+[24] M. A. Al-Fuqaha, M. Guizani, M. Mohammadi, M. Aledhari, and M. Ayyash, "Internet
+of Things: A survey on enabling technologies, protocols, and applications," IEEE
+Communications Surveys & Tutorials, vol. 17, no. 4, pp. 2347­2376, 2015, doi:
+10.1109/COMST.2015.2444095.
+
+[25] J. Gubbi, R. Buyya, S. Marusic, and M. Palaniswami, "Internet of Things (IoT): A
+vision, architectural elements, and future directions," Future Generation Computer
+Systems, vol. 29, no. 7, pp. 1645­1660, 2013, doi: 10.1016/j.future.2013.01.010.
+
+[26] A. Botta, W. de Donato, V. Persico, and A. Pescapé, "Integration of cloud
+computing and Internet of Things: A survey," Future Generation Computer Systems, vol.
+56, pp. 684­700, 2016, doi: 10.1016/j.future.2015.09.021.
+
+[27] M. Chiang and T. Zhang, "Fog and IoT: An overview of research opportunities,"
+IEEE Internet of Things Journal, vol. 3, no. 6, pp. 854­864, 2016, doi:
+10.1109/JIOT.2016.2584538.
+
+[28] M. A. Alsheikh, S. Lin, D. Niyato, and H. P. Tan, "Machine learning in wireless
+sensor networks: Algorithms, strategies, and applications," IEEE Communications
+Surveys & Tutorials, vol. 16, no. 4, pp. 1996­2018, 2014, doi:
+10.1109/COMST.2014.2320099.
+
+[29] L. A. Zadeh, "Fuzzy sets," Information and Control, vol. 8, no. 3, pp. 338­353,
+1965, doi: 10.1016/S0019-9958(65)90241-X.
+
+[30] T. Cover and P. Hart, "Nearest neighbor pattern classification," IEEE Transactions
+on Information Theory, vol. 13, no. 1, pp. 21­27, 1967, doi: 10.1109/TIT.1967.1053964.
+

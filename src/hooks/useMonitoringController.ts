@@ -268,6 +268,8 @@ export function useMonitoringController() {
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
         tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+        ph: snapshot?.ph ?? aquarium.ph,
+        turbidity: snapshot?.turbidity ?? aquarium.turbidity,
         quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
         filter: snapshot?.filterState ?? aquarium.filter,
         healthStatus: snapshot

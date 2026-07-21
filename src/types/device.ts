@@ -217,6 +217,11 @@ export function getFreshTelemetrySnapshot(
     tdsPpm,
     tdsPercent: purityPercent === null ? null : clampPercent(purityPercent),
     hasFreshPurityTelemetry: purityPercent !== null,
+    ph: typeof telemetry.ph === 'number' && Number.isFinite(telemetry.ph) ? telemetry.ph : null,
+    turbidity:
+      typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity)
+        ? telemetry.turbidity
+        : null,
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState

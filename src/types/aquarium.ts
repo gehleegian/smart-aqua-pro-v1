@@ -21,6 +21,8 @@ export interface Aquarium {
   temp: number;
   level: number;
   tdsPpm?: number;
+  ph?: number;
+  turbidity?: number;
   quality: number;
   feeder: string;
   light: string;

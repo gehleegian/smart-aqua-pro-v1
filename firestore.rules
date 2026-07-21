@@ -1,0 +1,106 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().data.role == 'Admin';
+    }
+
+    function aquariumDoc(aquariumId) {
+      return get(/databases/$(database)/documents/aquariums/$(aquariumId));
+    }
+
+    function canAccessAquarium(aquariumId) {
+      return isAdmin()
+        || (
+          exists(/databases/$(database)/documents/aquariums/$(aquariumId))
+          && aquariumDoc(aquariumId).data.ownerId == request.auth.uid
+        );
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow update: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    match /aquariums/{aquariumId} {
+      allow read: if signedIn() && canAccessAquarium(aquariumId);
+      allow create: if signedIn() && (
+        isAdmin() || request.resource.data.ownerId == request.auth.uid
+      );
+      allow update: if signedIn()
+        && canAccessAquarium(aquariumId)
+        && (
+          isAdmin()
+          || (
+            request.resource.data.ownerId == resource.data.ownerId
+            && request.resource.data.ownerName == resource.data.ownerName
+          )
+        );
+      allow delete: if signedIn() && canAccessAquarium(aquariumId);
+
+      match /sensor_readings/{dateKey} {
+        allow read, create, update: if signedIn() && canAccessAquarium(aquariumId);
+        allow delete: if isAdmin();
+
+        match /readings/{readingId} {
+          allow read, create, update: if signedIn() && canAccessAquarium(aquariumId);
+          allow delete: if isAdmin();
+        }
+      }
+    }
+
+    match /deviceControls/{aquariumId} {
+      allow read, write: if signedIn() && canAccessAquarium(aquariumId);
+    }
+
+    match /feederLogs/{logId} {
+      allow read: if signedIn() && canAccessAquarium(resource.data.aquariumId);
+      allow create: if signedIn() && canAccessAquarium(request.resource.data.aquariumId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /filtrationLogs/{logId} {
+      allow read: if signedIn() && canAccessAquarium(resource.data.aquariumId);
+      allow create: if signedIn() && canAccessAquarium(request.resource.data.aquariumId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /sensor_readings/{readingId} {
+      allow read: if signedIn() && canAccessAquarium(resource.data.aquariumId);
+      allow create: if signedIn() && canAccessAquarium(request.resource.data.aquariumId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /alert_records/{alertId} {
+      allow read: if signedIn() && canAccessAquarium(resource.data.aquarium_id);
+      allow create: if signedIn() && canAccessAquarium(request.resource.data.aquarium_id);
+      allow update: if signedIn()
+        && canAccessAquarium(resource.data.aquarium_id)
+        && request.resource.data.aquarium_id == resource.data.aquarium_id;
+      allow delete: if isAdmin();
+    }
+
+    match /monitoring_reports/{reportId} {
+      allow read: if signedIn() && canAccessAquarium(resource.data.aquarium_id);
+      allow create: if signedIn()
+        && canAccessAquarium(request.resource.data.aquarium_id)
+        && request.resource.data.generated_by == request.auth.uid;
+      allow update: if signedIn()
+        && canAccessAquarium(resource.data.aquarium_id)
+        && request.resource.data.aquarium_id == resource.data.aquarium_id;
+      allow delete: if isAdmin();
+    }
+  }
+}

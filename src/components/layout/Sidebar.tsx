@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   LayoutDashboard,
   Activity,
-  Cpu,
   Bell,
   BarChart3,
   Fish,
@@ -10,7 +9,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Waves,
   LogOut,
   X,
 } from 'lucide-react';
@@ -36,7 +34,6 @@ type MenuItem = {
 const allMenuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
   { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['Admin', 'User'] },
-  { id: 'automation', label: 'Automation', icon: Cpu, roles: ['Admin'] },
   { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['Admin', 'User'] },
   { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['Admin', 'User'] },
   { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['Admin', 'User'] },
@@ -65,13 +62,17 @@ export default function Sidebar({
         }`}
       >
         <div className="flex items-center justify-between px-4 py-5 border-b border-slate-700/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <Waves className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+              <img
+                src="/smartaqua-logo.png"
+                alt="SmartAqua logo"
+                className="w-full h-full object-contain"
+              />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-cyan-400">Pro Edition</p>
+            <div className="leading-tight">
+              <h1 className="text-lg font-bold text-white leading-none">SmartAqua</h1>
+              <p className="text-xs text-cyan-400 mt-1">AquariTech Solutions</p>
             </div>
           </div>
 
@@ -118,15 +119,19 @@ export default function Sidebar({
           collapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-700/50">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Waves className="w-6 h-6 text-white" />
+        <div className="flex items-center gap-2.5 px-4 py-5 border-b border-slate-700/50">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+            <img
+              src="/smartaqua-logo.png"
+              alt="SmartAqua logo"
+              className="w-full h-full object-contain"
+            />
           </div>
 
           {!collapsed && (
-            <div>
-              <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-cyan-400">Pro Edition</p>
+            <div className="leading-tight">
+              <h1 className="text-lg font-bold text-white leading-none">SmartAqua</h1>
+              <p className="text-xs text-cyan-400 mt-1">AquariTech Solutions</p>
             </div>
           )}
         </div>

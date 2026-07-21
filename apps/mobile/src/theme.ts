@@ -1,0 +1,26 @@
+export const mobileTheme = {
+  colors: {
+    background: '#1f4160',
+    surface: '#203f5c',
+    surfaceAlt: '#2a5680',
+    border: 'rgba(135, 181, 219, 0.14)',
+    overlay: 'rgba(2, 17, 32, 0.78)',
+    text: '#f8fafc',
+    textMuted: '#9ec2de',
+    accent: '#1fb7e5',
+    accentSoft: 'rgba(31, 183, 229, 0.12)',
+    success: '#34d3ff',
+    successSoft: 'rgba(52, 211, 255, 0.1)',
+    successBorder: 'rgba(52, 211, 255, 0.28)',
+    warning: '#8bbfe9',
+    warningSoft: 'rgba(139, 191, 233, 0.1)',
+    warningBorder: 'rgba(139, 191, 233, 0.28)',
+    danger: '#f59aac',
+    dangerSoft: 'rgba(245, 154, 172, 0.1)',
+    dangerBorder: 'rgba(245, 154, 172, 0.22)',
+  },
+  radius: {
+    card: 16,
+    pill: 999,
+  },
+} as const;

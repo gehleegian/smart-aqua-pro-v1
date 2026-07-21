@@ -3,11 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
     "build": "tsc -b && vite build",
+    "build:web": "tsc -b && vite build",
+    "dev:mobile": "npm --prefix apps/mobile run start",
+    "build:mobile": "npm --prefix apps/mobile run build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backfill:sensor-readings": "node scripts/backfill-sensor-readings.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

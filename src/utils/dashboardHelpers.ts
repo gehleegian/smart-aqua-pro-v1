@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Beaker,
   Droplets,
   Fish,
   Radio,
@@ -77,6 +78,8 @@ export function mergeDashboardAquariums(
       temp: snapshot ? snapshot.temperatureC : aquarium.temp,
       level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
       tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+      ph: snapshot?.ph ?? aquarium.ph,
+      turbidity: snapshot?.turbidity ?? aquarium.turbidity,
       quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
     };
 
@@ -220,6 +223,69 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         tank.quality,
         tank.quality,
       ],
+    },
+    {
+      title: 'pH Level',
+      value: typeof tank.ph === 'number' ? tank.ph.toFixed(2) : '--',
+      icon: Beaker,
+      change:
+        typeof tank.ph === 'number'
+          ? tank.ph >= 6.5 && tank.ph <= 7.8
+            ? 'Balanced'
+            : tank.ph < 6.5
+              ? 'Low'
+              : 'High'
+          : 'Waiting for telemetry',
+      trend:
+        typeof tank.ph === 'number' && tank.ph >= 6.5 && tank.ph <= 7.8
+          ? 'good'
+          : 'warning',
+      sparkline:
+        typeof tank.ph === 'number'
+          ? [tank.ph - 0.4, tank.ph - 0.2, tank.ph, tank.ph + 0.1, tank.ph + 0.05, tank.ph]
+          : [0, 0, 0, 0, 0, 0],
+    },
+    {
+      title: 'Turbidity',
+      value: typeof tank.turbidity === 'number' ? `${Math.round(tank.turbidity)}` : '--',
+      icon: Droplets,
+      change:
+        typeof tank.turbidity === 'number'
+          ? tank.turbidity <= 300
+            ? 'Clear'
+            : tank.turbidity <= 700
+              ? 'Moderate'
+              : 'Cloudy'
+          : 'Waiting for telemetry',
+      trend:
+        typeof tank.turbidity === 'number' && tank.turbidity <= 300
+          ? 'good'
+          : 'warning',
+      sparkline:
+        typeof tank.turbidity === 'number'
+          ? [
+              tank.turbidity - 20,
+              tank.turbidity - 10,
+              tank.turbidity - 5,
+              tank.turbidity,
+              tank.turbidity + 8,
+              tank.turbidity + 3,
+            ]
+          : [0, 0, 0, 0, 0, 0],
+    },
+    {
+      title: 'Power Status',
+      value:
+        tank.telemetryState === 'live'
+          ? 'Online'
+          : tank.telemetryState === 'offline'
+            ? 'Offline'
+            : 'Waiting',
+      icon: Radio,
+      change: getDeviceTelemetryStatusText(tank.telemetryState),
+      trend: tank.telemetryState === 'live' ? 'good' : 'warning',
+      sparkline:
+        tank.telemetryState === 'live' ? [100, 100, 100, 100, 100, 100] : [0, 0, 0, 0, 0, 0],
     },
     {
       title: 'System Status',

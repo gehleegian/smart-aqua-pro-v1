@@ -87,6 +87,34 @@ export function getTemperatureLabel(temp: number, minTemp: number, maxTemp: numb
   return 'Normal';
 }
 
+export function getPhLabel(ph?: number | null) {
+  if (typeof ph !== 'number' || !Number.isFinite(ph)) {
+    return 'Waiting for telemetry';
+  }
+
+  if (ph >= 6.5 && ph <= 7.8) {
+    return 'Balanced';
+  }
+
+  return ph < 6.5 ? 'Low' : 'High';
+}
+
+export function getTurbidityLabel(turbidity?: number | null) {
+  if (typeof turbidity !== 'number' || !Number.isFinite(turbidity)) {
+    return 'Waiting for telemetry';
+  }
+
+  if (turbidity <= 300) {
+    return 'Clear';
+  }
+
+  if (turbidity <= 700) {
+    return 'Moderate';
+  }
+
+  return 'Cloudy';
+}
+
 export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
@@ -354,9 +382,14 @@ export function prepareAutomationSettings(draft: AutomationSettings):
 
   if (
     feedingTimes.length === 0 ||
+    !draft.lightOnTime ||
+    !draft.lightOffTime ||
     !draft.filtrationStartTime
   ) {
-    return { settings: null, error: 'Please complete the feeding and filtration schedule.' };
+    return {
+      settings: null,
+      error: 'Please complete the feeding, lighting, and filtration schedule.',
+    };
   }
 
   if (!Number.isFinite(runtimeHours) || runtimeHours < 1 || runtimeHours > 24) {

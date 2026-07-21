@@ -274,8 +274,8 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
       { label: 'Samples Captured', value: '0' },
       { label: 'Average Temp', value: '--' },
       { label: 'Lowest Level', value: '--' },
-      { label: 'Average Purity (TDS)', value: '--' },
       { label: 'Average TDS', value: '--' },
+      { label: 'Average Purity Score', value: '--' },
     ];
   }
 
@@ -300,18 +300,18 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
       )}%`,
     },
     {
-      label: 'Average Purity (TDS)',
-      value:
-        validPurityReadings.length === 0
-          ? '--'
-          : `${toFixedValue(average(validPurityReadings), 0)}%`,
-    },
-    {
       label: 'Average TDS',
       value:
         validTdsReadings.length === 0
           ? '--'
           : `${toFixedValue(average(validTdsReadings), 0)} ppm`,
+    },
+    {
+      label: 'Average Purity Score',
+      value:
+        validPurityReadings.length === 0
+          ? '--'
+          : `${toFixedValue(average(validPurityReadings), 0)}%`,
     },
   ];
 }
@@ -358,23 +358,23 @@ export function buildWeeklyQualityData(
 ) {
   const weeklyKeys = buildDateKeys(selectedDate, 7);
 
-  return weeklyKeys.map((dateKey) => {
-    const dayEntries = mergedEntries.filter(
-      (entry) => formatDateKey(new Date(entry.recordedAtEpoch)) === dateKey
-    );
+  return weeklyKeys
+    .map((dateKey) => {
+      const validTdsReadings = mergedEntries
+        .filter((entry) => formatDateKey(new Date(entry.recordedAtEpoch)) === dateKey)
+        .map((entry) => getTelemetryTdsPpm(entry))
+        .filter((value): value is number => value !== null);
 
-    return {
-      label: formatDateLabel(dateKey),
-      value:
-        dayEntries.length > 0
-          ? average(
-              dayEntries
-                .map((entry) => getTelemetryPurityPercent(entry))
-                .filter((value): value is number => value !== null)
-            )
-          : 0,
-    };
-  });
+      if (validTdsReadings.length === 0) {
+        return null;
+      }
+
+      return {
+        label: formatDateLabel(dateKey),
+        value: average(validTdsReadings),
+      };
+    })
+    .filter((point): point is ChartPoint => Boolean(point));
 }
 
 

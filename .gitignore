@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+docs/arduino/SmartAquaPhase1/secrets.h
 
 # Editor directories and files
 .vscode/*
