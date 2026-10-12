@@ -58,7 +58,7 @@ function mapUserData(docId: string, data: Record<string, unknown>): UserData {
     fullName,
     email: readString(data.email, ''),
     contactNumber: readString(data.contact_number, ''),
-    role: normalizeRole(data.role),
+    role: normalizeRole(typeof data.role === 'string' ? data.role : undefined),
     createdAt,
     updatedAt,
     accountStatus,

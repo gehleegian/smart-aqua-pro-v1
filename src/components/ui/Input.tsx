@@ -9,10 +9,10 @@ export default function Input({ label, error, className = '', ...props }: InputP
   return (
     <div className="space-y-1">
       {label && (
-        <label className="block text-sm font-medium text-slate-300">{label}</label>
+        <label className="block text-sm font-medium text-slate-200">{label}</label>
       )}
       <input
-        className={`w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all ${error ? 'border-red-500' : ''} ${className}`}
+        className={`w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-slate-100 placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-400/70 ${error ? 'border-red-500' : ''} ${className}`}
         {...props}
       />
       {error && <p className="text-xs text-red-400">{error}</p>}

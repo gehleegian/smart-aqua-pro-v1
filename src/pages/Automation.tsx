@@ -81,7 +81,7 @@ export default function Automation() {
       <Card>
         <CardHeader>
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Fish className="w-5 h-5 text-cyan-400" />
+            <Fish className="h-5 w-5 text-teal-200" />
             Feeding Schedule
           </h3>
         </CardHeader>
@@ -111,7 +111,7 @@ export default function Automation() {
                     <td className="py-3 px-4">
                       <button
                         onClick={() => setFeedingEnabled({ ...feedingEnabled, [schedule.id]: !feedingEnabled[schedule.id] })}
-                        className={`w-12 h-6 rounded-full transition-all duration-200 ${feedingEnabled[schedule.id] ? 'bg-cyan-600' : 'bg-slate-600'}`}
+                        className={`h-6 w-12 rounded-full transition-all duration-200 ${feedingEnabled[schedule.id] ? 'bg-teal-600' : 'bg-slate-600'}`}
                       >
                         <div className={`w-5 h-5 bg-white rounded-full transition-all duration-200 ${feedingEnabled[schedule.id] ? 'translate-x-6' : 'translate-x-0.5'}`} />
                       </button>
@@ -200,13 +200,13 @@ export default function Automation() {
                     <Settings className="w-4 h-4 text-slate-300" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-cyan-400">{rule.condition}</p>
+                    <p className="text-sm font-medium text-teal-200">{rule.condition}</p>
                     <p className="text-xs text-slate-400">→ {rule.action}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setRulesEnabled({ ...rulesEnabled, [rule.id]: !rulesEnabled[rule.id] })}
-                  className={`w-12 h-6 rounded-full transition-all duration-200 ${rulesEnabled[rule.id] ? 'bg-cyan-600' : 'bg-slate-600'}`}
+                  className={`h-6 w-12 rounded-full transition-all duration-200 ${rulesEnabled[rule.id] ? 'bg-teal-600' : 'bg-slate-600'}`}
                 >
                   <div className={`w-5 h-5 bg-white rounded-full transition-all duration-200 ${rulesEnabled[rule.id] ? 'translate-x-6' : 'translate-x-0.5'}`} />
                 </button>

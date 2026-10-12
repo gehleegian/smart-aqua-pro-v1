@@ -60,18 +60,18 @@ export default function Sidebar({
   return (
     <>
       <aside
-        className={`fixed left-0 top-0 h-full bg-slate-900 border-r border-slate-700/50 z-50 w-64 transition-transform duration-300 lg:hidden ${
+        className={`fixed left-0 top-0 z-50 h-full w-64 border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-transform duration-300 lg:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between px-4 py-5 border-b border-slate-700/50">
+        <div className="flex items-center justify-between border-b border-slate-600/30 px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <Waves className="w-6 h-6 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
+              <Waves className="h-6 w-6 text-teal-200" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-cyan-400">Pro Edition</p>
+              <p className="text-xs text-teal-300">AquariTech Solutions</p>
             </div>
           </div>
 
@@ -91,8 +91,8 @@ export default function Sidebar({
                 onClick={() => onNavigate(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
                   isActive
-                    ? 'bg-cyan-600/20 text-cyan-400 border-r-2 border-cyan-400'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    ? 'border-r-2 border-teal-300 bg-teal-400/12 text-teal-200'
+                    : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
                 }`}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
@@ -102,7 +102,7 @@ export default function Sidebar({
           })}
         </nav>
 
-        <div className="border-t border-slate-700/50">
+        <div className="border-t border-slate-600/30">
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-4 py-4 text-red-400 hover:bg-red-500/10 transition-all"
@@ -114,19 +114,19 @@ export default function Sidebar({
       </aside>
 
       <aside
-        className={`hidden lg:block fixed left-0 top-0 h-full bg-slate-900 border-r border-slate-700/50 z-50 transition-all duration-300 ${
+        className={`fixed left-0 top-0 z-50 hidden h-full border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-all duration-300 lg:block ${
           collapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-700/50">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Waves className="w-6 h-6 text-white" />
+        <div className="flex items-center gap-3 border-b border-slate-600/30 px-4 py-5">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
+            <Waves className="h-6 w-6 text-teal-200" />
           </div>
 
           {!collapsed && (
             <div>
               <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-cyan-400">Pro Edition</p>
+              <p className="text-xs text-teal-300">AquariTech Solutions</p>
             </div>
           )}
         </div>
@@ -142,8 +142,8 @@ export default function Sidebar({
                 onClick={() => onNavigate(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
                   isActive
-                    ? 'bg-cyan-600/20 text-cyan-400 border-r-2 border-cyan-400'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    ? 'border-r-2 border-teal-300 bg-teal-400/12 text-teal-200'
+                    : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
                 }`}
                 title={collapsed ? item.label : undefined}
               >
@@ -154,7 +154,7 @@ export default function Sidebar({
           })}
         </nav>
 
-        <div className="border-t border-slate-700/50">
+        <div className="border-t border-slate-600/30">
           <button
             onClick={onLogout}
             className={`w-full flex items-center gap-3 px-4 py-4 text-red-400 hover:bg-red-500/10 transition-all ${
@@ -168,7 +168,7 @@ export default function Sidebar({
 
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="w-full flex items-center justify-center py-4 border-t border-slate-700/50 text-slate-400 hover:text-white transition-colors"
+            className="flex w-full items-center justify-center border-t border-slate-600/30 py-4 text-slate-400 transition-colors hover:text-white"
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           </button>

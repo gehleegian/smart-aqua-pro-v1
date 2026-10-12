@@ -17,6 +17,72 @@ import type {
 } from '../types/aquarium';
 import { getCurrentUserProfile } from './userService';
 
+type UserAquariumUpdateField =
+  | 'name'
+  | 'species'
+  | 'bioload'
+  | 'minTemp'
+  | 'maxTemp'
+  | 'minLevel'
+  | 'minQuality'
+  | 'feeder'
+  | 'light'
+  | 'filter'
+  | 'automationSettings';
+
+type AdminAquariumUpdateField =
+  | UserAquariumUpdateField
+  | 'ownerId'
+  | 'ownerName'
+  | 'tankType'
+  | 'tankSizeLiters'
+  | 'tankSizeCategory'
+  | 'tankLengthCm'
+  | 'tankWidthCm'
+  | 'tankHeightCm'
+  | 'workingWaterVolumeLiters'
+  | 'filtrationSetup'
+  | 'filterCapacity'
+  | 'fishCount';
+
+export type AquariumUpdateData = Partial<Pick<Aquarium, AdminAquariumUpdateField>>;
+
+const USER_AQUARIUM_UPDATE_FIELDS = new Set<UserAquariumUpdateField>([
+  'name',
+  'species',
+  'bioload',
+  'minTemp',
+  'maxTemp',
+  'minLevel',
+  'minQuality',
+  'feeder',
+  'light',
+  'filter',
+  'automationSettings',
+]);
+
+const ADMIN_AQUARIUM_UPDATE_FIELDS = new Set<AdminAquariumUpdateField>([
+  ...USER_AQUARIUM_UPDATE_FIELDS,
+  'ownerId',
+  'ownerName',
+  'tankType',
+  'tankSizeLiters',
+  'tankSizeCategory',
+  'tankLengthCm',
+  'tankWidthCm',
+  'tankHeightCm',
+  'workingWaterVolumeLiters',
+  'filtrationSetup',
+  'filterCapacity',
+  'fishCount',
+]);
+
+const MANUAL_STATUS_UPDATE_FIELDS: ReadonlyArray<keyof ManualSystemStatus> = [
+  'feeder',
+  'light',
+  'filter',
+];
+
 function readString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -217,18 +283,30 @@ export async function createAquarium(data: Omit<Aquarium, 'id'>): Promise<void> 
 
 export async function updateAquarium(
   aquariumId: string,
-  data: Partial<Omit<Aquarium, 'id'>>
+  data: AquariumUpdateData
 ): Promise<void> {
-  const { aquariumRef, aquariumData, isAdmin } = await requireAquariumAccess(
+  const { aquariumRef, isAdmin } = await requireAquariumAccess(
     aquariumId,
     'update'
   );
+  const allowedFields: ReadonlySet<string> = isAdmin
+    ? ADMIN_AQUARIUM_UPDATE_FIELDS
+    : USER_AQUARIUM_UPDATE_FIELDS;
+  const submittedFields = Object.keys(data);
+  const prohibitedFields = submittedFields.filter((field) => !allowedFields.has(field));
 
-  const sanitizedData = { ...data } as Partial<Omit<Aquarium, 'id'>>;
+  if (prohibitedFields.length > 0) {
+    throw new Error(`Aquarium fields cannot be updated: ${prohibitedFields.join(', ')}.`);
+  }
 
-  if (!isAdmin) {
-    sanitizedData.ownerId = readString(aquariumData.ownerId, '');
-    sanitizedData.ownerName = readString(aquariumData.ownerName, '');
+  const sanitizedData = Object.fromEntries(
+    Object.entries(data).filter(
+      ([field, value]) => allowedFields.has(field) && value !== undefined
+    )
+  ) as AquariumUpdateData;
+
+  if (Object.keys(sanitizedData).length === 0) {
+    throw new Error('No permitted aquarium fields were provided for update.');
   }
 
   await updateDoc(aquariumRef, sanitizedData);
@@ -239,9 +317,24 @@ export async function updateAquariumManualStatus(
   data: Partial<ManualSystemStatus>
 ): Promise<void> {
   const { aquariumRef } = await requireAquariumAccess(aquariumId, 'update');
-  const updates = Object.fromEntries(
-    Object.entries(data).map(([field, value]) => [`manualStatus.${field}`, value])
+  const submittedFields = Object.keys(data);
+  const prohibitedFields = submittedFields.filter(
+    (field) => !MANUAL_STATUS_UPDATE_FIELDS.includes(field as keyof ManualSystemStatus)
   );
+
+  if (prohibitedFields.length > 0) {
+    throw new Error(`Manual status fields cannot be updated: ${prohibitedFields.join(', ')}.`);
+  }
+
+  const updates = Object.fromEntries(
+    MANUAL_STATUS_UPDATE_FIELDS.filter((field) => data[field] !== undefined).map(
+      (field) => [`manualStatus.${field}`, data[field]]
+    )
+  );
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error('No permitted manual status fields were provided for update.');
+  }
 
   await updateDoc(aquariumRef, updates);
 }

@@ -8,6 +8,15 @@ import {
   isAuthRateLimitError,
 } from '../utils/authRateLimit';
 
+function getFirebaseAuthErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return '';
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : '';
+}
+
 export default function Login({
   onLogin,
   onGoToSignup,
@@ -84,16 +93,16 @@ export default function Login({
       }
 
       onLogin(userProfile);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (isAuthRateLimitError(err)) {
         setError(err.message);
-      } else if (err.code === 'auth/invalid-credential') {
+      } else if (getFirebaseAuthErrorCode(err) === 'auth/invalid-credential') {
         setError('Invalid email or password.');
-      } else if (err.code === 'auth/user-not-found') {
+      } else if (getFirebaseAuthErrorCode(err) === 'auth/user-not-found') {
         setError('User not found.');
-      } else if (err.code === 'auth/wrong-password') {
+      } else if (getFirebaseAuthErrorCode(err) === 'auth/wrong-password') {
         setError('Wrong password.');
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (getFirebaseAuthErrorCode(err) === 'auth/invalid-email') {
         setError('Invalid email address.');
       } else {
         setError('Login failed.');

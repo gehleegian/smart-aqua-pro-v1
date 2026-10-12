@@ -94,6 +94,9 @@ export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquariu
     hasFreshTelemetry: false,
     hasFreshTemperatureTelemetry: false,
     hasFreshPurityTelemetry: false,
+    hasFreshPhTelemetry: false,
+    hasFreshTurbidityTelemetry: false,
+    hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
   }));
 }

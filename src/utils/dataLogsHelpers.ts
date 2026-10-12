@@ -1,6 +1,10 @@
 import type { Aquarium } from '../types/aquarium';
 import type { DeviceShadow, DeviceTelemetryLogEntry } from '../types/device';
-import { getTelemetryPurityPercent, getTelemetryTdsPpm } from '../types/device';
+import {
+  getTelemetryPurityPercent,
+  getTelemetryTdsPpm,
+  normalizeDevicePowerStatus,
+} from '../types/device';
 import type { ChartPoint, PeriodKey, SummaryItem } from '../types/dataLogs';
 import type { UserRole } from '../types/user';
 
@@ -114,6 +118,8 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
         : undefined,
+    equipmentStatus: telemetry.equipmentStatus,
+    powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
     ph: typeof telemetry.ph === 'number' ? telemetry.ph : undefined,
     online: telemetry.online,
     recordedAt: `${formatDateKey(recordedAtDate)}T${String(
@@ -276,6 +282,9 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
       { label: 'Lowest Level', value: '--' },
       { label: 'Average Purity (TDS)', value: '--' },
       { label: 'Average TDS', value: '--' },
+      { label: 'Average pH', value: '--' },
+      { label: 'Average Turbidity', value: '--' },
+      { label: 'Power Status', value: '--' },
     ];
   }
 
@@ -285,6 +294,16 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
   const validTdsReadings = rangeEntries
     .map((entry) => getTelemetryTdsPpm(entry))
     .filter((value): value is number => value !== null);
+  const validPhReadings = rangeEntries
+    .map((entry) => entry.ph)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const validTurbidityReadings = rangeEntries
+    .map((entry) => entry.turbidity)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const latestPowerStatus = [...rangeEntries]
+    .reverse()
+    .map((entry) => normalizeDevicePowerStatus(entry.powerStatus))
+    .find(Boolean);
 
   return [
     { label: 'Samples Captured', value: `${rangeEntries.length}` },
@@ -312,6 +331,24 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
         validTdsReadings.length === 0
           ? '--'
           : `${toFixedValue(average(validTdsReadings), 0)} ppm`,
+    },
+    {
+      label: 'Average pH',
+      value:
+        validPhReadings.length === 0
+          ? '--'
+          : toFixedValue(average(validPhReadings), 1),
+    },
+    {
+      label: 'Average Turbidity',
+      value:
+        validTurbidityReadings.length === 0
+          ? '--'
+          : `${toFixedValue(average(validTurbidityReadings), 0)} NTU`,
+    },
+    {
+      label: 'Power Status',
+      value: latestPowerStatus || '--',
     },
   ];
 }
