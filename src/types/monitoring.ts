@@ -9,6 +9,9 @@ export type MonitoringAquarium = Aquarium & {
   hasFreshTelemetry: boolean;
   hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;
+  hasFreshPhTelemetry: boolean;
+  hasFreshTurbidityTelemetry: boolean;
+  hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
 };
 

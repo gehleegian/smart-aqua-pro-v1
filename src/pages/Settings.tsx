@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Bell,
-  CalendarDays,
   Database,
   Cpu,
   Info,
   Mail,
   PencilLine,
-  Phone,
-  Shield,
   Thermometer,
   Droplets,
   Waves,
@@ -127,7 +124,7 @@ export default function Settings() {
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
               <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
-                <UserRound className="h-5 w-5 text-cyan-400" />
+                <UserRound className="h-5 w-5 text-teal-200" />
                 Profile
               </h3>
               <Button type="button" variant="secondary" size="sm" onClick={openProfileModal}>
@@ -213,7 +210,7 @@ export default function Settings() {
                     }
                     className={`h-6 w-12 rounded-full transition-all duration-200 ${
                       notifications[item.key as keyof typeof notifications]
-                        ? 'bg-cyan-600'
+                        ? 'bg-teal-600'
                         : 'bg-slate-600'
                     }`}
                   >
@@ -239,7 +236,7 @@ export default function Settings() {
                   <input
                     type="email"
                     defaultValue="admin@smartaqua.pro"
-                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                   />
                 </div>
                 <div>
@@ -247,7 +244,7 @@ export default function Settings() {
                   <input
                     type="tel"
                     defaultValue="+63 900 000 0000"
-                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                   />
                 </div>
               </div>
@@ -293,13 +290,13 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
-              <Info className="w-5 h-5 text-cyan-400" />
+              <Info className="h-5 w-5 text-teal-200" />
               About SmartAqua Pro
             </h3>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="rounded-lg border border-cyan-500/30 bg-gradient-to-br from-cyan-600/20 to-blue-600/20 p-4">
+              <div className="rounded-lg border border-teal-300/25 bg-gradient-to-br from-teal-500/15 to-sky-600/10 p-4">
                 <h4 className="mb-1 text-lg font-bold text-white">SmartAqua Pro</h4>
                 <p className="text-sm text-slate-400">
                   IoT-Based Intelligent Aquarium Monitoring, Automation, and Management System

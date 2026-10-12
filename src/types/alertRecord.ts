@@ -4,8 +4,9 @@ export interface AlertRecordDocument {
   device_id: string;
   type: string;
   message: string;
-  severity: string;
+  severity: 'info' | 'warning' | 'critical';
   isRead: boolean;
+  status?: 'active' | 'resolved';
   triggered_at: Date;
   resolved_at: Date | null;
 }

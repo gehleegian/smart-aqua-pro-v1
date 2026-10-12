@@ -33,6 +33,13 @@ export const severityIconMap = {
 export const categoryIconMap: Record<AlertCategory, typeof Thermometer> = {
   temperature: Thermometer,
   water_level: Droplets,
+  tds: Waves,
+  ph: Waves,
+  turbidity: Waves,
+  ammonia: Waves,
+  power_status: Zap,
+  filter_state: Zap,
+  equipment_status: Zap,
   water_quality: Waves,
   system: Zap,
 };

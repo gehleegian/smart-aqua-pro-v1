@@ -39,7 +39,7 @@ export default function Aquariums() {
 
         <button
           onClick={aquariums.actions.openAddModal}
-          className="flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-600/20 transition-all hover:bg-cyan-700"
+          className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500"
         >
           <Plus className="h-4 w-4" />
           Add Aquarium
@@ -55,7 +55,7 @@ export default function Aquariums() {
       )}
 
       {aquariums.currentUserRole === 'Admin' && aquariums.selectedOwnerName && (
-        <div className="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3">
+        <div className="rounded-lg border border-slate-600/30 bg-slate-900/35 px-4 py-3">
           <p className="text-sm text-slate-400">Showing aquariums for</p>
           <p className="text-base font-semibold text-white">{aquariums.selectedOwnerName}</p>
         </div>

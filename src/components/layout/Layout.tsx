@@ -32,6 +32,18 @@ const pages: Record<string, React.FC> = {
 };
 
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
+type ThemeMode = 'dark' | 'light';
+
+const THEME_STORAGE_KEY = 'smartAquaTheme';
+
+const getInitialTheme = (): ThemeMode => {
+  if (typeof window === 'undefined') {
+    return 'dark';
+  }
+
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+};
 
 const rolePermissions: Record<UserRole, string[]> = {
   Admin: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'users', 'settings'],
@@ -46,10 +58,17 @@ export default function Layout() {
   const [user, setUser] = useState<UserData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
 
   useEffect(() => {
     localStorage.setItem('currentPage', currentPage);
   }, [currentPage]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -118,6 +137,10 @@ export default function Layout() {
     }
   };
 
+  const handleThemeToggle = () => {
+    setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+  };
+
   const allowedPages = useMemo(() => {
     if (!user) return [];
     return rolePermissions[user.role] ?? rolePermissions.User;
@@ -145,7 +168,10 @@ export default function Layout() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200 text-lg">
+      <div
+        className="smart-aqua-app flex min-h-screen items-center justify-center bg-slate-950 text-lg text-slate-200"
+        data-theme={theme}
+      >
         Loading...
       </div>
     );
@@ -188,7 +214,7 @@ export default function Layout() {
       : Dashboard;
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="smart-aqua-app min-h-screen bg-slate-950 text-slate-100" data-theme={theme}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={handleNavigate}
@@ -211,8 +237,10 @@ export default function Layout() {
           user={user}
           onLogout={handleLogout}
           onMenuClick={() => setSidebarOpen(true)}
+          theme={theme}
+          onThemeToggle={handleThemeToggle}
         />
-        <main className="p-6">
+        <main className="p-4 md:p-6">
           <PageComponent />
         </main>
       </div>

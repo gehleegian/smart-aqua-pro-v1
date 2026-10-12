@@ -1,16 +1,18 @@
 import {
-  addDoc,
   collection,
   doc,
   writeBatch,
   getDocs,
   orderBy,
-  setDoc,
   query,
   where,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { DeviceTelemetry, DeviceTelemetryLogEntry } from '../types/device';
+import {
+  normalizeDevicePowerStatus,
+  type DeviceTelemetry,
+  type DeviceTelemetryLogEntry,
+} from '../types/device';
 import type { SensorReadingDocument, SensorReadingSource } from '../types/sensorReading';
 
 function pad(value: number) {
@@ -60,10 +62,6 @@ function readNumber(value: unknown, fallback?: number) {
   }
 
   return fallback;
-}
-
-function readString(value: unknown, fallback = '') {
-  return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
 function readRecordedAtLabel(value: unknown, recordedAtEpoch: number) {
@@ -126,6 +124,14 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
       reading.filterState === 'Active' || reading.filterState === 'Inactive'
         ? reading.filterState
         : undefined,
+    equipmentStatus:
+      reading.equipmentStatus === 'Normal' ||
+      reading.equipmentStatus === 'Warning' ||
+      reading.equipmentStatus === 'Fault' ||
+      reading.equipmentStatus === 'Unknown'
+        ? reading.equipmentStatus
+        : undefined,
+    powerStatus: normalizeDevicePowerStatus(reading.powerStatus),
     ph: readNumber(reading.ph),
     online: readBoolean(reading.online, true),
     recordedAt: readRecordedAtLabel(reading.recordedAt, recordedAtEpoch),
@@ -166,6 +172,8 @@ export function buildSensorReadingDocument(options: {
     turbidity: options.telemetry.turbidity,
     ammoniaPpm: options.telemetry.ammoniaPpm,
     filterState: options.telemetry.filterState,
+    equipmentStatus: options.telemetry.equipmentStatus,
+    powerStatus: options.telemetry.powerStatus,
     ph: options.telemetry.ph,
     online: options.telemetry.online,
   };
@@ -200,6 +208,8 @@ export function buildSensorReadingDocumentFromHistoryEntry(options: {
     turbidity: options.entry.turbidity,
     ammoniaPpm: options.entry.ammoniaPpm,
     filterState: options.entry.filterState,
+    equipmentStatus: options.entry.equipmentStatus,
+    powerStatus: options.entry.powerStatus,
     ph: options.entry.ph,
     online: options.entry.online ?? true,
   };

@@ -8,6 +8,9 @@ import {
   Users,
   Waves,
   Zap,
+  Activity,
+  Gauge,
+  Power,
 } from 'lucide-react';
 import type { Aquarium } from '../types/aquarium';
 import {
@@ -58,6 +61,9 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     fishCount: Array.isArray(aquarium.species) ? aquarium.species.length : 0,
     hasFreshTelemetry: false,
     hasFreshPurityTelemetry: false,
+    hasFreshPhTelemetry: false,
+    hasFreshTurbidityTelemetry: false,
+    hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
   }));
 }
@@ -77,6 +83,13 @@ export function mergeDashboardAquariums(
       temp: snapshot ? snapshot.temperatureC : aquarium.temp,
       level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
       tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+      ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
+      turbidity: snapshot?.hasFreshTurbidityTelemetry
+        ? snapshot.turbidity ?? aquarium.turbidity
+        : aquarium.turbidity,
+      powerStatus: snapshot?.hasFreshPowerTelemetry
+        ? snapshot.powerStatus ?? aquarium.powerStatus
+        : aquarium.powerStatus,
       quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
     };
 
@@ -86,6 +99,9 @@ export function mergeDashboardAquariums(
       fishCount: Array.isArray(nextAquarium.species) ? nextAquarium.species.length : 0,
       hasFreshTelemetry: Boolean(snapshot),
       hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
+      hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
+      hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
+      hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       telemetryState,
     };
   });
@@ -154,6 +170,30 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         trend: 'warning',
         sparkline: [0, 0, 0, 0, 0, 0],
       },
+      {
+        title: 'pH Level',
+        value: '--',
+        icon: Activity,
+        change: 'Waiting for telemetry',
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+      {
+        title: 'Turbidity',
+        value: '--',
+        icon: Gauge,
+        change: 'Waiting for telemetry',
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
+      {
+        title: 'Power Status',
+        value: '--',
+        icon: Power,
+        change: 'Waiting for telemetry',
+        trend: 'warning',
+        sparkline: [0, 0, 0, 0, 0, 0],
+      },
     ];
   }
 
@@ -192,7 +232,11 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
     },
     {
       title: 'Water Purity (TDS)',
-      value: tank.hasFreshPurityTelemetry ? `${tank.quality}%` : '--',
+      value: tank.hasFreshPurityTelemetry
+        ? typeof tank.tdsPpm === 'number'
+          ? `${Math.round(tank.tdsPpm)} ppm`
+          : `${tank.quality}%`
+        : '--',
       icon: Waves,
       change: tank.hasFreshPurityTelemetry
         ? typeof tank.tdsPpm === 'number'
@@ -220,6 +264,57 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         tank.quality,
         tank.quality,
       ],
+    },
+    {
+      title: 'pH Level',
+      value: tank.hasFreshPhTelemetry && typeof tank.ph === 'number'
+        ? tank.ph.toFixed(1)
+        : '--',
+      icon: Activity,
+      change: tank.hasFreshPhTelemetry && typeof tank.ph === 'number'
+        ? tank.ph >= 6.5 && tank.ph <= 8.5
+          ? 'Normal'
+          : 'Check range'
+        : 'Waiting for telemetry',
+      trend:
+        tank.hasFreshPhTelemetry &&
+        typeof tank.ph === 'number' &&
+        tank.ph >= 6.5 &&
+        tank.ph <= 8.5
+          ? 'good'
+          : 'warning',
+      sparkline: [0, 0, 0, 0, 0, 0],
+    },
+    {
+      title: 'Turbidity',
+      value: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
+        ? `${tank.turbidity.toFixed(0)} NTU`
+        : '--',
+      icon: Gauge,
+      change: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
+        ? tank.turbidity <= 5
+          ? 'Clear'
+          : 'Check clarity'
+        : 'Waiting for telemetry',
+      trend:
+        tank.hasFreshTurbidityTelemetry &&
+        typeof tank.turbidity === 'number' &&
+        tank.turbidity <= 5
+          ? 'good'
+          : 'warning',
+      sparkline: [0, 0, 0, 0, 0, 0],
+    },
+    {
+      title: 'Power Status',
+      value: tank.hasFreshPowerTelemetry ? tank.powerStatus || '--' : '--',
+      icon: Power,
+      change: tank.hasFreshPowerTelemetry
+        ? tank.powerStatus === 'Online'
+          ? 'Normal'
+          : 'Check power'
+        : 'Waiting for telemetry',
+      trend: tank.hasFreshPowerTelemetry && tank.powerStatus === 'Online' ? 'good' : 'warning',
+      sparkline: [0, 0, 0, 0, 0, 0],
     },
     {
       title: 'System Status',

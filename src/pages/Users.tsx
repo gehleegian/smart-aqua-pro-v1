@@ -24,8 +24,8 @@ const roles = [
   {
     name: 'User',
     icon: User,
-    color: 'text-cyan-400',
-    bg: 'bg-cyan-500/20',
+    color: 'text-teal-200',
+    bg: 'bg-teal-400/15',
     permissions: [
       'View own dashboard',
       'Manage own aquariums',
@@ -214,14 +214,14 @@ export default function Users() {
                   placeholder="Search users..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 w-56"
+                  className="w-56 rounded-lg border border-slate-600/50 bg-slate-900/35 py-2 pl-10 pr-4 text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                 />
               </div>
 
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value as 'all' | UserRole)}
-                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
               >
                 <option value="all">All Roles</option>
                 <option value="Admin">Admin</option>
@@ -275,7 +275,7 @@ export default function Users() {
                     <tr key={user.id} className="border-b border-slate-700/50">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-sky-600">
                             <span className="text-xs font-bold text-white">
                               {user.name
                                 .split(' ')
@@ -314,7 +314,7 @@ export default function Users() {
                             handleRoleChange(user.id, e.target.value as UserRole, user.role)
                           }
                           disabled={savingId === user.id || deletingId === user.id || user.role === 'Admin'}
-                          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-60"
+                          className="rounded-lg border border-slate-600/50 bg-slate-900/35 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30 disabled:opacity-60"
                         >
                           <option value="User">User</option>
                           <option value="Admin">Admin</option>

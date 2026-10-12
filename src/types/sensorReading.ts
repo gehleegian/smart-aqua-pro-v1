@@ -1,3 +1,5 @@
+import type { DevicePowerStatus } from './device';
+
 export type SensorReadingSource = 'device' | 'web' | 'sync';
 
 export interface SensorReadingDocument {
@@ -23,6 +25,8 @@ export interface SensorReadingDocument {
   turbidity?: number;
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
+  equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
+  powerStatus?: DevicePowerStatus;
   ph?: number;
   online: boolean;
 }

@@ -1,38 +1,83 @@
 @import "tailwindcss";
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #1e293b #0f172a;
-}
-
-body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background-color: #0f172a;
-}
-@import "tailwindcss";
-
 @theme {
-  --color-slate-50: #edf5fb;
-  --color-slate-100: #dceaf5;
-  --color-slate-200: #bdd8eb;
-  --color-slate-300: #95bfdc;
-  --color-slate-400: #6ea4c9;
-  --color-slate-500: #4f89b3;
-  --color-slate-600: #3b6d95;
-  --color-slate-700: #2a5275;
-  --color-slate-800: #1b3a59;
-  --color-slate-900: #11283f;
-  --color-slate-950: #0b1b2d;
+  --color-slate-50: #f2fbfa;
+  --color-slate-100: #def3f0;
+  --color-slate-200: #bfe4df;
+  --color-slate-300: #93cbc4;
+  --color-slate-400: #66aea9;
+  --color-slate-500: #3f9290;
+  --color-slate-600: #2b7478;
+  --color-slate-700: #205963;
+  --color-slate-800: #173f4b;
+  --color-slate-900: #102f3a;
+  --color-slate-950: #08212b;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a5275 #0b1b2d;
+  scrollbar-color: #2b7478 #08212b;
 }
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background-color: #0b1b2d;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(45, 212, 191, 0.09), transparent 28rem),
+    linear-gradient(180deg, #0b2833 0%, #08212b 48%, #071c25 100%);
+  color: #f2fbfa;
+}
+
+.smart-aqua-app {
+  color-scheme: dark;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.smart-aqua-app[data-theme='light'] {
+  color-scheme: light;
+  --color-slate-50: #082f49;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-600: #9fb3bf;
+  --color-slate-700: #d9e7ec;
+  --color-slate-800: #eef6f8;
+  --color-slate-900: #ffffff;
+  --color-slate-950: #f6fafb;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(14, 165, 164, 0.13), transparent 26rem),
+    linear-gradient(180deg, #f8fcfd 0%, #edf7f8 48%, #e7f1f5 100%);
+}
+
+.smart-aqua-app[data-theme='light'] * {
+  scrollbar-color: #9fb3bf #e7f1f5;
+}
+
+.smart-aqua-app[data-theme='light'] input,
+.smart-aqua-app[data-theme='light'] select,
+.smart-aqua-app[data-theme='light'] textarea {
+  color-scheme: light;
+}
+
+.smart-aqua-app[data-theme='light'] .text-white {
+  color: #0f172a;
+}
+
+.smart-aqua-app[data-theme='light'] .bg-teal-600.text-white,
+.smart-aqua-app[data-theme='light'] .bg-rose-600.text-white,
+.smart-aqua-app[data-theme='light'] .bg-red-600.text-white,
+.smart-aqua-app[data-theme='light'] .bg-red-500.text-white,
+.smart-aqua-app[data-theme='light'] .bg-gradient-to-br .text-white {
+  color: #ffffff;
+}
+
+.smart-aqua-app[data-theme='light'] .shadow-slate-950\/10,
+.smart-aqua-app[data-theme='light'] .shadow-slate-950\/20,
+.smart-aqua-app[data-theme='light'] .shadow-slate-950\/30,
+.smart-aqua-app[data-theme='light'] .shadow-slate-950\/35,
+.smart-aqua-app[data-theme='light'] .shadow-slate-950\/50 {
+  --tw-shadow-color: rgba(15, 23, 42, 0.12);
 }
 
 @keyframes swim {

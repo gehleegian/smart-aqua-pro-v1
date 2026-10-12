@@ -17,7 +17,10 @@ import {
   getSensorReadingsForDateKey,
   upsertSensorReading,
 } from './sensorReadingsService';
-import { setDeviceTelemetryClockOffsetMs } from '../types/device';
+import {
+  normalizeDevicePowerStatus,
+  setDeviceTelemetryClockOffsetMs,
+} from '../types/device';
 import type {
   DeviceCommand,
   DeviceControlProfile,
@@ -37,6 +40,8 @@ let serverTimeOffsetUnsubscribe: (() => void) | null = null;
 type DeviceShadowSubscriptionOptions = {
   onError?: (error: Error) => void;
 };
+
+type DeviceCommandRequest = Omit<DeviceCommand, 'requestedBy'>;
 
 async function assertRealtimeDeviceAccess(
   aquariumId: string,
@@ -76,25 +81,6 @@ async function assertRealtimeDeviceAccess(
   }
 
   return aquariumData;
-}
-
-function mergeTelemetryHistoryEntries(
-  firestoreEntries: DeviceTelemetryLogEntry[],
-  realtimeEntries: DeviceTelemetryLogEntry[]
-) {
-  const seenEpochs = new Set<number>();
-  const merged: DeviceTelemetryLogEntry[] = [];
-
-  for (const entry of [...firestoreEntries, ...realtimeEntries]) {
-    if (seenEpochs.has(entry.recordedAtEpoch)) {
-      continue;
-    }
-
-    seenEpochs.add(entry.recordedAtEpoch);
-    merged.push(entry);
-  }
-
-  return merged.sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch);
 }
 
 function getDeviceRootRef(aquariumId: string): DatabaseReference | null {
@@ -172,6 +158,14 @@ function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
         : undefined,
+    equipmentStatus:
+      telemetry.equipmentStatus === 'Normal' ||
+      telemetry.equipmentStatus === 'Warning' ||
+      telemetry.equipmentStatus === 'Fault' ||
+      telemetry.equipmentStatus === 'Unknown'
+        ? telemetry.equipmentStatus
+        : undefined,
+    powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
     ph: Number.isFinite(Number(telemetry.ph)) ? Number(telemetry.ph) : undefined,
     updatedAt,
     online: typeof telemetry.online === 'boolean' ? telemetry.online : true,
@@ -192,22 +186,35 @@ export async function syncDeviceControlProfile(
   await set(child(deviceRootRef, 'control'), profile);
 }
 
-export async function publishDeviceCommand(command: DeviceCommand): Promise<void> {
+export async function publishDeviceCommand(command: DeviceCommandRequest): Promise<void> {
   const deviceRootRef = getDeviceRootRef(command.aquariumId);
 
   if (!deviceRootRef) {
     return;
   }
 
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error('You must be logged in to send aquarium device commands.');
+  }
+
   await assertRealtimeDeviceAccess(command.aquariumId, 'write');
 
   const payload = Object.fromEntries(
-    Object.entries(command).filter(([, value]) => value !== undefined)
+    Object.entries({
+      ...command,
+      requestedBy: currentUser.uid,
+    }).filter(([, value]) => value !== undefined)
   );
 
   await set(child(deviceRootRef, 'commands/latest'), payload);
 }
 
+/**
+ * Pending trusted-ingestion migration. Normal browser UI must not use this
+ * function as an authoritative source of real sensor telemetry.
+ */
 export async function writeDeviceTelemetry(
   aquariumId: string,
   telemetry: DeviceTelemetry
@@ -297,6 +304,14 @@ function mapTelemetryHistoryEntry(value: unknown): DeviceTelemetryLogEntry | nul
       entry.filterState === 'Active' || entry.filterState === 'Inactive'
         ? entry.filterState
         : undefined,
+    equipmentStatus:
+      entry.equipmentStatus === 'Normal' ||
+      entry.equipmentStatus === 'Warning' ||
+      entry.equipmentStatus === 'Fault' ||
+      entry.equipmentStatus === 'Unknown'
+        ? entry.equipmentStatus
+        : undefined,
+    powerStatus: normalizeDevicePowerStatus(entry.powerStatus),
     ph: Number.isFinite(Number(entry.ph)) ? Number(entry.ph) : undefined,
     online: typeof entry.online === 'boolean' ? entry.online : undefined,
     recordedAt,
@@ -324,19 +339,6 @@ export async function getDeviceTelemetryHistory(
     console.warn('Failed to load Firestore sensor readings.', error);
   }
 
-  if (firestoreHistory.length === 0) {
-    try {
-      const rtdbSnapshot = await get(child(deviceRootRef, `history/${dateKey}`));
-
-      if (rtdbSnapshot.exists()) {
-        await backfillSensorReadingsFromDeviceHistory(aquariumId);
-        firestoreHistory = await getSensorReadingsForDateKey(aquariumId, dateKey);
-      }
-    } catch (error) {
-      console.warn('Failed to backfill Firestore sensor readings.', error);
-    }
-  }
-
   if (firestoreHistory.length > 0) {
     return firestoreHistory.sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch);
   }
@@ -354,11 +356,7 @@ export async function getDeviceTelemetryHistory(
     .filter((entry): entry is DeviceTelemetryLogEntry => Boolean(entry))
     .sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch);
 
-  if (firestoreHistory.length === 0) {
-    return realtimeHistory;
-  }
-
-  return mergeTelemetryHistoryEntries(firestoreHistory, realtimeHistory);
+  return realtimeHistory;
 }
 
 export type SensorReadingsBackfillResult = {
@@ -366,6 +364,10 @@ export type SensorReadingsBackfillResult = {
   readingsWritten: number;
 };
 
+/**
+ * Pending trusted-ingestion migration. Retained for explicit maintenance use,
+ * but no normal production UI read path invokes this client-side writer.
+ */
 export async function backfillSensorReadingsFromDeviceHistory(
   aquariumId: string
 ): Promise<SensorReadingsBackfillResult> {

@@ -5,6 +5,13 @@ export type AlertSeverity = 'critical' | 'warning';
 export type AlertCategory =
   | 'temperature'
   | 'water_level'
+  | 'tds'
+  | 'ph'
+  | 'turbidity'
+  | 'ammonia'
+  | 'power_status'
+  | 'filter_state'
+  | 'equipment_status'
   | 'water_quality'
   | 'system';
 

@@ -268,6 +268,13 @@ export function useMonitoringController() {
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
         tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+        ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
+        turbidity: snapshot?.hasFreshTurbidityTelemetry
+          ? snapshot.turbidity ?? aquarium.turbidity
+          : aquarium.turbidity,
+        powerStatus: snapshot?.hasFreshPowerTelemetry
+          ? snapshot.powerStatus ?? aquarium.powerStatus
+          : aquarium.powerStatus,
         quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
         filter: snapshot?.filterState ?? aquarium.filter,
         healthStatus: snapshot
@@ -283,6 +290,9 @@ export function useMonitoringController() {
         hasFreshTelemetry: Boolean(snapshot),
         hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
         hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
+        hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
+        hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
+        hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
         telemetryState,
         manualStatus: snapshot?.filterState
           ? {
@@ -516,7 +526,6 @@ export function useMonitoringController() {
       type: 'feed_now' | 'set_filter_state' | 'set_light_state',
       options?: {
         durationMs?: number;
-        requestedBy?: string;
         state?: 'Active' | 'Inactive' | 'On' | 'Off';
       }
     ) => {
@@ -531,7 +540,6 @@ export function useMonitoringController() {
         commandId: `${type}-${requestedAt}`,
         type,
         requestedAt,
-        requestedBy: options?.requestedBy,
         state: options?.state,
         durationMs: options?.durationMs,
       });
@@ -592,7 +600,6 @@ export function useMonitoringController() {
       if (realtimeEnabled) {
         await publishAquariumCommand(aquariumId, 'feed_now', {
           durationMs: manualActionTiming.feeder.activeMs,
-          requestedBy: auth.currentUser?.uid,
         });
         commandSent = true;
       }
@@ -668,7 +675,6 @@ export function useMonitoringController() {
           aquariumId,
           field === 'light' ? 'set_light_state' : 'set_filter_state',
           {
-            requestedBy: auth.currentUser?.uid,
             state: nextValue as 'Active' | 'Inactive' | 'On' | 'Off',
           }
         );

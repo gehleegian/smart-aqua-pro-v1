@@ -8,6 +8,7 @@ export type DeviceCommandType =
   | 'sync_control';
 
 export type DeviceCommandState = 'Active' | 'Inactive' | 'On' | 'Off';
+export type DevicePowerStatus = 'Online' | 'Offline' | 'Power Interruption' | 'Unknown';
 
 export interface DeviceTelemetry {
   temperatureC: number;
@@ -20,6 +21,8 @@ export interface DeviceTelemetry {
   turbidity?: number;
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
+  equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
+  powerStatus?: DevicePowerStatus;
   ph?: number;
   updatedAt: number;
   online: boolean;
@@ -36,6 +39,8 @@ export interface DeviceTelemetryLogEntry {
   turbidity?: number;
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
+  equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
+  powerStatus?: DevicePowerStatus;
   ph?: number;
   online?: boolean;
   recordedAt: string;
@@ -47,6 +52,8 @@ export interface DeviceControlProfile {
   mode: SystemMode;
   automationEnabled: boolean;
   feedingTimes: string[];
+  lightOnTime?: string;
+  lightOffTime?: string;
   filtrationStartTime: string;
   filtrationRuntimeHours: number;
   manualLightState: 'On' | 'Off';
@@ -86,6 +93,32 @@ export function setDeviceTelemetryClockOffsetMs(offsetMs: number) {
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+export function normalizeDevicePowerStatus(value: unknown): DevicePowerStatus | undefined {
+  if (
+    value === 'Online' ||
+    value === 'Offline' ||
+    value === 'Power Interruption' ||
+    value === 'Unknown'
+  ) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === 'online') return 'Online';
+  if (normalized === 'offline') return 'Offline';
+  if (normalized === 'power_interruption' || normalized === 'power interruption') {
+    return 'Power Interruption';
+  }
+  if (normalized === 'unknown') return 'Unknown';
+
+  return undefined;
 }
 
 export function getTelemetryPurityPercent(
@@ -208,6 +241,14 @@ export function getFreshTelemetrySnapshot(
   const waterPresent = telemetry.waterPresent !== false;
   const hasFreshTemperatureTelemetry =
     waterPresent && telemetry.temperatureReadingValid !== false;
+  const ph = typeof telemetry.ph === 'number' && Number.isFinite(telemetry.ph)
+    ? telemetry.ph
+    : null;
+  const turbidity =
+    typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity)
+      ? telemetry.turbidity
+      : null;
+  const powerStatus = normalizeDevicePowerStatus(telemetry.powerStatus);
 
   return {
     temperatureC: telemetry.temperatureC,
@@ -217,6 +258,12 @@ export function getFreshTelemetrySnapshot(
     tdsPpm,
     tdsPercent: purityPercent === null ? null : clampPercent(purityPercent),
     hasFreshPurityTelemetry: purityPercent !== null,
+    ph,
+    hasFreshPhTelemetry: ph !== null,
+    turbidity,
+    hasFreshTurbidityTelemetry: turbidity !== null,
+    powerStatus,
+    hasFreshPowerTelemetry: Boolean(powerStatus),
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
