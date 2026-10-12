@@ -66,10 +66,6 @@ async function assertRealtimeDeviceAccess(
     throw new Error('Aquarium not found.');
   }
 
-  if (currentProfile.role === 'Admin') {
-    return aquariumSnap.data() as Record<string, unknown>;
-  }
-
   const aquariumData = aquariumSnap.data() as Record<string, unknown>;
   const ownerId =
     typeof aquariumData.ownerId === 'string' ? aquariumData.ownerId.trim() : '';

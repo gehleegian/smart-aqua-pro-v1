@@ -1,238 +1,171 @@
-import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardContent } from '../components/ui/Card';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Fish, RefreshCw, Search, Shield, UserRound } from 'lucide-react';
 import Badge from '../components/ui/Badge';
-import { Search, Shield, User, RefreshCw, Trash2 } from 'lucide-react';
-import { auth } from '../firebase';
-import { getAllUsers, updateUserRole, deleteUserDocument } from '../services/userService';
-import { deleteAquariumsByOwner } from '../services/aquariumService';
-import type { UserRole } from '../types/user';
+import { Card, CardContent, CardHeader } from '../components/ui/Card';
+import { getAquariumDirectoryEntries } from '../services/aquariumService';
+import { getAllUsers } from '../services/userService';
+import type { AquariumDirectoryEntry } from '../types/aquarium';
+import type { UserData, UserRole } from '../types/user';
 
-const roles = [
-  {
-    name: 'Admin',
-    icon: Shield,
-    color: 'text-red-400',
-    bg: 'bg-red-500/20',
-    permissions: [
-      'Full system access',
-      'User management',
-      'All aquarium access',
-      'System configuration',
-      'Manage all records',
-    ],
-  },
-  {
-    name: 'User',
-    icon: User,
-    color: 'text-teal-200',
-    bg: 'bg-teal-400/15',
-    permissions: [
-      'View own dashboard',
-      'Manage own aquariums',
-      'View own monitoring data',
-      'Receive own alerts',
-      'Update own account settings',
-    ],
-  },
-];
+type UserDirectoryItem = UserData & { id: string };
 
-type UserItem = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  createdAt?: string;
-  status?: string;
-};
+function formatDate(value?: string) {
+  if (!value) {
+    return 'Not recorded';
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Not recorded'
+    : new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(date);
+}
+
+function formatVolume(aquarium: AquariumDirectoryEntry) {
+  const volume = aquarium.workingWaterVolumeLiters ?? aquarium.tankSizeLiters;
+  return typeof volume === 'number' ? `${volume} L` : 'Not recorded';
+}
 
 export default function Users() {
-  const [usersList, setUsersList] = useState<UserItem[]>([]);
+  const [users, setUsers] = useState<UserDirectoryItem[]>([]);
+  const [aquariums, setAquariums] = useState<AquariumDirectoryEntry[]>([]);
+  const [expandedUserId, setExpandedUserId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState('');
-  const [deletingId, setDeletingId] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  const loadUsers = async () => {
+  const loadDirectory = async () => {
     try {
       setLoading(true);
       setError('');
 
-      const users = await getAllUsers();
-      setUsersList(users as UserItem[]);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to load users.');
+      const [userRecords, aquariumRecords] = await Promise.all([
+        getAllUsers(),
+        getAquariumDirectoryEntries(),
+      ]);
+
+      setUsers(
+        userRecords.filter((user): user is UserDirectoryItem => Boolean(user.id))
+      );
+      setAquariums(aquariumRecords);
+    } catch (loadError) {
+      console.error(loadError);
+      setError('Failed to load the user and aquarium directory.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRoleChange = async (
-    userId: string,
-    newRole: UserRole,
-    currentRole: UserRole
-  ) => {
-    if (newRole === currentRole) {
-      return;
-    }
-
-    if (newRole === 'Admin') {
-      const confirmed = window.confirm(
-        'Are you sure you want to grant Admin access to this account? This user will have full system access.'
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    try {
-      setSavingId(userId);
-      setError('');
-      setSuccess('');
-
-      await updateUserRole(userId, newRole);
-
-      setUsersList((prev) =>
-        prev.map((user) =>
-          user.id === userId ? { ...user, role: newRole } : user
-        )
-      );
-
-      setSuccess(`User role updated to ${newRole} successfully.`);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to update user role.');
-    } finally {
-      setSavingId('');
-    }
-  };
-
-  const handleDeleteUser = async (
-    userId: string,
-    userName: string,
-    userRole: UserRole
-  ) => {
-    const currentUser = auth.currentUser;
-
-    if (!currentUser) {
-      setError('No logged-in admin found.');
-      return;
-    }
-
-    if (currentUser.uid === userId) {
-      setError('You cannot delete your own admin account here.');
-      return;
-    }
-
-    if (userRole === 'Admin') {
-      setError('Admin accounts cannot be deleted from User Management.');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${userName}'s account and all of their aquariums?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setDeletingId(userId);
-      setError('');
-      setSuccess('');
-
-      await deleteAquariumsByOwner(userId);
-      await deleteUserDocument(userId);
-
-      setUsersList((prev) => prev.filter((user) => user.id !== userId));
-      setSuccess('User account and related aquariums deleted successfully.');
-    } catch (err) {
-      console.error(err);
-      setError('Failed to delete user account.');
-    } finally {
-      setDeletingId('');
-    }
-  };
-
   useEffect(() => {
-    loadUsers();
+    const loadTimer = window.setTimeout(() => {
+      void loadDirectory();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, []);
 
-  const filtered = usersList.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+  const aquariumsByOwner = useMemo(() => {
+    const groups = new Map<string, AquariumDirectoryEntry[]>();
 
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+    for (const aquarium of aquariums) {
+      const ownerAquariums = groups.get(aquarium.ownerId) || [];
+      ownerAquariums.push(aquarium);
+      groups.set(aquarium.ownerId, ownerAquariums);
+    }
 
-    return matchesSearch && matchesRole;
-  });
+    return groups;
+  }, [aquariums]);
+
+  const filteredUsers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const ownerAquariums = aquariumsByOwner.get(user.id) || [];
+      const matchesSearch =
+        !query ||
+        user.name.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query) ||
+        ownerAquariums.some((aquarium) =>
+          aquarium.name.toLowerCase().includes(query)
+        );
+      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+
+      return matchesSearch && matchesRole;
+    });
+  }, [aquariumsByOwner, roleFilter, searchQuery, users]);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {roles.map((role) => {
-          const Icon = role.icon;
+      <div>
+        <h2 className="text-xl font-semibold text-white">User and Aquarium Directory</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Read-only account and aquarium ownership information. Sensor readings and aquarium controls are not shown.
+        </p>
+      </div>
 
-          return (
-            <Card key={role.name}>
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`w-10 h-10 ${role.bg} rounded-lg flex items-center justify-center`}>
-                    <Icon className={`w-5 h-5 ${role.color}`} />
-                  </div>
-                  <h3 className="text-lg font-semibold text-white">{role.name}</h3>
-                </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/15">
+                <Shield className="h-5 w-5 text-violet-300" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Administrator</h3>
+                <p className="text-sm text-slate-400">Views system membership and aquarium ownership records.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-                <div className="space-y-1">
-                  {role.permissions.map((perm) => (
-                    <div key={perm} className="flex items-center gap-2 text-sm text-slate-400">
-                      <div className="w-1.5 h-1.5 bg-slate-600 rounded-full" />
-                      {perm}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-500/15">
+                <UserRound className="h-5 w-5 text-teal-200" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">User/Caretaker</h3>
+                <p className="text-sm text-slate-400">Manages and monitors only their own aquariums.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <h3 className="text-lg font-semibold text-white">User Accounts</h3>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h3 className="text-lg font-semibold text-white">Registered Accounts</h3>
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Search users..."
+                  placeholder="Search user or aquarium..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-56 rounded-lg border border-slate-600/50 bg-slate-900/35 py-2 pl-10 pr-4 text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="w-64 rounded-lg border border-slate-600/50 bg-slate-900/35 py-2 pl-10 pr-4 text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                 />
               </div>
 
               <select
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value as 'all' | UserRole)}
+                onChange={(event) => setRoleFilter(event.target.value as 'all' | UserRole)}
                 className="rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
               >
                 <option value="all">All Roles</option>
                 <option value="Admin">Admin</option>
-                <option value="User">User</option>
+                <option value="User">User/Caretaker</option>
               </select>
 
               <button
-                onClick={loadUsers}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+                type="button"
+                onClick={() => void loadDirectory()}
+                className="flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
             </div>
@@ -246,97 +179,112 @@ export default function Users() {
             </div>
           )}
 
-          {success && (
-            <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-green-300">
-              {success}
-            </div>
-          )}
-
           {loading ? (
-            <div className="py-8 text-center text-slate-400">Loading users...</div>
-          ) : filtered.length === 0 ? (
-            <div className="py-8 text-center text-slate-400">No users found.</div>
+            <div className="py-8 text-center text-slate-400">Loading directory...</div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="py-8 text-center text-slate-400">No matching accounts found.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">User</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Email</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Role</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Change Role</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Delete</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Account</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Role</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Account status</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Registered</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Aquariums</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">Details</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filtered.map((user) => (
-                    <tr key={user.id} className="border-b border-slate-700/50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-sky-600">
-                            <span className="text-xs font-bold text-white">
-                              {user.name
-                                .split(' ')
-                                .map((n) => n[0])
-                                .join('')
-                                .slice(0, 2)}
-                            </span>
-                          </div>
-                          <span className="text-sm text-white font-medium">{user.name}</span>
-                        </div>
-                      </td>
+                  {filteredUsers.map((user) => {
+                    const ownerAquariums = aquariumsByOwner.get(user.id) || [];
+                    const isExpanded = expandedUserId === user.id;
 
-                      <td className="py-3 px-4 text-sm text-slate-300">{user.email}</td>
+                    return (
+                      <Fragment key={user.id}>
+                        <tr className="border-b border-slate-700/50">
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-white">{user.name || 'Unnamed user'}</p>
+                            <p className="text-xs text-slate-400">{user.email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={user.role === 'Admin' ? 'danger' : 'info'}>
+                              {user.role === 'User' ? 'User/Caretaker' : 'Admin'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={user.accountStatus === 'inactive' ? 'default' : 'success'}>
+                              {user.accountStatus === 'inactive' ? 'Inactive' : 'Active'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-300">{formatDate(user.createdAt)}</td>
+                          <td className="px-4 py-3 text-sm text-slate-300">{ownerAquariums.length}</td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedUserId(isExpanded ? '' : user.id)}
+                              className="flex items-center gap-1.5 rounded-lg border border-slate-600/40 bg-slate-900/35 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-700/60 hover:text-white"
+                              aria-expanded={isExpanded}
+                            >
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              View aquariums
+                            </button>
+                          </td>
+                        </tr>
 
-                      <td className="py-3 px-4">
-                        <Badge variant={user.role === 'Admin' ? 'danger' : 'info'}>
-                          {user.role}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              user.status === 'online' ? 'bg-emerald-500' : 'bg-slate-600'
-                            }`}
-                          />
-                          <span className="text-sm text-slate-400 capitalize">{user.status}</span>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <select
-                          value={user.role}
-                          onChange={(e) =>
-                            handleRoleChange(user.id, e.target.value as UserRole, user.role)
-                          }
-                          disabled={savingId === user.id || deletingId === user.id || user.role === 'Admin'}
-                          className="rounded-lg border border-slate-600/50 bg-slate-900/35 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30 disabled:opacity-60"
-                        >
-                          <option value="User">User</option>
-                          <option value="Admin">Admin</option>
-                        </select>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {user.role === 'Admin' ? (
-                          <span className="text-sm text-slate-500">Protected</span>
-                        ) : (
-                          <button
-                            onClick={() => handleDeleteUser(user.id, user.name, user.role)}
-                            disabled={deletingId === user.id}
-                            className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-sm"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            {deletingId === user.id ? 'Deleting...' : 'Delete'}
-                          </button>
+                        {isExpanded && (
+                          <tr key={`${user.id}-aquariums`} className="border-b border-slate-700/50 bg-slate-950/20">
+                            <td colSpan={6} className="px-6 py-4">
+                              {ownerAquariums.length === 0 ? (
+                                <p className="text-sm text-slate-400">This account has no registered aquariums.</p>
+                              ) : (
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                  {ownerAquariums.map((aquarium) => (
+                                    <div
+                                      key={aquarium.id}
+                                      className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4"
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <Fish className="mt-0.5 h-5 w-5 flex-shrink-0 text-sky-300" />
+                                        <div className="min-w-0">
+                                          <p className="font-medium text-white">{aquarium.name}</p>
+                                          <p className="mt-1 text-xs text-slate-400">ID: {aquarium.id}</p>
+                                        </div>
+                                      </div>
+                                      <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                          <dt className="text-slate-500">Tank type</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.tankType || 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Volume</dt>
+                                          <dd className="mt-1 text-slate-300">{formatVolume(aquarium)}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Fish type</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.species.join(', ') || 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Fish count</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.fishCount ?? 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Registered</dt>
+                                          <dd className="mt-1 text-slate-300">{formatDate(aquarium.createdAt)}</dd>
+                                        </div>
+                                      </dl>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

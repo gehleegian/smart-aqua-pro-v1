@@ -1,4 +1,7 @@
-import { getAllAquariums, getAquariumsByOwner } from './aquariumService';
+import {
+  getAquariumDirectoryEntries,
+  getAquariumsByOwner,
+} from './aquariumService';
 import { getAllUsers, getCurrentUserProfile } from './userService';
 import type { DashboardData } from '../types/dashboard';
 import { mapDashboardAquariums } from '../utils/dashboardHelpers';
@@ -11,11 +14,15 @@ export async function getDashboardData(userId: string): Promise<DashboardData | 
   }
 
   if (userProfile.role === 'Admin') {
-    const [aquariums, users] = await Promise.all([getAllAquariums(), getAllUsers()]);
+    const [aquariumDirectory, users] = await Promise.all([
+      getAquariumDirectoryEntries(),
+      getAllUsers(),
+    ]);
 
     return {
       userProfile,
-      aquariums: mapDashboardAquariums(aquariums),
+      aquariums: [],
+      aquariumDirectory,
       users,
     };
   }
@@ -25,6 +32,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData | 
   return {
     userProfile,
     aquariums: mapDashboardAquariums(aquariums),
+    aquariumDirectory: [],
     users: [],
   };
 }

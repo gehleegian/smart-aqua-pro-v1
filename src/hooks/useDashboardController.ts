@@ -5,15 +5,13 @@ import {
   subscribeToDeviceShadow,
 } from '../services/deviceService';
 import { getDashboardData } from '../services/dashboardService';
+import type { AquariumDirectoryEntry } from '../types/aquarium';
 import type { DashboardAquarium } from '../types/dashboard';
 import type { DeviceShadow } from '../types/device';
-import type { UserRole } from '../types/user';
+import type { UserData, UserRole } from '../types/user';
 import {
-  buildAdminActivities,
-  buildAdminAlerts,
   buildAdminSummaryCards,
   mergeDashboardAquariums,
-  buildOwnerGroups,
   buildUserActivities,
   buildUserAlerts,
   buildUserSummaryCards,
@@ -26,8 +24,8 @@ export function useDashboardController() {
   const [deviceShadows, setDeviceShadows] = useState<Record<string, DeviceShadow>>({});
   const [deviceSubscriptionErrors, setDeviceSubscriptionErrors] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<UserRole>('User');
-  const [usersCount, setUsersCount] = useState(0);
-  const [selectedOwnerId, setSelectedOwnerId] = useState('');
+  const [adminUsers, setAdminUsers] = useState<UserData[]>([]);
+  const [aquariumDirectory, setAquariumDirectory] = useState<AquariumDirectoryEntry[]>([]);
   const [selectedTankId, setSelectedTankId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,8 +53,13 @@ export function useDashboardController() {
       }
 
       setUserRole(data.userProfile.role);
-      setUsersCount(data.users.length);
+      setAdminUsers(data.users);
+      setAquariumDirectory(data.aquariumDirectory);
       setDashboardAquariums(data.aquariums);
+      if (data.userProfile.role === 'Admin' || data.aquariums.length === 0) {
+        setDeviceShadows({});
+        setDeviceSubscriptionErrors({});
+      }
       setSelectedTankId((prev) =>
         prev && data.aquariums.some((aquarium) => aquarium.id === prev)
           ? prev
@@ -66,41 +69,48 @@ export function useDashboardController() {
       console.error(loadError);
       setError(getErrorMessage(loadError, 'Failed to load dashboard data.'));
       setDashboardAquariums([]);
+      setAdminUsers([]);
+      setAquariumDirectory([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadDashboard();
+    const loadTimer = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadDashboard]);
 
   useEffect(() => {
+    if (userRole === 'Admin') {
+      return;
+    }
+
     const tickTimer = window.setInterval(() => {
       setTelemetryNow(Date.now());
     }, 5000);
 
     return () => window.clearInterval(tickTimer);
-  }, []);
+  }, [userRole]);
 
   useEffect(() => {
-    if (dashboardAquariums.length === 0) {
-      setDeviceShadows({});
-      setDeviceSubscriptionErrors({});
+    if (userRole === 'Admin' || dashboardAquariums.length === 0) {
       return;
     }
 
     if (!isRealtimeDatabaseConfigured()) {
       const errorMessage = 'Realtime Database is not configured. Live device data is unavailable.';
-
-      setDeviceShadows({});
-      setDeviceSubscriptionErrors(
-        Object.fromEntries(dashboardAquariums.map((aquarium) => [aquarium.id, errorMessage]))
-      );
-      return;
+      const errorTimer = window.setTimeout(() => {
+        setDeviceShadows({});
+        setDeviceSubscriptionErrors(
+          Object.fromEntries(dashboardAquariums.map((aquarium) => [aquarium.id, errorMessage]))
+        );
+      }, 0);
+      return () => window.clearTimeout(errorTimer);
     }
-
-    setDeviceSubscriptionErrors({});
 
     const unsubscribers = dashboardAquariums.map((aquarium) =>
       subscribeToDeviceShadow(
@@ -139,47 +149,36 @@ export function useDashboardController() {
         unsubscribe();
       }
     };
-  }, [dashboardAquariums]);
+  }, [dashboardAquariums, userRole]);
 
   const liveAquariums = useMemo(
     () => mergeDashboardAquariums(dashboardAquariums, deviceShadows, telemetryNow),
     [dashboardAquariums, deviceShadows, telemetryNow]
   );
 
-  const ownerGroups = useMemo(() => buildOwnerGroups(liveAquariums), [liveAquariums]);
-  const selectedOwnerGroup = useMemo(
-    () => ownerGroups.find((group) => group.ownerId === selectedOwnerId) || ownerGroups[0] || null,
-    [ownerGroups, selectedOwnerId]
-  );
   const selectedTank = useMemo(
     () =>
       liveAquariums.find((aquarium) => aquarium.id === selectedTankId) ||
-      selectedOwnerGroup?.aquariums[0] ||
       liveAquariums[0] ||
       null,
-    [liveAquariums, selectedOwnerGroup, selectedTankId]
+    [liveAquariums, selectedTankId]
   );
   const warningAquariums = liveAquariums.filter((aquarium) => aquarium.status === 'warning').length;
   const healthyAquariums = liveAquariums.length - warningAquariums;
 
   return {
-    adminActivities: buildAdminActivities(ownerGroups),
-    adminAlerts: buildAdminAlerts(ownerGroups),
+    adminUsers,
+    aquariumDirectory,
     adminSummaryCards: buildAdminSummaryCards({
-      totalUsers: usersCount,
-      totalAquariums: liveAquariums.length,
-      warningAquariums,
-      healthyAquariums,
+      totalUsers: adminUsers.length,
+      totalAquariums: aquariumDirectory.length,
+      adminUsers: adminUsers.filter((user) => user.role === 'Admin').length,
+      caretakerUsers: adminUsers.filter((user) => user.role === 'User').length,
     }),
     error,
     liveAquariums,
     liveDataError: Object.values(deviceSubscriptionErrors).find(Boolean) || '',
     loading,
-    ownerGroups,
-    ownersMostTanks: [...ownerGroups].sort((a, b) => b.aquariums.length - a.aquariums.length).slice(0, 5),
-    ownersNeedingAttention: ownerGroups.filter((group) => group.warningCount > 0),
-    selectedOwnerGroup,
-    selectedOwnerId,
     selectedTankId: selectedTank?.id || '',
     stats: selectedTank ? getStatsForTank(selectedTank) : [],
     userActivities: buildUserActivities(liveAquariums),
@@ -192,7 +191,6 @@ export function useDashboardController() {
       selectedTankName: selectedTank?.name || 'None',
     }),
     actions: {
-      selectOwner: setSelectedOwnerId,
       selectTank: setSelectedTankId,
     },
   };
