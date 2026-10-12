@@ -1,4 +1,4 @@
-import { getAllAquariums, getAquariumsByOwner } from './aquariumService';
+import { getAquariumsByOwner } from './aquariumService';
 import { getCurrentUserProfile } from './userService';
 import type { DataLogsPageData } from '../types/dataLogs';
 
@@ -10,9 +10,7 @@ export async function getDataLogsPageData(userId: string): Promise<DataLogsPageD
   }
 
   const aquariums =
-    userProfile.role === 'Admin'
-      ? await getAllAquariums()
-      : await getAquariumsByOwner(userId);
+    userProfile.role === 'Admin' ? [] : await getAquariumsByOwner(userId);
 
   return {
     userProfile,

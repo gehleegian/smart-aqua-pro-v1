@@ -92,4 +92,20 @@ export interface Aquarium {
   fishProfiles?: FishSpeciesProfile[];
   automationSettings?: AutomationSettings;
   manualStatus?: ManualSystemStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  directorySchemaVersion?: number;
+}
+
+export interface AquariumDirectoryEntry {
+  id: string;
+  name: string;
+  ownerId: string;
+  ownerName: string;
+  species: string[];
+  fishCount?: number;
+  tankType?: string;
+  tankSizeLiters?: number;
+  workingWaterVolumeLiters?: number;
+  createdAt?: string;
 }

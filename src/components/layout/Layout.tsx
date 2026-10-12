@@ -46,7 +46,7 @@ const getInitialTheme = (): ThemeMode => {
 };
 
 const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'users', 'settings'],
+  Admin: ['dashboard', 'users', 'settings'],
   User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings'],
 };
 
@@ -161,8 +161,12 @@ export default function Layout() {
 
   useEffect(() => {
     if (user && !allowedPages.includes(currentPage)) {
-      setCurrentPage('dashboard');
-      localStorage.setItem('currentPage', 'dashboard');
+      const redirectTimer = window.setTimeout(() => {
+        setCurrentPage('dashboard');
+        localStorage.setItem('currentPage', 'dashboard');
+      }, 0);
+
+      return () => window.clearTimeout(redirectTimer);
     }
   }, [user, currentPage, allowedPages]);
 

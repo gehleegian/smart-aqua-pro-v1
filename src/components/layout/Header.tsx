@@ -17,7 +17,7 @@ const pageNames: Record<string, string> = {
   alerts: 'Alerts & Notifications',
   datalogs: 'Data Logs & Reports',
   aquariums: 'Aquarium Management',
-  users: 'User Management',
+  users: 'User & Aquarium Directory',
   settings: 'Settings & Configuration',
 };
 
@@ -43,6 +43,7 @@ export default function Header({
   const [notifList, setNotifList] = useState(notifications);
 
   const unreadCount = notifList.filter((n) => !n.read).length;
+  const isAdmin = user.role === 'Admin';
 
   const markAsRead = (id: number) => {
     setNotifList(notifList.map((n) => n.id === id ? { ...n, read: true } : n));
@@ -63,7 +64,7 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
-          <div className="relative hidden md:block">
+          {!isAdmin && <div className="relative hidden md:block">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
@@ -72,12 +73,12 @@ export default function Header({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-48 rounded-lg border border-slate-600/40 bg-slate-950/25 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
             />
-          </div>
+          </div>}
 
-          <div className="hidden items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/12 px-3 py-1.5 text-xs font-medium text-emerald-300 sm:flex">
+          {!isAdmin && <div className="hidden items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/12 px-3 py-1.5 text-xs font-medium text-emerald-300 sm:flex">
             <Wifi className="w-3.5 h-3.5" />
             Online
-          </div>
+          </div>}
 
           <button
             type="button"
@@ -90,7 +91,7 @@ export default function Header({
             <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
           </button>
 
-          <button
+          {!isAdmin && <button
             onClick={() => setShowNotifications(!showNotifications)}
             className="relative p-2 text-slate-400 hover:text-white transition-colors"
           >
@@ -100,7 +101,7 @@ export default function Header({
                 {unreadCount}
               </span>
             )}
-          </button>
+          </button>}
 
           <div className="hidden items-center gap-3 border-l border-slate-600/40 pl-4 md:flex">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500/20 ring-1 ring-teal-300/30">
@@ -123,7 +124,7 @@ export default function Header({
       </header>
 
       {/* Notification Dropdown - OUTSIDE the header */}
-      {showNotifications && (
+      {!isAdmin && showNotifications && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowNotifications(false)} />
           <div style={{ position: 'fixed', top: '64px', right: '80px', zIndex: 999, width: '320px' }}>

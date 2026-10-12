@@ -1,25 +1,24 @@
-import type { ReactNode } from 'react';
-import type {
-  DashboardSummaryCard,
-  DashboardTankStat,
-  OwnerGroup,
-} from '../../types/dashboard';
+import { Fish, UserRound } from 'lucide-react';
+import type { AquariumDirectoryEntry } from '../../types/aquarium';
+import type { DashboardSummaryCard } from '../../types/dashboard';
+import type { UserData } from '../../types/user';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
 interface AdminDashboardViewProps {
-  liveDataWarning: ReactNode;
   summaryCards: DashboardSummaryCard[];
-  ownerGroups: OwnerGroup[];
-  ownersNeedingAttention: OwnerGroup[];
-  ownersMostTanks: OwnerGroup[];
-  selectedOwnerId: string;
-  selectedOwnerGroup: OwnerGroup | null;
-  selectedTankId: string;
-  stats: DashboardTankStat[];
-  adminAlerts: string[];
-  adminActivities: string[];
-  onSelectOwner: (ownerId: string) => void;
-  onSelectTank: (tankId: string) => void;
+  users: UserData[];
+  aquariums: AquariumDirectoryEntry[];
+}
+
+function formatDate(value?: string) {
+  if (!value) {
+    return 'Not recorded';
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Not recorded'
+    : new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(date);
 }
 
 function SummaryGrid({ cards }: { cards: DashboardSummaryCard[] }) {
@@ -48,130 +47,126 @@ function SummaryGrid({ cards }: { cards: DashboardSummaryCard[] }) {
   );
 }
 
-function StatsGrid({ stats }: { stats: DashboardTankStat[] }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {stats.map((stat) => {
-        const Icon = stat.icon;
-
-        return (
-          <div key={stat.title} className="rounded-lg border border-slate-600/25 bg-slate-900/30 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">{stat.title}</p>
-                <p className="mt-1 text-xl font-semibold text-white">{stat.value}</p>
-              </div>
-              <Icon className="h-5 w-5 text-teal-200" />
-            </div>
-            <p className={stat.trend === 'good' ? 'mt-2 text-xs text-emerald-400' : 'mt-2 text-xs text-amber-400'}>
-              {stat.change}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function AdminDashboardView({
-  liveDataWarning,
   summaryCards,
-  ownerGroups,
-  ownersNeedingAttention,
-  ownersMostTanks,
-  selectedOwnerId,
-  selectedOwnerGroup,
-  selectedTankId,
-  stats,
-  adminAlerts,
-  adminActivities,
-  onSelectOwner,
-  onSelectTank,
+  users,
+  aquariums,
 }: AdminDashboardViewProps) {
+  const aquariumCountByOwner = new Map<string, number>();
+
+  for (const aquarium of aquariums) {
+    aquariumCountByOwner.set(
+      aquarium.ownerId,
+      (aquariumCountByOwner.get(aquarium.ownerId) || 0) + 1
+    );
+  }
+
+  const caretakersWithoutAquariums = users.filter(
+    (user) => user.role === 'User' && !aquariumCountByOwner.get(user.id || '')
+  );
+  const recentUsers = [...users]
+    .sort((left, right) => {
+      const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+      const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+      return rightTime - leftTime;
+    })
+    .slice(0, 5);
+
   return (
     <div className="space-y-6">
-      {liveDataWarning}
+      <div>
+        <h2 className="text-xl font-semibold text-white">System Membership Overview</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Registration and aquarium ownership records only. Live readings and device controls are not available to administrators.
+        </p>
+      </div>
+
       <SummaryGrid cards={summaryCards} />
 
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">Owners</h3>
+            <h3 className="text-lg font-semibold text-white">Recent Registrations</h3>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {ownerGroups.map((group) => (
-                <button
-                  key={group.ownerId}
-                  type="button"
-                  onClick={() => onSelectOwner(group.ownerId)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                    selectedOwnerId === group.ownerId ? 'bg-teal-600 text-white shadow-sm shadow-teal-950/20' : 'bg-slate-900/35 text-slate-300 hover:bg-slate-700/60'
-                  }`}
-                >
-                  <span className="block font-medium">{group.ownerName}</span>
-                  <span className="text-xs opacity-80">{group.aquariums.length} aquariums</span>
-                </button>
-              ))}
+            <div className="space-y-3">
+              {recentUsers.length === 0 ? (
+                <p className="text-sm text-slate-400">No registered accounts yet.</p>
+              ) : (
+                recentUsers.map((user) => (
+                  <div
+                    key={user.id || user.email}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-600/25 bg-slate-900/30 px-4 py-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <UserRound className="h-5 w-5 flex-shrink-0 text-teal-200" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{user.name || 'Unnamed user'}</p>
+                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-300">{user.role}</p>
+                      <p className="text-xs text-slate-500">{formatDate(user.createdAt)}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">
-              {selectedOwnerGroup?.ownerName || 'Aquarium Overview'}
-            </h3>
+            <h3 className="text-lg font-semibold text-white">Aquarium Ownership</h3>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 flex flex-wrap gap-2">
-              {(selectedOwnerGroup?.aquariums || []).map((aquarium) => (
-                <button
-                  key={aquarium.id}
-                  type="button"
-                  onClick={() => onSelectTank(aquarium.id)}
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    selectedTankId === aquarium.id ? 'bg-teal-600 text-white shadow-sm shadow-teal-950/20' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/60'
-                  }`}
-                >
-                  {aquarium.name}
-                </button>
-              ))}
+            <div className="space-y-3">
+              {aquariums.length === 0 ? (
+                <p className="text-sm text-slate-400">No aquarium profiles are registered.</p>
+              ) : (
+                aquariums.slice(0, 5).map((aquarium) => (
+                  <div
+                    key={aquarium.id}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-600/25 bg-slate-900/30 px-4 py-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Fish className="h-5 w-5 flex-shrink-0 text-sky-300" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{aquarium.name}</p>
+                        <p className="truncate text-xs text-slate-400">Owner: {aquarium.ownerName}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-500">{aquarium.tankType || 'Tank type not recorded'}</span>
+                  </div>
+                ))
+              )}
             </div>
-            <StatsGrid stats={stats} />
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <InfoList title="Needs Attention" items={ownersNeedingAttention.map((owner) => owner.ownerName)} />
-        <InfoList title="Most Tanks" items={ownersMostTanks.map((owner) => `${owner.ownerName}: ${owner.aquariums.length}`)} />
-        <InfoList title="Alerts" items={adminAlerts} />
-      </div>
-      <InfoList title="Activity" items={adminActivities} />
-    </div>
-  );
-}
-
-function InfoList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {items.length === 0 ? (
-            <p className="text-sm text-slate-400">No items yet.</p>
+      <Card>
+        <CardHeader>
+          <h3 className="text-lg font-semibold text-white">Users Without Registered Aquariums</h3>
+        </CardHeader>
+        <CardContent>
+          {caretakersWithoutAquariums.length === 0 ? (
+            <p className="text-sm text-slate-400">Every User/Caretaker account has at least one aquarium.</p>
           ) : (
-            items.map((item) => (
-              <p key={item} className="rounded-lg border border-slate-600/20 bg-slate-900/30 px-3 py-2 text-sm text-slate-300">
-                {item}
-              </p>
-            ))
+            <div className="flex flex-wrap gap-2">
+              {caretakersWithoutAquariums.map((user) => (
+                <span
+                  key={user.id || user.email}
+                  className="rounded-full border border-slate-600/35 bg-slate-900/35 px-3 py-1.5 text-sm text-slate-300"
+                >
+                  {user.name || user.email}
+                </span>
+              ))}
+            </div>
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

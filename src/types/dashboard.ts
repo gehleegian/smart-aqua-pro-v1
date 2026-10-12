@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { Aquarium } from './aquarium';
+import type { Aquarium, AquariumDirectoryEntry } from './aquarium';
 import type { DeviceTelemetryState } from './device';
 import type { UserData } from './user';
 
@@ -45,5 +45,6 @@ export type DashboardSummaryCard = {
 export type DashboardData = {
   userProfile: UserData;
   aquariums: DashboardAquarium[];
+  aquariumDirectory: AquariumDirectoryEntry[];
   users: UserData[];
 };

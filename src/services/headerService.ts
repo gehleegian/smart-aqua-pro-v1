@@ -1,4 +1,4 @@
-import { getAllAquariums, getAquariumsByOwner } from './aquariumService';
+import { getAquariumsByOwner } from './aquariumService';
 import { getCurrentUserProfile } from './userService';
 import type { Aquarium } from '../types/aquarium';
 import type { UserData } from '../types/user';
@@ -16,9 +16,7 @@ export async function getHeaderData(userId: string): Promise<HeaderData | null> 
   }
 
   const aquariums =
-    userProfile.role === 'Admin'
-      ? await getAllAquariums()
-      : await getAquariumsByOwner(userId);
+    userProfile.role === 'Admin' ? [] : await getAquariumsByOwner(userId);
 
   return {
     userProfile,

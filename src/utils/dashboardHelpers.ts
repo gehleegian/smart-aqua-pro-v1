@@ -330,39 +330,39 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
 export function buildAdminSummaryCards(options: {
   totalUsers: number;
   totalAquariums: number;
-  warningAquariums: number;
-  healthyAquariums: number;
+  adminUsers: number;
+  caretakerUsers: number;
 }): DashboardSummaryCard[] {
-  const { totalUsers, totalAquariums, warningAquariums, healthyAquariums } = options;
+  const { totalUsers, totalAquariums, adminUsers, caretakerUsers } = options;
 
   return [
     {
-      title: 'Total Users',
+      title: 'Registered Accounts',
       value: totalUsers,
       icon: Users,
       iconClassName: 'text-cyan-400',
       iconWrapperClassName: 'bg-cyan-500/20',
     },
     {
-      title: 'Total Aquariums',
+      title: 'User/Caretaker Accounts',
+      value: caretakerUsers,
+      icon: Radio,
+      iconClassName: 'text-teal-300',
+      iconWrapperClassName: 'bg-teal-500/20',
+    },
+    {
+      title: 'Administrator Accounts',
+      value: adminUsers,
+      icon: ShieldCheck,
+      iconClassName: 'text-violet-300',
+      iconWrapperClassName: 'bg-violet-500/20',
+    },
+    {
+      title: 'Registered Aquariums',
       value: totalAquariums,
       icon: Fish,
       iconClassName: 'text-blue-400',
       iconWrapperClassName: 'bg-blue-500/20',
-    },
-    {
-      title: 'Warning Aquariums',
-      value: warningAquariums,
-      icon: AlertTriangle,
-      iconClassName: 'text-amber-400',
-      iconWrapperClassName: 'bg-amber-500/20',
-    },
-    {
-      title: 'Healthy Aquariums',
-      value: healthyAquariums,
-      icon: ShieldCheck,
-      iconClassName: 'text-emerald-400',
-      iconWrapperClassName: 'bg-emerald-500/20',
     },
   ];
 }

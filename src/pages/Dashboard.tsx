@@ -25,6 +25,16 @@ export default function Dashboard() {
     );
   }
 
+  if (dashboard.userRole === 'Admin') {
+    return (
+      <AdminDashboardView
+        summaryCards={dashboard.adminSummaryCards}
+        users={dashboard.adminUsers}
+        aquariums={dashboard.aquariumDirectory}
+      />
+    );
+  }
+
   if (dashboard.liveAquariums.length === 0) {
     return (
       <Card>
@@ -32,26 +42,6 @@ export default function Dashboard() {
           <p className="text-slate-300">{getDashboardEmptyMessage(dashboard.userRole)}</p>
         </CardContent>
       </Card>
-    );
-  }
-
-  if (dashboard.userRole === 'Admin') {
-    return (
-      <AdminDashboardView
-        liveDataWarning={liveDataWarning}
-        summaryCards={dashboard.adminSummaryCards}
-        ownerGroups={dashboard.ownerGroups}
-        ownersNeedingAttention={dashboard.ownersNeedingAttention}
-        ownersMostTanks={dashboard.ownersMostTanks}
-        selectedOwnerId={dashboard.selectedOwnerId}
-        selectedOwnerGroup={dashboard.selectedOwnerGroup}
-        selectedTankId={dashboard.selectedTankId}
-        stats={dashboard.stats}
-        adminAlerts={dashboard.adminAlerts}
-        adminActivities={dashboard.adminActivities}
-        onSelectOwner={dashboard.actions.selectOwner}
-        onSelectTank={dashboard.actions.selectTank}
-      />
     );
   }
 
