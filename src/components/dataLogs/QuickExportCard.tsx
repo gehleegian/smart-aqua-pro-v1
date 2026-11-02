@@ -1,6 +1,6 @@
 import { Download, FileText } from 'lucide-react';
 import Button from '../ui/Button';
-import { Card, CardContent, CardHeader } from '../ui/Card';
+import { Card, CardContent } from '../ui/Card';
 
 interface QuickExportCardProps {
   className?: string;
@@ -17,17 +17,15 @@ export function QuickExportCard({
 }: QuickExportCardProps) {
   return (
     <Card className={className}>
-      <CardHeader>
-        <h3 className="text-lg font-semibold text-white">Export</h3>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          <Button className="w-full" disabled={disabled} onClick={onExportCsv}>
-            <Download className="h-4 w-4" />
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-base font-semibold text-white">Export</h3>
+        <div className="flex flex-wrap gap-3">
+          <Button disabled={disabled} onClick={onExportCsv}>
+            <Download className="h-4 w-4" aria-hidden="true" />
             Export CSV
           </Button>
-          <Button className="w-full" variant="secondary" disabled={disabled} onClick={onGenerateReport}>
-            <FileText className="h-4 w-4" />
+          <Button variant="secondary" disabled={disabled} onClick={onGenerateReport}>
+            <FileText className="h-4 w-4" aria-hidden="true" />
             Generate Report
           </Button>
         </div>

@@ -2,36 +2,37 @@ import { AlertsFilters } from '../components/alerts/AlertsFilters';
 import { AlertsList } from '../components/alerts/AlertsList';
 import { AlertsSidebar } from '../components/alerts/AlertsSidebar';
 import { AlertsSummaryGrid } from '../components/alerts/AlertsSummaryGrid';
-import { Card, CardContent } from '../components/ui/Card';
+import { Bell } from 'lucide-react';
+import { Card } from '../components/ui/Card';
+import EmptyState from '../components/ui/EmptyState';
 import { useAlertsController } from '../hooks/useAlertsController';
+import StatusMessage from '../components/ui/StatusMessage';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function Alerts() {
   const alerts = useAlertsController();
 
   if (alerts.loading) {
-    return <div className="text-slate-300">Loading alerts...</div>;
+    return <LoadingState label="Loading alerts..." />;
   }
 
   if (alerts.error && alerts.aquariums.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-slate-300">{alerts.error}</p>
-        </CardContent>
-      </Card>
+      <StatusMessage variant="error">{alerts.error}</StatusMessage>
     );
   }
 
   if (alerts.aquariums.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <p className="text-slate-300">
-            {alerts.userRole === 'Admin'
+        <EmptyState
+          icon={Bell}
+          message={
+            alerts.userRole === 'Admin'
               ? 'No aquarium records are available yet.'
-              : 'You do not have any aquariums to monitor alerts for yet.'}
-          </p>
-        </CardContent>
+              : 'You do not have any aquariums to monitor alerts for yet.'
+          }
+        />
       </Card>
     );
   }
@@ -46,15 +47,11 @@ export default function Alerts() {
       />
 
       {alerts.error ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
-          {alerts.error}
-        </div>
+        <StatusMessage variant="error">{alerts.error}</StatusMessage>
       ) : null}
 
       {alerts.liveDataError ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
-          {alerts.liveDataError}
-        </div>
+        <StatusMessage variant="warning">{alerts.liveDataError}</StatusMessage>
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">

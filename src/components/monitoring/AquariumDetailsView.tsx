@@ -14,6 +14,7 @@ import {
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import StatusMessage from '../ui/StatusMessage';
 
 interface AquariumDetailsViewProps {
   aquarium: MonitoringAquarium;
@@ -68,16 +69,14 @@ export function AquariumDetailsView({
       </div>
 
       {systemError ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
-          {systemError}
-        </div>
+        <StatusMessage variant="error">{systemError}</StatusMessage>
       ) : null}
 
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-white">{aquarium.name}</h3>
+              <h3 className="text-base font-semibold text-white">{aquarium.name}</h3>
               <p className="mt-1 text-sm text-slate-400">{aquarium.species.join(', ')}</p>
             </div>
             <Badge variant={aquarium.healthStatus === 'healthy' ? 'success' : 'warning'}>
@@ -91,7 +90,7 @@ export function AquariumDetailsView({
               label="Temperature"
               value={
                 aquarium.hasFreshTemperatureTelemetry
-                  ? `${aquarium.temp.toFixed(1)} C`
+                  ? `${aquarium.temp.toFixed(1)}°C`
                   : '--'
               }
               status={
@@ -154,7 +153,7 @@ export function AquariumDetailsView({
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">Manual Controls</h3>
+            <h3 className="text-base font-semibold text-white">Manual Controls</h3>
           </CardHeader>
           <CardContent>
             <div className="mb-4 flex rounded-lg border border-slate-600/40 bg-slate-900/45 p-1">
@@ -164,7 +163,7 @@ export function AquariumDetailsView({
                   type="button"
                   disabled={savingMode}
                   onClick={() => onModeChange(mode)}
-                  className={`flex-1 rounded-md px-3 py-2 text-sm ${
+                  className={`flex-1 rounded-md px-3 py-2 text-sm capitalize ${
                     systemMode === mode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
                   }`}
                 >
@@ -178,7 +177,7 @@ export function AquariumDetailsView({
                 <div key={field} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
                   <div>
                     <p className="capitalize text-white">{field}</p>
-                    <p className="text-xs text-slate-500">{manualActions[field].status}</p>
+                    <p className="text-xs text-slate-400">{manualActions[field].status}</p>
                   </div>
                   <Button
                     size="sm"
@@ -197,7 +196,7 @@ export function AquariumDetailsView({
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-white">Automation</h3>
+              <h3 className="text-base font-semibold text-white">Automation</h3>
               <Button size="sm" variant="secondary" onClick={onOpenAutomationEditor}>
                 <Settings className="h-4 w-4" />
                 Edit
@@ -227,7 +226,7 @@ function Reading({ label, value, status }: { label: string; value: string; statu
     <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-1 text-xl font-semibold text-white">{value}</p>
-      <p className="mt-2 text-xs text-slate-500">{status}</p>
+      <p className="mt-2 text-xs text-slate-400">{status}</p>
     </div>
   );
 }
@@ -235,7 +234,7 @@ function Reading({ label, value, status }: { label: string; value: string; statu
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-400">{label}</span>
       <span className="text-right text-white">{value}</span>
     </div>
   );

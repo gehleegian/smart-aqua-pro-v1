@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import AuthShell, {
+  authInputClassName,
+  authLabelClassName,
+  authLinkClassName,
+  authSubmitClassName,
+} from '../components/auth/AuthShell';
 import { registerUser } from '../services/authService';
 import { getAuthErrorMessage } from '../utils/authErrors';
 import { formatAuthRateLimitDuration, getAuthRateLimitStatus } from '../utils/authRateLimit';
@@ -35,26 +41,6 @@ export default function Signup({
         rateLimitStatus.retryAfterMs
       )}.`
     : '';
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '14px 16px',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    border: '1px solid rgba(59, 130, 246, 0.18)',
-    borderRadius: '12px',
-    fontSize: '14px',
-    color: '#e2e8f0',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#bfdbfe',
-    marginBottom: '8px',
-  };
 
   const handleSignup = async () => {
     if (!name || !email || !password || !confirmPassword) {
@@ -100,258 +86,136 @@ export default function Signup({
     }
   };
 
+  const signupDisabled = loading || rateLimitStatus.blocked;
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background:
-          'radial-gradient(circle at top left, rgba(14,165,233,0.18), transparent 30%), radial-gradient(circle at bottom right, rgba(59,130,246,0.18), transparent 25%), linear-gradient(135deg, #020617 0%, #0f172a 45%, #082f49 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 16px',
-        position: 'relative',
-      }}
-    >
-      <button
-        onClick={onGoToLogin}
-        style={{
-          position: 'absolute',
-          top: '24px',
-          left: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(15,23,42,0.7)',
-          border: '1px solid rgba(96,165,250,0.2)',
-          color: '#e0f2fe',
-          borderRadius: '12px',
-          padding: '10px 14px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 600,
-          backdropFilter: 'blur(8px)',
+    <AuthShell onBack={onGoToLogin}>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-white">Create your account</h1>
+        <p className="mt-1 text-sm text-slate-300">Create your account to continue.</p>
+      </div>
+
+      <div aria-live="polite" className="empty:hidden mb-5 space-y-3">
+        {error && (
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
+          >
+            {error}
+          </div>
+        )}
+
+        {!error && rateLimitMessage && (
+          <div className="rounded-lg border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            {rateLimitMessage}
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-lg border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {success}
+          </div>
+        )}
+      </div>
+
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSignup();
         }}
       >
-        <ArrowLeft size={16} />
-        Back
-      </button>
-
-      <div style={{ width: '100%', maxWidth: '460px' }}>
-        <div
-          style={{
-            background: 'rgba(2, 6, 23, 0.72)',
-            border: '1px solid rgba(96, 165, 250, 0.16)',
-            borderRadius: '24px',
-            padding: '36px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-            backdropFilter: 'blur(14px)',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <div
-              style={{
-                width: '72px',
-                height: '72px',
-                margin: '0 auto 18px',
-                overflow: 'hidden',
-              }}
-            >
-              <img
-                src="/smartaqua-logo.png"
-                alt="SmartAqua logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
-
-            <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
-              SmartAqua Pro
-            </h1>
-            <p style={{ fontSize: '14px', color: '#93c5fd', marginTop: '8px', marginBottom: 0 }}>
-              Create your account to continue
-            </p>
-          </div>
-
-          <div style={{ marginBottom: '22px' }}>
-            <h2
-              style={{
-                fontSize: '22px',
-                fontWeight: 700,
-                color: '#ffffff',
-                margin: 0,
-                textAlign: 'center',
-              }}
-            >
-              Sign Up
-            </h2>
-          </div>
-
-          {error && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(239,68,68,0.14)',
-                border: '1px solid rgba(239,68,68,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fca5a5',
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {!error && rateLimitMessage && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(245,158,11,0.14)',
-                border: '1px solid rgba(245,158,11,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fcd34d',
-              }}
-            >
-              {rateLimitMessage}
-            </div>
-          )}
-
-          {success && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(34,197,94,0.14)',
-                border: '1px solid rgba(34,197,94,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#86efac',
-              }}
-            >
-              {success}
-            </div>
-          )}
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your full name"
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
-                style={{ ...inputStyle, paddingRight: '46px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#93c5fd',
-                }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label style={labelStyle}>Confirm Password</label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm your password"
-              style={inputStyle}
-            />
-          </div>
-
-          <button
-            onClick={handleSignup}
-            disabled={loading || rateLimitStatus.blocked}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: 'linear-gradient(135deg, #06b6d4, #2563eb)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '14px',
-              fontSize: '15px',
-              fontWeight: 700,
-              cursor: loading || rateLimitStatus.blocked ? 'not-allowed' : 'pointer',
-              boxShadow: '0 12px 30px rgba(37,99,235,0.28)',
-              opacity: loading || rateLimitStatus.blocked ? 0.75 : 1,
-            }}
-          >
-            {loading
-              ? 'Creating Account...'
-              : rateLimitStatus.blocked
-                ? `Try Again In ${formatAuthRateLimitDuration(
-                    rateLimitStatus.retryAfterMs
-                  )}`
-                : 'Create Account'}
-          </button>
-
-          <p
-            style={{
-              textAlign: 'center',
-              fontSize: '14px',
-              color: '#94a3b8',
-              marginTop: '22px',
-              marginBottom: 0,
-            }}
-          >
-            Already have an account?{' '}
-            <button
-              onClick={onGoToLogin}
-              style={{
-                color: '#38bdf8',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '14px',
-              }}
-            >
-              Sign In
-            </button>
-          </p>
+        <div className="mb-4">
+          <label htmlFor="signup-name" className={authLabelClassName}>
+            Full name
+          </label>
+          <input
+            id="signup-name"
+            type="text"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your full name"
+            className={authInputClassName}
+          />
         </div>
-      </div>
-    </div>
+
+        <div className="mb-4">
+          <label htmlFor="signup-email" className={authLabelClassName}>
+            Email address
+          </label>
+          <input
+            id="signup-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className={authInputClassName}
+          />
+        </div>
+
+        <div className="mb-4">
+          <label htmlFor="signup-password" className={authLabelClassName}>
+            Password
+          </label>
+          <div className="relative">
+            <input
+              id="signup-password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Create a password"
+              className={`${authInputClassName} pr-12`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-teal-300"
+            >
+              {showPassword ? (
+                <EyeOff className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Eye className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label htmlFor="signup-confirm-password" className={authLabelClassName}>
+            Confirm password
+          </label>
+          <input
+            id="signup-confirm-password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm your password"
+            className={authInputClassName}
+          />
+        </div>
+
+        <button type="submit" disabled={signupDisabled} className={authSubmitClassName}>
+          {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          {loading
+            ? 'Creating account...'
+            : rateLimitStatus.blocked
+              ? `Try again in ${formatAuthRateLimitDuration(rateLimitStatus.retryAfterMs)}`
+              : 'Create account'}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-slate-300">
+        Already have an account?{' '}
+        <button type="button" onClick={onGoToLogin} className={authLinkClassName}>
+          Sign in
+        </button>
+      </p>
+    </AuthShell>
   );
 }

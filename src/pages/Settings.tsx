@@ -14,10 +14,14 @@ import {
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
+import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import LoadingState from '../components/ui/LoadingState';
+import Toggle from '../components/ui/Toggle';
 import ProfileModal from '../components/settings/ProfileModal';
 import { getCurrentUserProfile, updateCurrentUserProfile } from '../services/userService';
 import type { UserData } from '../types/user';
+import StatusMessage from '../components/ui/StatusMessage';
 
 export default function Settings() {
   const [notifications, setNotifications] = useState({
@@ -123,7 +127,7 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-white">
                 <UserRound className="h-5 w-5 text-teal-200" />
                 Profile
               </h3>
@@ -135,38 +139,34 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             {profileError ? (
-              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {profileError}
-              </div>
+              <StatusMessage variant="error">{profileError}</StatusMessage>
             ) : null}
             {profileSuccess ? (
-              <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                {profileSuccess}
-              </div>
+              <StatusMessage variant="success">{profileSuccess}</StatusMessage>
             ) : null}
 
             {profileLoading ? (
-              <p className="text-sm text-slate-400">Loading profile...</p>
+              <LoadingState label="Loading profile..." />
             ) : profile ? (
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Full Name</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Full Name</p>
                   <p className="text-sm text-slate-200">{profile.fullName || profile.name}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Email</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Email</p>
                   <p className="text-sm text-slate-200">{profile.email}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Contact Number</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Contact Number</p>
                   <p className="text-sm text-slate-200">{profile.contactNumber || 'Not set'}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Role</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Role</p>
                   <p className="text-sm text-slate-200">{profile.role}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Account Status</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Account Status</p>
                   <p className="text-sm text-slate-200">{profile.accountStatus || 'active'}</p>
                 </div>
               </div>
@@ -180,9 +180,10 @@ export default function Settings() {
       <div className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader>
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
               <Bell className="w-5 h-5 text-amber-400" />
               Notification Preferences
+              <Badge>Sample data</Badge>
             </h3>
           </CardHeader>
           <CardContent>
@@ -198,30 +199,18 @@ export default function Settings() {
                 <div key={item.key} className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm text-white">{item.label}</p>
-                    <p className="text-xs text-slate-500">{item.desc}</p>
+                    <p className="text-xs text-slate-400">{item.desc}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
+                  <Toggle
+                    checked={notifications[item.key as keyof typeof notifications]}
+                    label={item.label}
+                    onChange={() =>
                       setNotifications({
                         ...notifications,
                         [item.key]: !notifications[item.key as keyof typeof notifications],
                       })
                     }
-                    className={`h-6 w-12 rounded-full transition-all duration-200 ${
-                      notifications[item.key as keyof typeof notifications]
-                        ? 'bg-teal-600'
-                        : 'bg-slate-600'
-                    }`}
-                  >
-                    <div
-                      className={`h-5 w-5 rounded-full bg-white transition-all duration-200 ${
-                        notifications[item.key as keyof typeof notifications]
-                          ? 'translate-x-6'
-                          : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
+                  />
                 </div>
               ))}
             </div>
@@ -232,16 +221,18 @@ export default function Settings() {
               </h4>
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-xs text-slate-500">Notification Email</label>
+                  <label htmlFor="settings-notification-email" className="mb-1 block text-xs text-slate-400">Notification Email</label>
                   <input
+                    id="settings-notification-email"
                     type="email"
                     defaultValue="admin@smartaqua.pro"
                     className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-slate-500">SMS Number</label>
+                  <label htmlFor="settings-sms-number" className="mb-1 block text-xs text-slate-400">SMS Number</label>
                   <input
+                    id="settings-sms-number"
                     type="tel"
                     defaultValue="+63 900 000 0000"
                     className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
@@ -256,7 +247,7 @@ export default function Settings() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
               <Cpu className="w-5 h-5 text-purple-400" />
               System Information
             </h3>
@@ -274,7 +265,7 @@ export default function Settings() {
                 const Icon = item.icon;
 
                 return (
-                  <div key={item.label} className="flex items-center justify-between py-2">
+                  <div key={item.label} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
                     <div className="flex items-center gap-3">
                       <Icon className="w-4 h-4 text-slate-400" />
                       <span className="text-sm text-slate-400">{item.label}</span>
@@ -289,7 +280,7 @@ export default function Settings() {
 
         <Card>
           <CardHeader>
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
               <Info className="h-5 w-5 text-teal-200" />
               About SmartAqua Pro
             </h3>
@@ -303,25 +294,25 @@ export default function Settings() {
                 </p>
               </div>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Institution</span>
+                <div className="flex flex-wrap justify-between gap-x-4">
+                  <span className="text-slate-400">Institution</span>
                   <span className="text-white">Davao del Norte State College</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Department</span>
+                <div className="flex flex-wrap justify-between gap-x-4">
+                  <span className="text-slate-400">Department</span>
                   <span className="text-white">Institute of Computing</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Location</span>
+                <div className="flex flex-wrap justify-between gap-x-4">
+                  <span className="text-slate-400">Location</span>
                   <span className="text-white">Panabo City, Davao del Norte</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Degree</span>
+                <div className="flex flex-wrap justify-between gap-x-4">
+                  <span className="text-slate-400">Degree</span>
                   <span className="text-white">BS Information Technology</span>
                 </div>
               </div>
               <div className="border-t border-slate-700 pt-3">
-                <p className="mb-2 text-xs text-slate-500">Developers:</p>
+                <p className="mb-2 text-xs text-slate-400">Developers:</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     'Dennis Mark L. Jamero',
