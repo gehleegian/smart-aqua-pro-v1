@@ -14,6 +14,16 @@
   --color-slate-950: #08212b;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #2b7478 #08212b;
@@ -78,6 +88,15 @@ body {
 .smart-aqua-app[data-theme='light'] .shadow-slate-950\/35,
 .smart-aqua-app[data-theme='light'] .shadow-slate-950\/50 {
   --tw-shadow-color: rgba(15, 23, 42, 0.12);
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f2fbfa;
+  caret-color: #f2fbfa;
+  -webkit-box-shadow: 0 0 0 1000px #08212b inset;
+  transition: background-color 9999s ease-out;
 }
 
 @keyframes swim {

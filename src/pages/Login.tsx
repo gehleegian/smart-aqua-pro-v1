@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2, Waves } from 'lucide-react';
+import UnderwaterBackground from '../components/ui/UnderwaterBackground';
 import {
   EmailVerificationRequiredError,
   loginUser,
@@ -11,6 +12,12 @@ import { getAuthErrorMessage } from '../utils/authErrors';
 import { formatAuthRateLimitDuration, getAuthRateLimitStatus } from '../utils/authRateLimit';
 
 const RESEND_COOLDOWN_MS = 60_000;
+
+const inputClassName =
+  'auth-input w-full rounded-lg border border-slate-600/50 bg-slate-950/45 px-4 py-3 text-sm text-slate-50 placeholder-slate-400 transition-colors hover:border-slate-500 focus:border-teal-300 focus:outline-2 focus:outline-offset-1 focus:outline-teal-300/60';
+const labelClassName = 'mb-2 block text-sm font-medium text-slate-200';
+const linkClassName =
+  'rounded font-semibold text-teal-200 transition-colors hover:text-teal-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 disabled:cursor-not-allowed disabled:opacity-60';
 
 export default function Login({
   onLogin,
@@ -53,26 +60,6 @@ export default function Login({
     : '';
   const resendCooldownSeconds = Math.ceil(Math.max(0, resendAvailableAt - now) / 1000);
   const resendDisabled = resending || resendCooldownSeconds > 0 || rateLimitStatus.blocked;
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '14px 16px',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    border: '1px solid rgba(59, 130, 246, 0.18)',
-    borderRadius: '12px',
-    fontSize: '14px',
-    color: '#e2e8f0',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#bfdbfe',
-    marginBottom: '8px',
-  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -155,304 +142,166 @@ export default function Login({
     }
   };
 
+  const signInDisabled = loading || rateLimitStatus.blocked;
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background:
-          'radial-gradient(circle at top left, rgba(14,165,233,0.18), transparent 30%), radial-gradient(circle at bottom right, rgba(59,130,246,0.18), transparent 25%), linear-gradient(135deg, #020617 0%, #0f172a 45%, #082f49 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 16px',
-        position: 'relative',
-      }}
-    >
+    <main className="relative flex min-h-screen items-center justify-center px-4 py-20 sm:py-12">
+      <UnderwaterBackground />
+
       <button
+        type="button"
         onClick={onGoBack}
-        style={{
-          position: 'absolute',
-          top: '24px',
-          left: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(15,23,42,0.7)',
-          border: '1px solid rgba(96,165,250,0.2)',
-          color: '#e0f2fe',
-          borderRadius: '12px',
-          padding: '10px 14px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 600,
-          backdropFilter: 'blur(8px)',
-        }}
+        className="absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-lg px-3 py-2 bg-slate-950/55 text-sm font-medium text-slate-50 backdrop-blur-sm transition-colors hover:bg-slate-900/80 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 sm:left-6 sm:top-6"
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Back
       </button>
 
-      <div style={{ width: '100%', maxWidth: '460px' }}>
-        <div
-          style={{
-            background: 'rgba(2, 6, 23, 0.72)',
-            border: '1px solid rgba(96, 165, 250, 0.16)',
-            borderRadius: '24px',
-            padding: '36px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-            backdropFilter: 'blur(14px)',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <div
-              style={{
-                width: '72px',
-                height: '72px',
-                margin: '0 auto 18px',
-                overflow: 'hidden',
-              }}
-            >
-              <img
-                src="/smartaqua-logo.png"
-                alt="SmartAqua logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
+      <div className="relative z-10 w-full max-w-md">
+        <div className="mb-6 flex items-center justify-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
+            <Waves className="h-6 w-6 text-teal-200" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-lg font-bold leading-tight text-white">SmartAqua Pro</p>
+            <p className="text-xs text-teal-300">IoT-Based Aquarium Management System</p>
+          </div>
+        </div>
 
-            <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
-              SmartAqua Pro
-            </h1>
-            <p style={{ fontSize: '14px', color: '#93c5fd', marginTop: '8px', marginBottom: 0 }}>
-              IoT-Based Aquarium Management System
+        <div className="rounded-2xl border border-slate-600/35 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30 backdrop-blur sm:p-8">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-white">Welcome back</h1>
+            <p className="mt-1 text-sm text-slate-300">
+              Sign in to access your aquarium dashboard.
             </p>
           </div>
 
-          <div style={{ marginBottom: '22px' }}>
-            <h2
-              style={{
-                fontSize: '22px',
-                fontWeight: 700,
-                color: '#ffffff',
-                margin: 0,
-                textAlign: 'center',
-              }}
-            >
-              Welcome Back
-            </h2>
-            <p
-              style={{
-                textAlign: 'center',
-                color: '#94a3b8',
-                fontSize: '14px',
-                marginTop: '8px',
-                marginBottom: 0,
-              }}
-            >
-              Sign in to access your aquarium management dashboard
-            </p>
-          </div>
-
-          {error && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(239,68,68,0.14)',
-                border: '1px solid rgba(239,68,68,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fca5a5',
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {!error && (notice || infoMessage) && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(59,130,246,0.14)',
-                border: '1px solid rgba(59,130,246,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#93c5fd',
-              }}
-            >
-              {notice || infoMessage}
-            </div>
-          )}
-
-          {needsVerification && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(245,158,11,0.14)',
-                border: '1px solid rgba(245,158,11,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fcd34d',
-              }}
-            >
-              <div style={{ marginBottom: '10px' }}>Please verify your email first.</div>
-              <button
-                type="button"
-                onClick={handleResendVerification}
-                disabled={resendDisabled}
-                style={{
-                  background: 'none',
-                  border: '1px solid rgba(245,158,11,0.45)',
-                  borderRadius: '10px',
-                  padding: '8px 12px',
-                  color: '#fcd34d',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: resendDisabled ? 'not-allowed' : 'pointer',
-                  opacity: resendDisabled ? 0.65 : 1,
-                }}
+          <div aria-live="polite" className="empty:hidden mb-5 space-y-3">
+            {error && (
+              <div
+                role="alert"
+                className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
               >
-                {resending
-                  ? 'Sending...'
-                  : resendCooldownSeconds > 0
-                    ? `Resend available in ${resendCooldownSeconds}s`
-                    : 'Resend verification email'}
-              </button>
-            </div>
-          )}
+                {error}
+              </div>
+            )}
 
-          {!error && rateLimitMessage && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(245,158,11,0.14)',
-                border: '1px solid rgba(245,158,11,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fcd34d',
-              }}
-            >
-              {rateLimitMessage}
-            </div>
-          )}
+            {!error && (notice || infoMessage) && (
+              <div className="rounded-lg border border-teal-300/25 bg-teal-500/10 px-4 py-3 text-sm text-teal-100">
+                {notice || infoMessage}
+              </div>
+            )}
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              style={inputStyle}
-            />
+            {needsVerification && (
+              <div className="rounded-lg border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                <p className="mb-3">Please verify your email first.</p>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendDisabled}
+                  className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {resending
+                    ? 'Sending...'
+                    : resendCooldownSeconds > 0
+                      ? `Resend available in ${resendCooldownSeconds}s`
+                      : 'Resend verification email'}
+                </button>
+              </div>
+            )}
+
+            {!error && rateLimitMessage && (
+              <div className="rounded-lg border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                {rateLimitMessage}
+              </div>
+            )}
           </div>
 
-          <div style={{ marginBottom: '8px' }}>
-            <label style={labelStyle}>Password</label>
-            <div style={{ position: 'relative' }}>
+          <form
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleLogin();
+            }}
+          >
+            <div className="mb-4">
+              <label htmlFor="login-email" className={labelClassName}>
+                Email address
+              </label>
               <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                style={{ ...inputStyle, paddingRight: '46px' }}
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={inputClassName}
               />
+            </div>
+
+            <div className="mb-2">
+              <label htmlFor="login-password" className={labelClassName}>
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className={`${inputClassName} pr-12`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-teal-300"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <Eye className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-6 text-right">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#93c5fd',
-                }}
+                onClick={handleForgotPassword}
+                disabled={sendingReset}
+                className={`${linkClassName} text-sm`}
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {sendingReset ? 'Sending...' : 'Forgot password?'}
               </button>
             </div>
-          </div>
 
-          <div style={{ textAlign: 'right', marginBottom: '20px' }}>
             <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={sendingReset}
-              style={{
-                color: '#38bdf8',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: sendingReset ? 'not-allowed' : 'pointer',
-                fontSize: '13px',
-                fontWeight: 600,
-              }}
+              type="submit"
+              disabled={signInDisabled}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-teal-950/20 transition-colors hover:bg-teal-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {sendingReset ? 'Sending...' : 'Forgot password?'}
+              {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {loading
+                ? 'Signing in...'
+                : rateLimitStatus.blocked
+                  ? `Try again in ${formatAuthRateLimitDuration(rateLimitStatus.retryAfterMs)}`
+                  : 'Sign in'}
             </button>
-          </div>
+          </form>
 
-          <button
-            onClick={handleLogin}
-            disabled={loading || rateLimitStatus.blocked}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: 'linear-gradient(135deg, #06b6d4, #2563eb)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '14px',
-              fontSize: '15px',
-              fontWeight: 700,
-              cursor: loading || rateLimitStatus.blocked ? 'not-allowed' : 'pointer',
-              boxShadow: '0 12px 30px rgba(37,99,235,0.28)',
-              opacity: loading || rateLimitStatus.blocked ? 0.75 : 1,
-            }}
-          >
-            {loading
-              ? 'Signing In...'
-              : rateLimitStatus.blocked
-                ? `Try Again In ${formatAuthRateLimitDuration(
-                    rateLimitStatus.retryAfterMs
-                  )}`
-                : 'Sign In'}
-          </button>
-
-          <p
-            style={{
-              textAlign: 'center',
-              fontSize: '14px',
-              color: '#94a3b8',
-              marginTop: '22px',
-              marginBottom: 0,
-            }}
-          >
+          <p className="mt-6 text-center text-sm text-slate-300">
             Don&apos;t have an account?{' '}
-            <button
-              onClick={onGoToSignup}
-              style={{
-                color: '#38bdf8',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '14px',
-              }}
-            >
-              Sign Up
+            <button type="button" onClick={onGoToSignup} className={linkClassName}>
+              Sign up
             </button>
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
