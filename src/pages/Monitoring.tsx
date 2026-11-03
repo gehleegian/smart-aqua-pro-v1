@@ -1,28 +1,28 @@
-import { Card, CardContent } from '../components/ui/Card';
+import { Activity } from 'lucide-react';
+import { Card } from '../components/ui/Card';
+import EmptyState from '../components/ui/EmptyState';
 import { AdminMonitoringView } from '../components/monitoring/AdminMonitoringView';
 import { AquariumDetailsView } from '../components/monitoring/AquariumDetailsView';
 import { AutomationSettingsModal } from '../components/monitoring/AutomationSettingsModal';
 import { UserAquariumList } from '../components/monitoring/UserAquariumList';
 import { useMonitoringController } from '../hooks/useMonitoringController';
+import StatusMessage from '../components/ui/StatusMessage';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function Monitoring() {
   const monitoring = useMonitoringController();
   const { actions } = monitoring;
   const liveDataWarning = monitoring.liveDataError ? (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
-      {monitoring.liveDataError}
-    </div>
+    <StatusMessage variant="warning">{monitoring.liveDataError}</StatusMessage>
   ) : null;
 
   if (monitoring.loading) {
-    return <div className="text-slate-300">Loading monitoring data...</div>;
+    return <LoadingState label="Loading monitoring data..." />;
   }
 
   if (monitoring.error) {
     return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
-        {monitoring.error}
-      </div>
+      <StatusMessage variant="error">{monitoring.error}</StatusMessage>
     );
   }
 
@@ -44,9 +44,7 @@ export default function Monitoring() {
   if (monitoring.aquariums.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <p className="text-slate-300">No monitoring data available. Add an aquarium first.</p>
-        </CardContent>
+        <EmptyState icon={Activity} message="No monitoring data available. Add an aquarium first." />
       </Card>
     );
   }
@@ -66,11 +64,11 @@ export default function Monitoring() {
   }
 
   if (!monitoring.automationSettings || !monitoring.manualActions) {
-    return null;
+    return <LoadingState label="Loading aquarium details..." />;
   }
 
   return (
-    <>
+    <div className="space-y-6">
       {liveDataWarning}
       <AquariumDetailsView
         aquarium={monitoring.selectedAquarium}
@@ -106,6 +104,6 @@ export default function Monitoring() {
           onUpdateFeedingTime={actions.updateFeedingTime}
         />
       )}
-    </>
+    </div>
   );
 }

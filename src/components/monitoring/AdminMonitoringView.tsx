@@ -31,7 +31,7 @@ export function AdminMonitoringView({
 
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">{selectedOwner.name}</h3>
+            <h3 className="text-base font-semibold text-white">{selectedOwner.name}</h3>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
@@ -44,7 +44,7 @@ export function AdminMonitoringView({
                 <div key={aquarium.id} className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4">
                   <p className="font-medium text-white">{aquarium.name}</p>
                   <p className="mt-1 text-sm text-slate-400">
-                    {aquarium.temp.toFixed(1)} C · {aquarium.level}% level · {aquarium.quality}% TDS
+                    {aquarium.temp.toFixed(1)}°C · {aquarium.level}% level · {aquarium.quality}% TDS
                   </p>
                 </div>
               ))}
@@ -59,7 +59,7 @@ export function AdminMonitoringView({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
-          <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-white">
             <Users className="h-5 w-5 text-teal-200" />
             User Monitoring
           </h3>
@@ -80,7 +80,7 @@ export function AdminMonitoringView({
             >
               <p className="font-medium text-white">{owner.name}</p>
               <p className="mt-1 text-sm text-slate-400">{owner.email}</p>
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-xs text-slate-400">
                 {owner.stats.totalTanks} tanks · {owner.stats.warningTanks} warnings
               </p>
             </button>

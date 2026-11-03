@@ -27,7 +27,7 @@ export function WeeklyQualityChart({
               style={{ height: `${Math.max(6, Math.min(point.value, 100))}%` }}
             />
           </div>
-          <span className="w-full truncate text-center text-xs text-slate-500">{point.label}</span>
+          <span className="w-full truncate text-center text-xs text-slate-400">{point.label}</span>
         </div>
       ))}
     </div>

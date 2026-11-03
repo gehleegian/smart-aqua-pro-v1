@@ -1,4 +1,4 @@
-import { Droplets, Thermometer, Waves } from 'lucide-react';
+import { BarChart3, Droplets, Thermometer, Waves } from 'lucide-react';
 import { DataLogsToolbar } from '../components/dataLogs/DataLogsToolbar';
 import { HistoricalDataTable } from '../components/dataLogs/HistoricalDataTable';
 import { HistoryLineChart } from '../components/dataLogs/HistoryLineChart';
@@ -6,31 +6,28 @@ import { QuickExportCard } from '../components/dataLogs/QuickExportCard';
 import { ReportSummaryCard } from '../components/dataLogs/ReportSummaryCard';
 import { WeeklyQualityChart } from '../components/dataLogs/WeeklyQualityChart';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
+import EmptyState from '../components/ui/EmptyState';
 import { useDataLogsController } from '../hooks/useDataLogsController';
+import StatusMessage from '../components/ui/StatusMessage';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function DataLogs() {
   const dataLogs = useDataLogsController();
 
   if (dataLogs.loading) {
-    return <div className="text-slate-300">Loading data logs...</div>;
+    return <LoadingState label="Loading data logs..." />;
   }
 
   if (dataLogs.error && dataLogs.aquariums.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-slate-300">{dataLogs.error}</p>
-        </CardContent>
-      </Card>
+      <StatusMessage variant="error">{dataLogs.error}</StatusMessage>
     );
   }
 
   if (dataLogs.aquariums.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <p className="text-slate-300">{dataLogs.emptyMessage}</p>
-        </CardContent>
+        <EmptyState icon={BarChart3} message={dataLogs.emptyMessage} />
       </Card>
     );
   }
@@ -48,22 +45,24 @@ export default function DataLogs() {
         onSelectAquarium={dataLogs.actions.selectAquarium}
       />
 
+      <QuickExportCard
+        disabled={!dataLogs.selectedAquarium || dataLogs.exportEntries.length === 0}
+        onExportCsv={dataLogs.actions.exportCsv}
+        onGenerateReport={dataLogs.actions.generateReport}
+      />
+
       {dataLogs.error ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {dataLogs.error}
-        </div>
+        <StatusMessage variant="error">{dataLogs.error}</StatusMessage>
       ) : null}
 
       {dataLogs.liveDataError ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          {dataLogs.liveDataError}
-        </div>
+        <StatusMessage variant="warning">{dataLogs.liveDataError}</StatusMessage>
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
               <Thermometer className="h-5 w-5 text-orange-400" />
               Temperature History
             </h3>
@@ -73,7 +72,7 @@ export default function DataLogs() {
               data={dataLogs.temperatureChartData}
               color="#f97316"
               label={dataLogs.chartRangeLabel}
-              unit=" C"
+              unit="°C"
               emptyMessage="No logged readings for this range yet."
             />
           </CardContent>
@@ -81,7 +80,7 @@ export default function DataLogs() {
 
         <Card>
           <CardHeader>
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
               <Droplets className="h-5 w-5 text-blue-400" />
               Water Level History
             </h3>
@@ -98,11 +97,10 @@ export default function DataLogs() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-white">
                 <Waves className="h-5 w-5 text-emerald-400" />
                 Water Purity (TDS Level)
               </h3>
@@ -117,14 +115,6 @@ export default function DataLogs() {
           </Card>
 
           <ReportSummaryCard summaryItems={dataLogs.summaryItems} />
-        </div>
-
-        <QuickExportCard
-          className="xl:sticky xl:top-6"
-          disabled={!dataLogs.selectedAquarium || dataLogs.exportEntries.length === 0}
-          onExportCsv={dataLogs.actions.exportCsv}
-          onGenerateReport={dataLogs.actions.generateReport}
-        />
       </div>
 
       <HistoricalDataTable

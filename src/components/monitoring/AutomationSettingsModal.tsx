@@ -1,7 +1,10 @@
+import { useId } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
 import type { AutomationSettings } from '../../types/aquarium';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import Modal from '../ui/Modal';
+import StatusMessage from '../ui/StatusMessage';
 
 interface AutomationSettingsModalProps {
   aquariumName: string;
@@ -31,38 +34,32 @@ export function AutomationSettingsModal({
   onSave,
   onUpdateFeedingTime,
 }: AutomationSettingsModalProps) {
+  const titleId = useId();
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     onSave();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm">
-      <button type="button" aria-label="Close modal" className="absolute inset-0 cursor-default" onClick={onClose} />
-      <form
-        onSubmit={handleSubmit}
-        className="relative w-full max-w-xl overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-      >
+    <Modal labelledBy={titleId} onClose={onClose} className="max-w-xl">
+      <form onSubmit={handleSubmit}>
         <div className="flex items-center justify-between gap-4 border-b border-slate-700 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Automation Settings</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-white">Automation Settings</h2>
             <p className="mt-1 text-sm text-slate-400">{aquariumName}</p>
           </div>
-          <button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={onClose}>
-            <X className="h-5 w-5" />
+          <button type="button" aria-label="Close" className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={onClose}>
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         <div className="space-y-4 px-6 py-5">
-          {error ? (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {error}
-            </div>
-          ) : null}
+          {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-300">Feeding Times</label>
+              <p className="text-sm font-medium text-slate-200">Feeding Times</p>
               <Button type="button" size="sm" variant="secondary" onClick={onAddFeedingTime}>
                 <Plus className="h-4 w-4" />
                 Add
@@ -72,12 +69,13 @@ export function AutomationSettingsModal({
               <div key={`${time}-${index}`} className="flex gap-2">
                 <input
                   type="time"
+                  aria-label={`Feeding time ${index + 1}`}
                   value={time}
                   disabled={saving}
                   onChange={(event) => onUpdateFeedingTime(index, event.target.value)}
                   className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-slate-200"
                 />
-                <Button type="button" variant="danger" disabled={saving || draft.feedingTimes.length === 1} onClick={() => onRemoveFeedingTime(index)}>
+                <Button type="button" variant="danger" aria-label={`Remove feeding time ${index + 1}`} disabled={saving || draft.feedingTimes.length === 1} onClick={() => onRemoveFeedingTime(index)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -101,6 +99,6 @@ export function AutomationSettingsModal({
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

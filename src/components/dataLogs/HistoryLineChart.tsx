@@ -49,7 +49,7 @@ export function HistoryLineChart({
           return <circle key={`${point.label}-${index}`} cx={x} cy={y} r="2.5" fill={color} />;
         })}
       </svg>
-      <div className="mt-2 flex justify-between text-xs text-slate-500">
+      <div className="mt-2 flex justify-between text-xs text-slate-400">
         <span>{data[0]?.label}</span>
         <span>{data[data.length - 1]?.label}</span>
       </div>

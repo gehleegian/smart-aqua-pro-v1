@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
+import StatusMessage from '../components/ui/StatusMessage';
+import Toggle from '../components/ui/Toggle';
 import Badge from '../components/ui/Badge';
 import { Fish, Sun, Wind, Zap, Settings, AlertTriangle } from 'lucide-react';
 
@@ -78,9 +80,13 @@ export default function Automation() {
 
   return (
     <div className="space-y-6">
+      <StatusMessage variant="warning">
+        Sample data: this page is not connected to your aquariums yet, and changes here are not saved.
+      </StatusMessage>
+
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <Fish className="h-5 w-5 text-teal-200" />
             Feeding Schedule
           </h3>
@@ -109,12 +115,11 @@ export default function Automation() {
                       </Badge>
                     </td>
                     <td className="py-3 px-4">
-                      <button
-                        onClick={() => setFeedingEnabled({ ...feedingEnabled, [schedule.id]: !feedingEnabled[schedule.id] })}
-                        className={`h-6 w-12 rounded-full transition-all duration-200 ${feedingEnabled[schedule.id] ? 'bg-teal-600' : 'bg-slate-600'}`}
-                      >
-                        <div className={`w-5 h-5 bg-white rounded-full transition-all duration-200 ${feedingEnabled[schedule.id] ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                      </button>
+                      <Toggle
+                        checked={feedingEnabled[schedule.id]}
+                        label={`${schedule.tank} feeding at ${schedule.time}`}
+                        onChange={() => setFeedingEnabled({ ...feedingEnabled, [schedule.id]: !feedingEnabled[schedule.id] })}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -127,7 +132,7 @@ export default function Automation() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <Sun className="w-5 h-5 text-amber-400" />
               Lighting Control
             </h3>
@@ -142,7 +147,7 @@ export default function Automation() {
                       {light.status === 'on' ? 'ON' : 'OFF'}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-slate-400">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
                     <span>ON: {light.onTime}</span>
                     <span>OFF: {light.offTime}</span>
                     <span>Brightness: {light.brightness}%</span>
@@ -158,7 +163,7 @@ export default function Automation() {
 
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <Wind className="w-5 h-5 text-blue-400" />
               Filtration Control
             </h3>
@@ -186,7 +191,7 @@ export default function Automation() {
 
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-400" />
             Rule-Based Automation
           </h3>
@@ -194,7 +199,7 @@ export default function Automation() {
         <CardContent>
           <div className="space-y-3">
             {automationRules.map((rule) => (
-              <div key={rule.id} className="flex items-center justify-between bg-slate-700/30 rounded-lg p-4">
+              <div key={rule.id} className="flex items-center justify-between gap-4 bg-slate-700/30 rounded-lg p-4">
                 <div className="flex items-center gap-4">
                   <div className="w-8 h-8 rounded-lg bg-slate-600 flex items-center justify-center">
                     <Settings className="w-4 h-4 text-slate-300" />
@@ -204,12 +209,11 @@ export default function Automation() {
                     <p className="text-xs text-slate-400">→ {rule.action}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setRulesEnabled({ ...rulesEnabled, [rule.id]: !rulesEnabled[rule.id] })}
-                  className={`h-6 w-12 rounded-full transition-all duration-200 ${rulesEnabled[rule.id] ? 'bg-teal-600' : 'bg-slate-600'}`}
-                >
-                  <div className={`w-5 h-5 bg-white rounded-full transition-all duration-200 ${rulesEnabled[rule.id] ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                </button>
+                <Toggle
+                  checked={rulesEnabled[rule.id]}
+                  label={rule.condition}
+                  onChange={() => setRulesEnabled({ ...rulesEnabled, [rule.id]: !rulesEnabled[rule.id] })}
+                />
               </div>
             ))}
           </div>
@@ -218,7 +222,7 @@ export default function Automation() {
 
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-amber-400" />
             Bioload-Based Fish Classification
           </h3>
@@ -239,7 +243,7 @@ export default function Automation() {
                 <p className="text-xs text-slate-400 mb-3">{profile.description}</p>
                 <div className="space-y-2">
                   <div>
-                    <p className="text-xs text-slate-500">Example Species:</p>
+                    <p className="text-xs text-slate-400">Example Species:</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {profile.examples.map((fish) => (
                         <span key={fish} className="px-2 py-0.5 bg-slate-700/50 rounded text-xs text-slate-300">{fish}</span>
@@ -248,19 +252,19 @@ export default function Automation() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-slate-500">Feeding</p>
+                      <p className="text-slate-400">Feeding</p>
                       <p className="text-white font-medium">{profile.feedingFreq}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Filter Speed</p>
+                      <p className="text-slate-400">Filter Speed</p>
                       <p className="text-white font-medium">{profile.filterSpeed}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Water Change</p>
+                      <p className="text-slate-400">Water Change</p>
                       <p className="text-white font-medium">{profile.waterChange}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Monitoring</p>
+                      <p className="text-slate-400">Monitoring</p>
                       <p className="text-white font-medium">{profile.monitoring}</p>
                     </div>
                   </div>

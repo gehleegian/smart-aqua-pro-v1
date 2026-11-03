@@ -1,5 +1,6 @@
 import { Search, Bell, Wifi, LogOut, Menu, X, AlertCircle, AlertTriangle, Info, Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
+import Badge from '../ui/Badge';
 
 interface HeaderProps {
   currentPage: string;
@@ -55,23 +56,25 @@ export default function Header({
 
   return (
     <>
-      <header className="flex h-16 items-center justify-between border-b border-slate-600/30 bg-slate-900/80 px-4 shadow-sm shadow-slate-950/10 backdrop-blur md:px-6" style={{ position: 'relative', zIndex: 100 }}>
-        <div className="flex items-center gap-3">
-          <button onClick={onMenuClick} className="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
-            <Menu className="w-5 h-5" />
+      <header className="flex h-16 items-center justify-between border-b border-slate-600/30 bg-slate-900/80 px-4 shadow-sm shadow-slate-950/10 backdrop-blur md:px-6 relative z-30">
+        <div className="flex min-w-0 items-center gap-3">
+          <button type="button" onClick={onMenuClick} aria-label="Open menu" className="rounded-lg p-2 text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-teal-300 lg:hidden">
+            <Menu className="w-5 h-5" aria-hidden="true" />
           </button>
-          <h2 className="text-lg md:text-xl font-semibold text-white">{pageNames[currentPage] || 'Dashboard'}</h2>
+          <h2 className="truncate text-lg md:text-xl font-semibold text-white">{pageNames[currentPage] || 'Dashboard'}</h2>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex flex-shrink-0 items-center gap-2 md:gap-4">
           {!isAdmin && <div className="relative hidden md:block">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search (coming soon)"
+              aria-label="Search (coming soon)"
+              disabled
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-48 rounded-lg border border-slate-600/40 bg-slate-950/25 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
+              className="w-52 cursor-not-allowed rounded-lg border border-slate-600/40 bg-slate-950/25 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
             />
           </div>}
 
@@ -92,10 +95,13 @@ export default function Header({
           </button>
 
           {!isAdmin && <button
+            type="button"
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 text-slate-400 hover:text-white transition-colors"
+            aria-label={`Notifications, ${unreadCount} unread`}
+            aria-expanded={showNotifications}
+            className="relative rounded-lg p-2 text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-teal-300"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-5 h-5" aria-hidden="true" />
             {unreadCount > 0 && (
               <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold">
                 {unreadCount}
@@ -109,16 +115,18 @@ export default function Header({
             </div>
             <div className="text-left">
               <p className="text-sm text-white font-medium">{user.name}</p>
-              <p className="text-xs text-slate-500">{user.role}</p>
+              <p className="text-xs text-slate-300">{user.role}</p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onLogout}
-            className="flex items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-500/12 px-2 py-1.5 text-xs font-medium text-rose-300 transition-all hover:bg-rose-500/20 hover:text-rose-200 md:px-3"
+            aria-label="Log out"
+            className="flex items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-500/12 px-2 py-1.5 text-xs font-medium text-rose-300 transition-all hover:bg-rose-500/20 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-rose-300 md:px-3"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
+            <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Log out</span>
           </button>
         </div>
       </header>
@@ -127,16 +135,19 @@ export default function Header({
       {!isAdmin && showNotifications && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowNotifications(false)} />
-          <div style={{ position: 'fixed', top: '64px', right: '80px', zIndex: 999, width: '320px' }}>
+          <div className="fixed left-4 right-4 top-16 z-[999] sm:left-auto sm:right-20 sm:w-80">
             <div className="overflow-hidden rounded-xl border border-slate-600/40 bg-slate-900/95 shadow-2xl shadow-slate-950/30 backdrop-blur">
               <div className="flex items-center justify-between border-b border-slate-600/30 px-4 py-3">
-                <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                  <Badge>Sample data</Badge>
+                </div>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
                     <button onClick={markAllRead} className="text-xs text-teal-200 hover:text-teal-100">Mark all read</button>
                   )}
-                  <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white">
-                    <X className="w-4 h-4" />
+                  <button type="button" onClick={() => setShowNotifications(false)} aria-label="Close notifications" className="rounded text-slate-300 hover:text-white focus-visible:outline-2 focus-visible:outline-teal-300">
+                    <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -156,7 +167,7 @@ export default function Header({
                       <TypeIcon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${iconColor}`} />
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-slate-400'}`}>{notif.message}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{notif.time}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{notif.time}</p>
                       </div>
                       {!notif.read && <div className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-teal-300" />}
                     </div>

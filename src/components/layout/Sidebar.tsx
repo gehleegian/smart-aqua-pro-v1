@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   LayoutDashboard,
   Activity,
@@ -24,6 +23,8 @@ interface SidebarProps {
   onLogout: () => void;
   isOpen: boolean;
   onClose: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 type MenuItem = {
@@ -33,16 +34,31 @@ type MenuItem = {
   roles: UserRole[];
 };
 
-const allMenuItems: MenuItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
-  { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['User'] },
-  { id: 'automation', label: 'Automation', icon: Cpu, roles: ['User'] },
-  { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['User'] },
-  { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['User'] },
-  { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['User'] },
-  { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
-  { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] },
+const menuGroups: { label: string; items: MenuItem[] }[] = [
+  {
+    label: 'Overview',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
+      { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['User'] },
+      { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['User'] },
+    ],
+  },
+  {
+    label: 'Manage',
+    items: [
+      { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['User'] },
+      { id: 'automation', label: 'Automation', icon: Cpu, roles: ['User'] },
+      { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['User'] },
+      { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [{ id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] }],
+  },
 ];
+
+const insetFocus = 'focus-visible:outline-offset-[-2px]';
 
 export default function Sidebar({
   currentPage,
@@ -51,126 +67,123 @@ export default function Sidebar({
   onLogout,
   isOpen,
   onClose,
+  collapsed,
+  onToggleCollapsed,
 }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
-
   const normalizedRole = normalizeRole(userRole);
-  const menuItems = allMenuItems.filter((item) => item.roles.includes(normalizedRole));
+
+  const renderBrand = (showText: boolean) => (
+    <div className="flex items-center gap-3">
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
+        <Waves className="h-6 w-6 text-teal-200" aria-hidden="true" />
+      </div>
+      {showText && (
+        <div>
+          <p className="text-lg font-bold text-white">SmartAqua</p>
+          <p className="text-xs text-teal-300">AquariTech Solutions</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderNav = (showLabels: boolean) => (
+    <nav aria-label="Main" className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      {menuGroups.map((group) => {
+        const items = group.items.filter((item) => item.roles.includes(normalizedRole));
+
+        if (items.length === 0) {
+          return null;
+        }
+
+        return (
+          <div key={group.label} className="space-y-1">
+            {showLabels && <p className="px-3 pb-1 text-xs font-medium text-slate-400">{group.label}</p>}
+            {items.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentPage === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onNavigate(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label}
+                  title={showLabels ? undefined : item.label}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-200 ${insetFocus} ${
+                    showLabels ? '' : 'justify-center'
+                  } ${
+                    isActive
+                      ? 'bg-teal-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  {showLabels && <span className="text-sm font-medium">{item.label}</span>}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </nav>
+  );
+
+  const renderLogout = (showLabel: boolean) => (
+    <button
+      type="button"
+      onClick={onLogout}
+      aria-label="Log out"
+      title="Log out"
+      className={`flex w-full items-center gap-3 px-6 py-4 text-rose-300 transition-colors hover:bg-rose-500/10 ${insetFocus} ${
+        showLabel ? '' : 'justify-center'
+      }`}
+    >
+      <LogOut className="h-5 w-5 flex-shrink-0" />
+      {showLabel && <span className="text-sm font-medium">Log out</span>}
+    </button>
+  );
 
   return (
     <>
       <aside
-        className={`fixed left-0 top-0 z-50 h-full w-64 border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-transform duration-300 lg:hidden ${
+        inert={!isOpen}
+        className={`fixed left-0 top-0 z-50 flex h-full w-64 flex-col border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-transform duration-300 lg:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="flex items-center justify-between border-b border-slate-600/30 px-4 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
-              <Waves className="h-6 w-6 text-teal-200" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-teal-300">AquariTech Solutions</p>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <nav className="flex-1 py-4 overflow-y-auto">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
-                  isActive
-                    ? 'border-r-2 border-teal-300 bg-teal-400/12 text-teal-200'
-                    : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
-                }`}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-slate-600/30">
+          {renderBrand(true)}
           <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-4 text-red-400 hover:bg-red-500/10 transition-all"
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="rounded-lg p-2 text-slate-300 hover:text-white"
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            <span className="text-sm font-medium">Sign Out</span>
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
+        {renderNav(true)}
+        <div className="border-t border-slate-600/30">{renderLogout(true)}</div>
       </aside>
 
       <aside
-        className={`fixed left-0 top-0 z-50 hidden h-full border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-all duration-300 lg:block ${
+        className={`fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-all duration-300 lg:flex ${
           collapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="flex items-center gap-3 border-b border-slate-600/30 px-4 py-5">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
-            <Waves className="h-6 w-6 text-teal-200" />
-          </div>
-
-          {!collapsed && (
-            <div>
-              <h1 className="text-lg font-bold text-white">SmartAqua</h1>
-              <p className="text-xs text-teal-300">AquariTech Solutions</p>
-            </div>
-          )}
-        </div>
-
-        <nav className="flex-1 py-4 overflow-y-auto">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
-                  isActive
-                    ? 'border-r-2 border-teal-300 bg-teal-400/12 text-teal-200'
-                    : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
-                }`}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
+        <div className="border-b border-slate-600/30 px-5 py-5">{renderBrand(!collapsed)}</div>
+        {renderNav(!collapsed)}
         <div className="border-t border-slate-600/30">
+          {renderLogout(!collapsed)}
           <button
-            onClick={onLogout}
-            className={`w-full flex items-center gap-3 px-4 py-4 text-red-400 hover:bg-red-500/10 transition-all ${
-              collapsed ? 'justify-center' : ''
-            }`}
-            title="Sign Out"
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            className={`flex w-full items-center justify-center border-t border-slate-600/30 py-4 text-slate-300 transition-colors hover:text-white ${insetFocus}`}
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">Sign Out</span>}
-          </button>
-
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="flex w-full items-center justify-center border-t border-slate-600/30 py-4 text-slate-400 transition-colors hover:text-white"
-          >
-            {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
         </div>
       </aside>

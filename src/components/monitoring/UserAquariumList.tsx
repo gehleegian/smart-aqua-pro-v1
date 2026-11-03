@@ -22,7 +22,7 @@ export function UserAquariumList({
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-white">Monitoring</h3>
+            <h3 className="text-base font-semibold text-white">Monitoring</h3>
             <p className="mt-1 text-sm text-slate-400">{userName}</p>
           </div>
           <Button variant="secondary" onClick={onRefresh}>
@@ -47,7 +47,7 @@ export function UserAquariumList({
                 </Badge>
               </div>
               <p className="mt-2 text-sm text-slate-400">
-                {aquarium.temp.toFixed(1)} C · {aquarium.level}% level · {aquarium.quality}% TDS
+                {aquarium.temp.toFixed(1)}°C · {aquarium.level}% level · {aquarium.quality}% TDS
               </p>
             </button>
           ))}

@@ -3,11 +3,13 @@ import type { AquariumDirectoryEntry } from '../../types/aquarium';
 import type { DashboardSummaryCard } from '../../types/dashboard';
 import type { UserData } from '../../types/user';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import { SummaryGrid } from './SummaryGrid';
 
 interface AdminDashboardViewProps {
   summaryCards: DashboardSummaryCard[];
   users: UserData[];
   aquariums: AquariumDirectoryEntry[];
+  onNavigate: (page: string) => void;
 }
 
 function formatDate(value?: string) {
@@ -21,36 +23,11 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(date);
 }
 
-function SummaryGrid({ cards }: { cards: DashboardSummaryCard[] }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => {
-        const Icon = card.icon;
-
-        return (
-          <Card key={card.title}>
-            <CardContent>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-slate-400">{card.title}</p>
-                  <p className="mt-1 text-2xl font-semibold text-white">{card.value}</p>
-                </div>
-                <div className={`rounded-lg p-3 ${card.iconWrapperClassName}`}>
-                  <Icon className={`h-5 w-5 ${card.iconClassName}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
 export function AdminDashboardView({
   summaryCards,
   users,
   aquariums,
+  onNavigate,
 }: AdminDashboardViewProps) {
   const aquariumCountByOwner = new Map<string, number>();
 
@@ -76,7 +53,7 @@ export function AdminDashboardView({
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-white">System Membership Overview</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-slate-300">
           Registration and aquarium ownership records only. Live readings and device controls are not available to administrators.
         </p>
       </div>
@@ -85,74 +62,81 @@ export function AdminDashboardView({
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold text-white">Recent Registrations</h3>
+          <CardHeader className="flex items-center justify-between gap-4">
+            <h3 className="text-base font-semibold text-white">Recent Registrations</h3>
+            <button
+              type="button"
+              onClick={() => onNavigate('users')}
+              className="rounded text-sm font-medium text-teal-200 transition-colors hover:text-teal-100"
+            >
+              View all
+            </button>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <div>
+            <div className="divide-y divide-slate-600/25">
               {recentUsers.length === 0 ? (
-                <p className="text-sm text-slate-400">No registered accounts yet.</p>
+                <p className="px-6 py-4 text-sm text-slate-300">No registered accounts yet.</p>
               ) : (
                 recentUsers.map((user) => (
                   <div
                     key={user.id || user.email}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-600/25 bg-slate-900/30 px-4 py-3"
+                    className="flex items-center justify-between gap-4 px-6 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <UserRound className="h-5 w-5 flex-shrink-0 text-teal-200" />
+                      <UserRound className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden="true" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-white">{user.name || 'Unnamed user'}</p>
-                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                        <p className="truncate text-xs text-slate-300">{user.email}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-300">{user.role}</p>
-                      <p className="text-xs text-slate-500">{formatDate(user.createdAt)}</p>
+                      <p className="text-xs text-slate-300">{formatDate(user.createdAt)}</p>
                     </div>
                   </div>
                 ))
               )}
             </div>
-          </CardContent>
+          </div>
         </Card>
 
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">Aquarium Ownership</h3>
+            <h3 className="text-base font-semibold text-white">Aquarium Ownership</h3>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <div>
+            <div className="divide-y divide-slate-600/25">
               {aquariums.length === 0 ? (
-                <p className="text-sm text-slate-400">No aquarium profiles are registered.</p>
+                <p className="px-6 py-4 text-sm text-slate-300">No aquarium profiles are registered.</p>
               ) : (
                 aquariums.slice(0, 5).map((aquarium) => (
                   <div
                     key={aquarium.id}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-600/25 bg-slate-900/30 px-4 py-3"
+                    className="flex items-center justify-between gap-4 px-6 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <Fish className="h-5 w-5 flex-shrink-0 text-sky-300" />
+                      <Fish className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden="true" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-white">{aquarium.name}</p>
-                        <p className="truncate text-xs text-slate-400">Owner: {aquarium.ownerName}</p>
+                        <p className="truncate text-xs text-slate-300">Owner: {aquarium.ownerName}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-slate-500">{aquarium.tankType || 'Tank type not recorded'}</span>
+                    <span className="text-xs text-slate-300">{aquarium.tankType || 'Tank type not recorded'}</span>
                   </div>
                 ))
               )}
             </div>
-          </CardContent>
+          </div>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white">Users Without Registered Aquariums</h3>
+          <h3 className="text-base font-semibold text-white">Users Without Registered Aquariums</h3>
         </CardHeader>
         <CardContent>
           {caretakersWithoutAquariums.length === 0 ? (
-            <p className="text-sm text-slate-400">Every User/Caretaker account has at least one aquarium.</p>
+            <p className="text-sm text-slate-300">Every User/Caretaker account has at least one aquarium.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {caretakersWithoutAquariums.map((user) => (

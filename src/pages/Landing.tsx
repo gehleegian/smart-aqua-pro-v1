@@ -1,6 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Waves, Zap, ArrowRight, Mail, Phone, MapPin } from 'lucide-react';
-import aquariumHero from '../assets/hero.png';
+import {
+  Activity,
+  ArrowRight,
+  Bell,
+  BarChart3,
+  Building2,
+  Cpu,
+  Droplets,
+  FlaskConical,
+  Home,
+  Mail,
+  MapPin,
+  Phone,
+  ShieldCheck,
+  Smartphone,
+  Thermometer,
+  TriangleAlert,
+  Waves,
+  Zap,
+} from 'lucide-react';
+import UnderwaterBackground from '../components/ui/UnderwaterBackground';
 
 type FeedPellet = {
   id: string;
@@ -197,6 +216,70 @@ function createFeedPellet(x: number, y: number, now: number, index: number): Fee
 }
 
 const initialFishStates = aquariumFish.map(createFishState);
+
+const focusRing =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300';
+const navLinkClassName = `rounded text-sm text-slate-200 transition-colors hover:text-white ${focusRing}`;
+const glassCardClassName =
+  'rounded-2xl border border-teal-100/10 bg-slate-950/55 shadow-lg shadow-slate-950/20 transition-colors hover:border-teal-200/30';
+const primaryButtonClassName = `inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 font-semibold text-white shadow-lg shadow-teal-950/30 transition-colors hover:bg-teal-500 ${focusRing}`;
+const fieldClassName =
+  'w-full rounded-lg border border-slate-600/50 bg-slate-950/45 px-4 py-2.5 text-sm text-slate-50 placeholder-slate-400 focus:border-teal-300 focus:outline-2 focus:outline-offset-1 focus:outline-teal-300/60';
+
+function BrandMark() {
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/15 ring-1 ring-teal-300/30">
+      <Waves className="h-5 w-5 text-teal-200" aria-hidden="true" />
+    </div>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="mx-auto mb-12 max-w-2xl text-center">
+      <p className="mb-3 text-sm font-semibold text-teal-200">{eyebrow}</p>
+      <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">{title}</h2>
+      {description && <p className="mt-4 leading-relaxed text-slate-200">{description}</p>}
+    </div>
+  );
+}
+
+function TelemetryChip({
+  icon: Icon,
+  label,
+  value,
+  className,
+  iconClassName,
+  duration,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  className: string;
+  iconClassName: string;
+  duration: string;
+}) {
+  return (
+    <div
+      className={`absolute z-40 flex items-center gap-2 rounded-lg border border-teal-100/15 bg-slate-950/80 px-3 py-2 shadow-lg shadow-slate-950/30 ${className}`}
+      style={{ animation: `float ${duration} ease-in-out infinite` }}
+    >
+      <Icon className={`h-4 w-4 ${iconClassName}`} />
+      <div>
+        <p className="text-xs text-slate-300">{label}</p>
+        <p className="text-sm font-semibold text-white">{value}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Landing({ onGetStarted }: { onGetStarted: () => void }) {
   const [feeds, setFeeds] = useState<FeedPellet[]>([]);
@@ -406,114 +489,90 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="relative min-h-screen overflow-x-clip bg-slate-950">
+      <UnderwaterBackground descendOnScroll />
 
-      <nav className="fixed top-0 z-50 w-full border-b border-slate-600/25 bg-slate-950/75 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 overflow-hidden">
-              <img
-                src="/smartaqua-logo.png"
-                alt="SmartAqua logo"
-                className="w-full h-full object-contain"
-              />
+      <nav aria-label="Main" className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between rounded-xl border border-teal-100/15 bg-slate-950/65 px-3 shadow-lg shadow-slate-950/25 backdrop-blur-md md:px-4">
+          <a href="#home" className={`flex items-center gap-3 rounded-lg ${focusRing}`}>
+            <BrandMark />
+            <span className="text-base font-bold text-white">
+              SmartAqua <span className="text-teal-200">Pro</span>
+            </span>
+          </a>
+          <div className="flex items-center gap-6">
+            <div className="hidden items-center gap-6 md:flex">
+              <a href="#home" className={navLinkClassName}>Home</a>
+              <a href="#features" className={navLinkClassName}>Features</a>
+              <a href="#about" className={navLinkClassName}>About</a>
+              <a href="#team" className={navLinkClassName}>Team</a>
+              <a href="#contact" className={navLinkClassName}>Contact</a>
             </div>
-            <span className="text-lg font-bold text-white">SmartAqua <span className="text-teal-200">Pro</span></span>
+            <button
+              type="button"
+              onClick={onGetStarted}
+              className={`${primaryButtonClassName} px-4 py-2 text-sm`}
+            >
+              Login
+            </button>
           </div>
-          <div className="hidden md:flex items-center gap-6">
-            <a href="#home" className="text-sm text-slate-400 hover:text-white transition-colors">Home</a>
-            <a href="#features" className="text-sm text-slate-400 hover:text-white transition-colors">Features</a>
-            <a href="#about" className="text-sm text-slate-400 hover:text-white transition-colors">About</a>
-            <a href="#team" className="text-sm text-slate-400 hover:text-white transition-colors">Team</a>
-            <a href="#contact" className="text-sm text-slate-400 hover:text-white transition-colors">Contact</a>
-            <button onClick={onGetStarted} className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500">Login</button>
-          </div>
-          <button onClick={onGetStarted} className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500 md:hidden">Login</button>
         </div>
       </nav>
 
-      {/* Hero */}
-      <section id="home" className="relative overflow-hidden pt-32 pb-20 px-6">
-        <div className="absolute inset-0">
-          <img
-            src={aquariumHero}
-            alt=""
-            className="aquarium-hero-motion h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-slate-950/55" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/35" />
-          <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-slate-950 to-transparent" />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <main className="relative z-10">
+        <section id="home" className="scroll-mt-24 px-4 pb-20 pt-32 sm:px-6 md:min-h-screen md:pt-40">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
             <div>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-teal-300/25 bg-teal-400/10 px-4 py-1.5 text-xs text-teal-200">
-                <Zap className="w-3.5 h-3.5" /> IoT-Based Aquarium Management System
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-teal-200/25 bg-slate-950/50 px-4 py-1.5 text-xs font-medium text-teal-100">
+                <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+                IoT-Based Aquarium Management System
               </div>
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
-                Smart Aquarium<br />
-                <span className="bg-gradient-to-r from-teal-200 to-sky-300 bg-clip-text text-transparent">Monitoring, Automation</span><br />
-                & Management
+              <h1 className="mb-6 text-4xl font-bold leading-[1.08] tracking-tight text-white [text-shadow:0_2px_24px_rgba(8,33,43,0.65)] sm:text-5xl xl:text-[3.5rem]">
+                Smart Aquarium Monitoring, Automation & Management
               </h1>
-              <p className="text-base text-slate-400 mb-8 leading-relaxed">
+              <p className="mb-8 max-w-xl text-lg leading-relaxed text-slate-100 [text-shadow:0_1px_12px_rgba(8,33,43,0.8)]">
                 SmartAqua Pro is an IoT-based intelligent aquarium monitoring, automation, and management system that provides real-time monitoring, automated control, and centralized digital supervision of aquarium environments.
               </p>
-              <div className="flex items-center gap-4">
-                <button onClick={onGetStarted} className="flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500">
-                  Get Started <ArrowRight className="w-4 h-4" />
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onGetStarted}
+                  className={`${primaryButtonClassName} px-6 py-3 text-sm`}
+                >
+                  Get Started <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </button>
-                <a href="#features" className="rounded-xl border border-slate-600/35 bg-slate-800/45 px-6 py-3 text-sm font-medium text-slate-300 transition-all hover:bg-slate-700/60">Learn More</a>
+                <a
+                  href="#features"
+                  className={`rounded-lg border border-teal-100/20 bg-slate-950/45 px-6 py-3 text-sm font-semibold text-slate-50 transition-colors hover:bg-slate-900/70 ${focusRing}`}
+                >
+                  Learn More
+                </a>
               </div>
-              <div className="grid grid-cols-4 gap-4 mt-10">
+              <dl className="mt-10 grid max-w-xl grid-cols-2 gap-px overflow-hidden rounded-xl border border-teal-100/10 bg-teal-100/10 sm:grid-cols-4">
                 {[
                   { value: '4', label: 'Aquariums' },
                   { value: '5+', label: 'Sensors' },
                   { value: '6+', label: 'Rules' },
                   { value: '3', label: 'User Roles' },
                 ].map((stat) => (
-                  <div key={stat.label} className="rounded-xl border border-slate-600/30 bg-slate-800/40 py-3 text-center">
-                    <p className="text-xl font-bold text-teal-200">{stat.value}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
+                  <div key={stat.label} className="bg-slate-950/70 px-4 py-3">
+                    <dd className="text-xl font-bold text-white">{stat.value}</dd>
+                    <dt className="mt-0.5 text-xs text-slate-300">{stat.label}</dt>
                   </div>
                 ))}
-              </div>
+              </dl>
             </div>
 
-            <div className="flex justify-center">
-              <div className="relative h-[30rem] w-110 rounded-[2rem] border-[10px] border-slate-600/55 bg-slate-900 shadow-2xl shadow-slate-950/35">
-                <div className="absolute -top-2 left-10 right-10 h-3 rounded-full bg-gradient-to-r from-slate-500 via-slate-300 to-slate-600 shadow-lg shadow-teal-950/20" />
-                <div className="absolute -bottom-3 left-8 right-8 h-5 rounded-b-2xl bg-gradient-to-b from-slate-700 to-slate-950 shadow-lg shadow-black/40" />
-                <div className="absolute inset-0 rounded-[1.45rem] border border-white/15 pointer-events-none z-40" />
+            <div className="relative mx-auto w-full max-w-md">
+              <div className="relative h-[26rem]">
                 <div
-                  className="absolute inset-1 cursor-pointer overflow-hidden rounded-[1.35rem] border-2 border-teal-200/20 bg-gradient-to-b from-teal-200/10 via-sky-500/12 to-slate-950/35 shadow-inner shadow-teal-200/10"
+                  className={`relative h-full cursor-pointer overflow-hidden rounded-2xl ${focusRing}`}
                   role="button"
                   tabIndex={0}
                   aria-label="Feed the virtual aquarium"
                   onPointerDown={handleAquariumFeed}
                   onKeyDown={handleAquariumKeyDown}
                 >
-                  <div className="absolute left-3 top-4 bottom-12 w-px bg-white/25 pointer-events-none" />
-                  <div className="pointer-events-none absolute bottom-16 right-4 top-6 w-px bg-teal-100/10" />
-                  <div className="pointer-events-none absolute left-8 right-8 top-3 h-px bg-white/30" />
-                  <div className="h-8 bg-gradient-to-b from-teal-300/10 to-transparent">
-                    <div className="w-full h-full flex">
-                      <div className="h-full w-1/3 animate-pulse rounded-b-full bg-teal-300/5" />
-                      <div className="h-full w-1/4 animate-pulse rounded-b-full bg-teal-300/10" style={{ animationDelay: '0.5s' }} />
-                    </div>
-                  </div>
-                  <div className="absolute left-1/4 bottom-0">
-                    <div className="h-3 w-3 animate-bounce rounded-full bg-teal-300/20" style={{ animationDuration: '3s', animationIterationCount: 'infinite' }} />
-                  </div>
-                  <div className="absolute left-1/2 bottom-4">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-teal-300/15" style={{ animationDuration: '2.5s', animationDelay: '1s', animationIterationCount: 'infinite' }} />
-                  </div>
-                  <div className="absolute left-2/3 bottom-2">
-                    <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-teal-300/15" style={{ animationDuration: '3.5s', animationDelay: '0.3s', animationIterationCount: 'infinite' }} />
-                  </div>
-                  <div className="absolute left-1/3 bottom-6">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-teal-300/10" style={{ animationDuration: '4s', animationDelay: '1.5s', animationIterationCount: 'infinite' }} />
-                  </div>
                   {feeds.map((feed) => (
                     <div
                       key={feed.id}
@@ -569,231 +628,190 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
                       </span>
                     </div>
                   ))}
-                  <div className="absolute bottom-0 left-6 text-3xl">🌿</div>
-                  <div className="absolute bottom-0 right-8 text-2xl">🌱</div>
-                  <div className="absolute bottom-0 left-1/2 text-2xl">🌿</div>
-                  <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-amber-950/60 via-amber-900/25 to-transparent rounded-b-[1.2rem]" />
-                  <div className="absolute bottom-1 left-6 right-8 h-3 rounded-full bg-gradient-to-r from-stone-700/50 via-amber-700/30 to-stone-800/50 blur-[1px]" />
-                  <div className="absolute bottom-3 left-12 w-2 h-2 rounded-full bg-stone-400/40" />
-                  <div className="absolute bottom-2 left-28 w-1.5 h-1.5 rounded-full bg-amber-200/30" />
-                  <div className="absolute bottom-4 right-20 w-2.5 h-2.5 rounded-full bg-stone-500/40" />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-teal-500/5 to-transparent" />
                 </div>
-                <div className="absolute -top-4 -right-4 bg-slate-800/90 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm shadow-lg shadow-emerald-500/10" style={{ animation: 'float 4s ease-in-out infinite' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🌡️</span>
-                    <div>
-                      <p className="text-xs text-slate-500">Temp</p>
-                      <p className="text-sm font-bold text-emerald-400">26.4°C ✓</p>
+              </div>
+              <TelemetryChip icon={Thermometer} label="Temp" value="26.4°C" duration="4s" iconClassName="text-emerald-300" className="right-2 top-2" />
+              <TelemetryChip icon={Droplets} label="Level" value="85%" duration="5s" iconClassName="text-teal-200" className="left-0 top-1/3" />
+              <TelemetryChip icon={TriangleAlert} label="Alert" value="1 Warning" duration="4.5s" iconClassName="text-amber-300" className="bottom-8 right-6" />
+              <p className="mt-4 text-center text-xs text-slate-100 [text-shadow:0_1px_8px_rgba(8,33,43,0.9)]">Tap the water to feed the fish. Values shown are samples.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" className="scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <SectionHeading
+              eyebrow="Platform"
+              title="Key Features"
+              description="Everything you need to monitor, automate, and manage your aquarium ecosystem."
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                { icon: Activity, title: 'Real-time Monitoring', desc: 'Track temperature, water level, water purity (TDS level), and pH in real-time with live sensor data.' },
+                { icon: Cpu, title: 'Intelligent Automation', desc: 'Rule-based automation for feeding, lighting, and filtration with bioload-based fish classification.' },
+                { icon: Bell, title: 'Alert & Notification', desc: 'Instant warnings for abnormal conditions, system risks, and power outage detection.' },
+                { icon: BarChart3, title: 'Data Logging & Reports', desc: 'Historical data analysis, interactive charts, and exportable CSV reports for long-term management.' },
+                { icon: ShieldCheck, title: 'User Management', desc: 'Role-based access control with Admin, Operator, and Viewer permissions.' },
+                { icon: Smartphone, title: 'Mobile Accessible', desc: 'Monitor and control your aquariums anytime, anywhere through web and mobile.' },
+              ].map((feature) => {
+                const Icon = feature.icon;
+
+                return (
+                  <div key={feature.title} className={`${glassCardClassName} p-6`}>
+                    <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-lg bg-teal-500/15 ring-1 ring-teal-300/25">
+                      <Icon className="h-5 w-5 text-teal-200" aria-hidden="true" />
                     </div>
+                    <h3 className="mb-2 text-lg font-semibold text-white">{feature.title}</h3>
+                    <p className="text-sm leading-relaxed text-slate-200">{feature.desc}</p>
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section id="about" className="scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <SectionHeading eyebrow="Why SmartAqua" title="About the Project" />
+            <div className="mx-auto mb-10 max-w-3xl space-y-5 text-center leading-relaxed text-slate-100">
+              <p>Aquarium management requires continuous monitoring of environmental conditions such as water temperature, water level, water purity (TDS level), lighting, and feeding schedules to maintain a stable and healthy aquatic ecosystem.</p>
+              <p>SmartAqua Pro addresses these challenges by integrating IoT-based sensing, rule-based automation, real-time alerts, and digital record management into a single platform.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {[
+                { icon: Home, title: 'Home Aquariums', desc: 'Help hobbyists monitor water conditions, automate feeding and lighting, and reduce risks.' },
+                { icon: Building2, title: 'Schools & Facilities', desc: 'Assist schools in maintaining aquarium stability and reducing manual care dependency.' },
+                { icon: FlaskConical, title: 'Research & Labs', desc: 'Support research with data logging, historical analysis, and long-term management.' },
+              ].map((audience) => {
+                const Icon = audience.icon;
+
+                return (
+                  <div key={audience.title} className={`${glassCardClassName} p-6`}>
+                    <Icon className="mb-4 h-6 w-6 text-teal-200" aria-hidden="true" />
+                    <h3 className="mb-2 font-semibold text-white">{audience.title}</h3>
+                    <p className="text-sm leading-relaxed text-slate-200">{audience.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section id="objectives" className="scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-4xl">
+            <SectionHeading eyebrow="Goals" title="Project Objectives" />
+            <ol className="overflow-hidden rounded-2xl border border-teal-100/10 bg-slate-950/55">
+              {[
+                { num: '01', text: 'Develop an IoT-based data collection and monitoring system that gathers real-time aquarium parameters such as temperature, water level, and water purity (TDS level).' },
+                { num: '02', text: 'Design and implement rule-based intelligent automation for feeding, lighting, and filtration using predefined thresholds, conditions, schedules, and bioload-based fish classification.' },
+                { num: '03', text: 'Develop a centralized monitoring platform (web and mobile application) for real-time monitoring, remote control, user management, and improved accessibility.' },
+                { num: '04', text: 'Integrate an alert and notification system that provides real-time warnings for abnormal conditions, system risks, and power outages.' },
+                { num: '05', text: 'Implement data logging, historical analysis, and reporting features to support system evaluation, decision-making, and long-term aquarium management.' },
+              ].map((objective) => (
+                <li key={objective.num} className="flex items-start gap-4 border-b border-teal-100/10 p-5 last:border-b-0 sm:gap-6 sm:p-6">
+                  <span className="flex-shrink-0 text-sm font-bold text-teal-200">{objective.num}</span>
+                  <p className="text-sm leading-relaxed text-slate-100">{objective.text}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section id="team" className="scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-4xl">
+            <SectionHeading
+              eyebrow="The people"
+              title="Development Team"
+              description="BS Information Technology • Institute of Computing • DNSC"
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {[
+                { name: 'Dennis Mark L. Jamero', role: 'Lead Developer', initials: 'DM' },
+                { name: 'Wendyl Ziv S. Arellano', role: 'Backend Developer', initials: 'WA' },
+                { name: 'Gian Carlo R. Marin', role: 'IoT & Hardware', initials: 'GM' },
+              ].map((member) => (
+                <div key={member.name} className={`${glassCardClassName} p-6 text-center`}>
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal-500/20 ring-1 ring-teal-300/30">
+                    <span className="text-lg font-bold text-white">{member.initials}</span>
+                  </div>
+                  <h3 className="font-semibold text-white">{member.name}</h3>
+                  <p className="mt-1 text-sm text-teal-200">{member.role}</p>
                 </div>
-                <div className="absolute top-1/3 -left-6 rounded-xl border border-teal-300/25 bg-slate-800/85 px-3 py-2 shadow-lg shadow-teal-950/10 backdrop-blur-sm" style={{ animation: 'float 5s ease-in-out infinite', animationDelay: '1s' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">💧</span>
-                    <div>
-                      <p className="text-xs text-slate-500">Level</p>
-                      <p className="text-sm font-bold text-teal-200">85%</p>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="contact" className="scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-5xl">
+            <SectionHeading
+              eyebrow="Contact"
+              title="Contact Us"
+              description="Have questions? Get in touch with the SmartAqua Pro team."
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`${glassCardClassName} space-y-6 p-6`}>
+                {[
+                  { icon: MapPin, title: 'Location', value: 'Davao del Norte State College, Panabo City' },
+                  { icon: Mail, title: 'Email', value: 'smartaqua.pro@dnsc.edu.ph' },
+                  { icon: Phone, title: 'Phone', value: '09912879123' },
+                ].map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <div key={item.title} className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-teal-500/15">
+                        <Icon className="h-5 w-5 text-teal-200" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-white">{item.title}</h3>
+                        <p className="break-words text-sm text-slate-200">{item.value}</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="absolute -bottom-4 right-4 bg-slate-800/90 border border-amber-500/30 rounded-xl px-3 py-2 backdrop-blur-sm shadow-lg shadow-amber-500/10" style={{ animation: 'float 4.5s ease-in-out infinite', animationDelay: '2s' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🚨</span>
-                    <div>
-                      <p className="text-xs text-slate-500">Alert</p>
-                      <p className="text-sm font-bold text-amber-400">1 Warning</p>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Key Features - NOW FIRST */}
-      <section id="features" className="py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-3">Key Features</h2>
-            <p className="text-slate-400 max-w-lg mx-auto">Everything you need to monitor, automate, and manage your aquarium ecosystem.</p>
-            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-teal-400"></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { icon: '🌡️', title: 'Real-time Monitoring', desc: 'Track temperature, water level, water purity (TDS level), and pH in real-time with live sensor data.', color: 'from-orange-500 to-red-500' },
-              { icon: '⚙️', title: 'Intelligent Automation', desc: 'Rule-based automation for feeding, lighting, and filtration with bioload-based fish classification.', color: 'from-purple-500 to-indigo-500' },
-              { icon: '🔔', title: 'Alert & Notification', desc: 'Instant warnings for abnormal conditions, system risks, and power outage detection.', color: 'from-amber-500 to-orange-500' },
-              { icon: '📊', title: 'Data Logging & Reports', desc: 'Historical data analysis, interactive charts, and exportable CSV reports for long-term management.', color: 'from-emerald-500 to-green-500' },
-              { icon: '🛡️', title: 'User Management', desc: 'Role-based access control with Admin, Operator, and Viewer permissions.', color: 'from-red-500 to-pink-500' },
-              { icon: '📱', title: 'Mobile Accessible', desc: 'Monitor and control your aquariums anytime, anywhere through web and mobile.', color: 'from-teal-500 to-sky-500' },
-            ].map((feature) => (
-              <div key={feature.title} className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6 transition-all hover:border-teal-300/35">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-4 text-xl`}>
-                  {feature.icon}
-                </div>
-                <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-sm text-slate-400">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* About - NOW SECOND */}
-      <section id="about" className="bg-slate-900/30 px-6 py-20">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-3">About the Project</h2>
-            <div className="mx-auto h-1 w-16 rounded-full bg-teal-400"></div>
-          </div>
-          <p className="text-center max-w-3xl mx-auto text-slate-400 leading-relaxed mb-6">Aquarium management requires continuous monitoring of environmental conditions such as water temperature, water level, water purity (TDS level), lighting, and feeding schedules to maintain a stable and healthy aquatic ecosystem.</p>
-          <p className="text-center max-w-3xl mx-auto text-slate-400 leading-relaxed">SmartAqua Pro addresses these challenges by integrating IoT-based sensing, rule-based automation, real-time alerts, and digital record management into a single platform.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
-            <div className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6 text-center">
-              <div className="text-3xl mb-3">🏠</div>
-              <h4 className="text-white font-semibold mb-2">Home Aquariums</h4>
-              <p className="text-sm text-slate-400">Help hobbyists monitor water conditions, automate feeding and lighting, and reduce risks.</p>
-            </div>
-            <div className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6 text-center">
-              <div className="text-3xl mb-3">🏫</div>
-              <h4 className="text-white font-semibold mb-2">Schools & Facilities</h4>
-              <p className="text-sm text-slate-400">Assist schools in maintaining aquarium stability and reducing manual care dependency.</p>
-            </div>
-            <div className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6 text-center">
-              <div className="text-3xl mb-3">🔬</div>
-              <h4 className="text-white font-semibold mb-2">Research & Labs</h4>
-              <p className="text-sm text-slate-400">Support research with data logging, historical analysis, and long-term management.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Objectives */}
-      <section id="objectives" className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-3">Project Objectives</h2>
-            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-teal-400"></div>
-          </div>
-          <div className="space-y-4">
-            {[
-              { num: '01', text: 'Develop an IoT-based data collection and monitoring system that gathers real-time aquarium parameters such as temperature, water level, and water purity (TDS level).' },
-              { num: '02', text: 'Design and implement rule-based intelligent automation for feeding, lighting, and filtration using predefined thresholds, conditions, schedules, and bioload-based fish classification.' },
-              { num: '03', text: 'Develop a centralized monitoring platform (web and mobile application) for real-time monitoring, remote control, user management, and improved accessibility.' },
-              { num: '04', text: 'Integrate an alert and notification system that provides real-time warnings for abnormal conditions, system risks, and power outages.' },
-              { num: '05', text: 'Implement data logging, historical analysis, and reporting features to support system evaluation, decision-making, and long-term aquarium management.' },
-            ].map((obj) => (
-              <div key={obj.num} className="flex items-start gap-4 rounded-xl border border-slate-600/30 bg-slate-800/40 p-5 transition-all hover:border-teal-300/35">
-                <span className="flex-shrink-0 text-2xl font-bold text-teal-200">{obj.num}</span>
-                <p className="text-sm text-slate-300 pt-1">{obj.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team */}
-      <section id="team" className="bg-slate-900/30 px-6 py-20">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-3">Development Team</h2>
-          <p className="text-slate-400 mb-10">BS Information Technology • Institute of Computing • DNSC</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { name: 'Dennis Mark L. Jamero', role: 'Lead Developer', initials: 'DM' },
-              { name: 'Wendyl Ziv S. Arellano', role: 'Backend Developer', initials: 'WA' },
-              { name: 'Gian Carlo R. Marin', role: 'IoT & Hardware', initials: 'GM' },
-            ].map((member) => (
-              <div key={member.name} className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6 transition-all hover:border-teal-300/35">
-                <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-sky-600">
-                  <span className="text-2xl font-bold text-white">{member.initials}</span>
-                </div>
-                <h4 className="text-white font-semibold text-lg">{member.name}</h4>
-                <p className="mt-1 text-sm text-teal-200">{member.role}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact */}
-      <section id="contact" className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-3">Contact Us</h2>
-            <p className="text-slate-400">Have questions? Get in touch with the SmartAqua Pro team.</p>
-            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-teal-400"></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-teal-400/15"><MapPin className="h-5 w-5 text-teal-200" /></div>
-                <div>
-                  <h4 className="text-white font-medium">Location</h4>
-                  <p className="text-sm text-slate-400">Davao del Norte State College, Panabo City</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-teal-400/15"><Mail className="h-5 w-5 text-teal-200" /></div>
-                <div>
-                  <h4 className="text-white font-medium">Email</h4>
-                  <p className="text-sm text-slate-400">smartaqua.pro@dnsc.edu.ph</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-teal-400/15"><Phone className="h-5 w-5 text-teal-200" /></div>
-                <div>
-                  <h4 className="text-white font-medium">Phone</h4>
-                  <p className="text-sm text-slate-400">09912879123</p>
+              <div className={`${glassCardClassName} p-6`}>
+                <h3 className="mb-4 text-lg font-semibold text-white">Send a Message</h3>
+                <div className="space-y-3">
+                  <input type="text" aria-label="Your Name" placeholder="Your Name" className={fieldClassName} />
+                  <input type="email" aria-label="Your Email" placeholder="Your Email" className={fieldClassName} />
+                  <textarea aria-label="Your Message" placeholder="Your Message" rows={4} className={`${fieldClassName} resize-none`} />
+                  <button type="button" className={`${primaryButtonClassName} w-full py-2.5 text-sm`}>
+                    Send Message
+                  </button>
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border border-slate-600/30 bg-slate-800/40 p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Send a Message</h3>
-              <div className="space-y-3">
-                <input type="text" placeholder="Your Name" className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30" />
-                <input type="email" placeholder="Your Email" className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30" />
-                <textarea placeholder="Your Message" rows={4} className="w-full resize-none rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30" />
-                <button className="w-full rounded-lg bg-teal-600 py-2.5 text-sm font-medium text-white transition-all hover:bg-teal-500">Send Message</button>
-              </div>
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA */}
-      <section className="bg-slate-900/30 px-6 py-20">
-        <div className="max-w-3xl mx-auto text-center">
-          <div className="rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-500/15 to-sky-600/10 p-10">
-            <Waves className="mx-auto mb-4 h-12 w-12 text-teal-200" />
-            <h2 className="text-3xl font-bold text-white mb-3">Ready to Get Started?</h2>
-            <p className="text-slate-400 mb-6">Experience intelligent aquarium monitoring and automation with SmartAqua Pro.</p>
-            <button onClick={onGetStarted} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-8 py-3 text-base font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500">
-              Launch Dashboard <ArrowRight className="w-4 h-4" />
+        <section className="px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-teal-200/25 bg-slate-950/65 p-8 text-center shadow-xl shadow-slate-950/30 sm:p-12">
+            <h2 className="mb-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Ready to Get Started?</h2>
+            <p className="mb-7 text-slate-200">Experience intelligent aquarium monitoring and automation with SmartAqua Pro.</p>
+            <button
+              type="button"
+              onClick={onGetStarted}
+              className={`${primaryButtonClassName} px-7 py-3 text-base`}
+            >
+              Launch Dashboard <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="py-8 px-6 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="relative z-10 border-t border-teal-100/10 bg-slate-950/70 px-4 py-8 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 overflow-hidden">
-              <img
-                src="/smartaqua-logo.png"
-                alt="SmartAqua logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <span className="text-sm text-slate-400">SmartAqua Pro © 2026</span>
+            <BrandMark />
+            <span className="text-sm text-slate-200">SmartAqua Pro © 2026</span>
           </div>
-          <div className="text-center">
-            <p className="text-sm text-slate-500">Davao del Norte State College</p>
-            <p className="text-xs text-slate-600">Institute of Computing • Panabo City, Davao del Norte</p>
+          <div>
+            <p className="text-sm text-slate-200">Davao del Norte State College</p>
+            <p className="text-xs text-slate-300">Institute of Computing • Panabo City, Davao del Norte</p>
           </div>
-          <div className="text-xs text-slate-600">BS Information Technology</div>
+          <div className="text-xs text-slate-300">BS Information Technology</div>
         </div>
       </footer>
     </div>

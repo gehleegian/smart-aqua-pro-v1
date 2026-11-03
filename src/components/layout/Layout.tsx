@@ -15,6 +15,7 @@ import Settings from '../../pages/Settings';
 import Login from '../../pages/Login';
 import Landing from '../../pages/Landing';
 import Signup from '../../pages/Signup';
+import ConfirmModal from '../ui/ConfirmModal';
 
 import {
   EmailVerificationRequiredError,
@@ -25,7 +26,7 @@ import {
 import type { UserData, UserRole } from '../../types/user';
 import { normalizeRole } from '../../utils/roleHelpers';
 
-const pages: Record<string, React.FC> = {
+const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = {
   dashboard: Dashboard,
   monitoring: Monitoring,
   automation: Automation,
@@ -62,6 +63,8 @@ export default function Layout() {
   const [appPage, setAppPage] = useState<AppPage>('landing');
   const [user, setUser] = useState<UserData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [loginNotice, setLoginNotice] = useState('');
@@ -163,6 +166,11 @@ export default function Layout() {
     }
   };
 
+  const handleConfirmLogout = () => {
+    setLogoutConfirmOpen(false);
+    void handleLogout();
+  };
+
   const handleThemeToggle = () => {
     setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
   };
@@ -262,9 +270,11 @@ export default function Layout() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         userRole={user.role}
-        onLogout={handleLogout}
+        onLogout={() => setLogoutConfirmOpen(true)}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
       />
 
       {sidebarOpen && (
@@ -274,19 +284,29 @@ export default function Layout() {
         />
       )}
 
-      <div className="lg:ml-64">
+      <div className={`transition-[margin] duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <Header
           currentPage={currentPage}
           user={user}
-          onLogout={handleLogout}
+          onLogout={() => setLogoutConfirmOpen(true)}
           onMenuClick={() => setSidebarOpen(true)}
           theme={theme}
           onThemeToggle={handleThemeToggle}
         />
         <main className="p-4 md:p-6">
-          <PageComponent />
+          <PageComponent onNavigate={handleNavigate} />
         </main>
       </div>
+
+      {logoutConfirmOpen && (
+        <ConfirmModal
+          title="Log out of SmartAqua Pro?"
+          confirmLabel="Log out"
+          danger
+          onConfirm={handleConfirmLogout}
+          onCancel={() => setLogoutConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
