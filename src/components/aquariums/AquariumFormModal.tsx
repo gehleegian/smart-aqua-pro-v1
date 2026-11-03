@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { X } from 'lucide-react';
 import type {
   AquariumFormData,
@@ -16,6 +17,7 @@ import {
 } from '../../utils/aquariumProfileCalculations';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import Modal from '../ui/Modal';
 
 interface AquariumFormModalProps {
   formData: AquariumFormData;
@@ -45,6 +47,7 @@ export function AquariumFormModal({
   onFieldChange,
   onFishWeightChange,
 }: AquariumFormModalProps) {
+  const titleId = useId();
   const bioloadCalculation = getFormBioloadCalculation(formData);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -60,16 +63,15 @@ export function AquariumFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm">
-      <button type="button" aria-label="Close modal" className="absolute inset-0 cursor-default" onClick={onClose} />
+    <Modal labelledBy={titleId} onClose={onClose} className="max-w-3xl overflow-hidden p-0">
       <form
         onSubmit={handleSubmit}
         noValidate
-        className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+        className="flex max-h-[92vh] w-full flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between gap-4 border-b border-slate-700 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">{getAquariumFormTitle(formMode)}</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-white">{getAquariumFormTitle(formMode)}</h2>
             {currentUserRole === 'Admin' && selectedOwnerName ? (
               <p className="mt-1 text-sm text-slate-400">Owner: {selectedOwnerName}</p>
             ) : null}
@@ -187,6 +189,6 @@ export function AquariumFormModal({
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

@@ -1,37 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { onIdTokenChanged, signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Dashboard from '../../pages/Dashboard';
-import Monitoring from '../../pages/Monitoring';
-import Alerts from '../../pages/Alerts';
-import DataLogs from '../../pages/DataLogs';
-import Aquariums from '../../pages/Aquariums';
-import Users from '../../pages/Users';
-import Settings from '../../pages/Settings';
-import Login from '../../pages/Login';
-import Landing from '../../pages/Landing';
-import Signup from '../../pages/Signup';
-import VerifyEmail from '../../pages/VerifyEmail';
-import Support from '../../pages/Support';
+import Dashboard from '../../views/Dashboard';
+import Monitoring from '../../views/Monitoring';
+import Automation from '../../views/Automation';
+import Alerts from '../../views/Alerts';
+import DataLogs from '../../views/DataLogs';
+import Aquariums from '../../views/Aquariums';
+import Users from '../../views/Users';
+import Settings from '../../views/Settings';
+import Login from '../../views/Login';
+import Landing from '../../views/Landing';
+import Signup from '../../views/Signup';
+import Support from '../../views/Support';
+import ConfirmModal from '../ui/ConfirmModal';
 
 import {
-  getCurrentUserProfile,
-  subscribeToCurrentUserProfile,
-} from '../../services/userService';
+  EmailVerificationRequiredError,
+  endUnverifiedSession,
+  isAuthFlowActive,
+  resolveSessionProfile,
+} from '../../services/authService';
 import type { UserData, UserRole } from '../../types/user';
-import {
-  getCurrentEmailAccessState,
-  isVerificationPolicyUnavailableError,
-  VERIFICATION_POLICY_UNAVAILABLE_MESSAGE,
-} from '../../services/emailVerificationPolicyService';
 import { normalizeRole } from '../../utils/roleHelpers';
 
-const pages: Record<string, React.FC> = {
+const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = {
   dashboard: Dashboard,
   monitoring: Monitoring,
+  automation: Automation,
   alerts: Alerts,
   datalogs: DataLogs,
   aquariums: Aquariums,
@@ -40,7 +39,7 @@ const pages: Record<string, React.FC> = {
   support: Support,
 };
 
-type AppPage = 'landing' | 'login' | 'signup' | 'verify-email' | 'app';
+type AppPage = 'landing' | 'login' | 'signup' | 'app';
 type ThemeMode = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'smartAquaTheme';
@@ -55,20 +54,27 @@ const getInitialTheme = (): ThemeMode => {
 };
 
 const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'users', 'support', 'settings'],
-  User: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'aquariums', 'support', 'settings'],
+  Admin: ['dashboard', 'users', 'settings', 'support'],
+  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings', 'support'],
 };
 
 export default function Layout() {
   const [currentPage, setCurrentPage] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 'dashboard';
+    }
+
     return localStorage.getItem('currentPage') || 'dashboard';
   });
   const [appPage, setAppPage] = useState<AppPage>('landing');
   const [user, setUser] = useState<UserData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [sessionError, setSessionError] = useState('');
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [loginNotice, setLoginNotice] = useState('');
+  const [verificationRequired, setVerificationRequired] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('currentPage', currentPage);
@@ -81,13 +87,20 @@ export default function Layout() {
   }, [theme]);
 
   useEffect(() => {
-    let unsubscribeProfile: (() => void) | undefined;
+    let latestRun = 0;
 
-    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
-      unsubscribeProfile?.();
-      unsubscribeProfile = undefined;
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      latestRun += 1;
+      const run = latestRun;
+      const isOutdated = () => run !== latestRun || isAuthFlowActive();
 
       try {
+        // Signup, login, and resend finish on their own page; acting on their
+        // temporary sign-ins here would unmount that page and hide its messages.
+        if (isOutdated()) {
+          return;
+        }
+
         if (!firebaseUser) {
           setUser(null);
           setAppPage('landing');
@@ -96,28 +109,9 @@ export default function Layout() {
           return;
         }
 
-        // Do not render the previous account while this account's trusted
-        // verification policy and profile are being resolved.
-        setLoadingAuth(true);
-        setUser(null);
-        setSessionError('');
+        const userProfile = await resolveSessionProfile(firebaseUser);
 
-        if ((await getCurrentEmailAccessState(firebaseUser)) !== 'access-allowed') {
-          setUser(null);
-          setAppPage('verify-email');
-          setLoadingAuth(false);
-          return;
-        }
-
-        const userProfile = await getCurrentUserProfile(firebaseUser.uid);
-
-        if (!userProfile) {
-          setUser(null);
-          setSessionError(
-            'Your credentials were accepted, but your SmartAqua Pro user profile was not found. Please contact the system administrator.'
-          );
-          setAppPage('login');
-          setLoadingAuth(false);
+        if (isOutdated()) {
           return;
         }
 
@@ -143,63 +137,26 @@ export default function Layout() {
           setCurrentPage('dashboard');
           localStorage.setItem('currentPage', 'dashboard');
         }
-
-        unsubscribeProfile = subscribeToCurrentUserProfile(
-          firebaseUser.uid,
-          (updatedProfile) => {
-            if (!updatedProfile) {
-              void signOut(auth).finally(() => {
-                setUser(null);
-                setAppPage('login');
-                setCurrentPage('dashboard');
-                localStorage.removeItem('currentPage');
-              });
-              return;
-            }
-
-            setUser((currentUser) => ({
-              ...updatedProfile,
-              name: updatedProfile.name,
-              email: updatedProfile.email,
-              role: normalizeRole(updatedProfile.role),
-              status: updatedProfile.status,
-              createdAt: updatedProfile.createdAt,
-              id: updatedProfile.id || currentUser?.id || firebaseUser.uid,
-            }));
-          },
-          () => {
-            setSessionError(
-              'Your profile access was denied. Your account may have been revoked or the deployed security rules may be incompatible.'
-            );
-            void signOut(auth).finally(() => {
-              setUser(null);
-              setAppPage('login');
-              setCurrentPage('dashboard');
-              localStorage.removeItem('currentPage');
-            });
-          },
-          (profileError) => {
-            console.error('User profile subscription failed:', profileError);
-          }
-        );
       } catch (error) {
         console.error('Failed to load user session:', error);
+
+        if (isOutdated()) {
+          return;
+        }
+
+        if (error instanceof EmailVerificationRequiredError) {
+          await endUnverifiedSession();
+          setVerificationRequired(true);
+        }
+
         setUser(null);
-        setSessionError(
-          isVerificationPolicyUnavailableError(error)
-            ? VERIFICATION_POLICY_UNAVAILABLE_MESSAGE
-            : 'Your sign-in succeeded, but SmartAqua Pro could not load your account. Please try again or contact the system administrator.'
-        );
         setAppPage('login');
       } finally {
         setLoadingAuth(false);
       }
     });
 
-    return () => {
-      unsubscribeProfile?.();
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
@@ -210,10 +167,14 @@ export default function Layout() {
       setAppPage('landing');
       setCurrentPage('dashboard');
       setSidebarOpen(false);
-      setSessionError('');
     } catch (error) {
       console.error('Logout failed:', error);
     }
+  };
+
+  const handleConfirmLogout = () => {
+    setLogoutConfirmOpen(false);
+    void handleLogout();
   };
 
   const handleThemeToggle = () => {
@@ -267,29 +228,11 @@ export default function Layout() {
   if (appPage === 'signup') {
     return (
       <Signup
-        onVerificationRequired={() => setAppPage('verify-email')}
-        onGoToLogin={() => {
-          void signOut(auth).finally(() => setAppPage('login'));
-        }}
-      />
-    );
-  }
-
-  if (appPage === 'verify-email' && auth.currentUser) {
-    return (
-      <VerifyEmail
-        email={auth.currentUser.email ?? ''}
-        onVerified={(userData) => {
-          setUser({
-            ...userData,
-            role: normalizeRole(userData.role),
-          });
-          setAppPage('app');
-        }}
-        onSignOut={async () => {
-          await signOut(auth);
+        onSignup={(message) => {
+          setLoginNotice(message);
           setAppPage('login');
         }}
+        onGoToLogin={() => setAppPage('login')}
       />
     );
   }
@@ -297,8 +240,11 @@ export default function Layout() {
   if (appPage === 'login' || !user) {
     return (
       <Login
+        infoMessage={loginNotice}
+        verificationRequired={verificationRequired}
         onLogin={(userData) => {
-          setSessionError('');
+          setLoginNotice('');
+          setVerificationRequired(false);
           setUser({
             ...userData,
             role: normalizeRole(userData.role),
@@ -306,14 +252,15 @@ export default function Layout() {
           setAppPage('app');
         }}
         onGoToSignup={() => {
-          setSessionError('');
+          setLoginNotice('');
+          setVerificationRequired(false);
           setAppPage('signup');
         }}
         onGoBack={() => {
-          setSessionError('');
+          setLoginNotice('');
+          setVerificationRequired(false);
           setAppPage('landing');
         }}
-        externalError={sessionError}
       />
     );
   }
@@ -329,9 +276,11 @@ export default function Layout() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         userRole={user.role}
-        onLogout={handleLogout}
+        onLogout={() => setLogoutConfirmOpen(true)}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
       />
 
       {sidebarOpen && (
@@ -341,19 +290,29 @@ export default function Layout() {
         />
       )}
 
-      <div className="lg:ml-64">
+      <div className={`transition-[margin] duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <Header
           currentPage={currentPage}
           user={user}
-          onLogout={handleLogout}
+          onLogout={() => setLogoutConfirmOpen(true)}
           onMenuClick={() => setSidebarOpen(true)}
           theme={theme}
           onThemeToggle={handleThemeToggle}
         />
         <main className="p-4 md:p-6">
-          <PageComponent />
+          <PageComponent onNavigate={handleNavigate} />
         </main>
       </div>
+
+      {logoutConfirmOpen && (
+        <ConfirmModal
+          title="Log out of SmartAqua Pro?"
+          confirmLabel="Log out"
+          danger
+          onConfirm={handleConfirmLogout}
+          onCancel={() => setLogoutConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }

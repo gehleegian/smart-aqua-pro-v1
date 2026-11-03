@@ -14,6 +14,23 @@
   --color-slate-950: #08212b;
 }
 
+@layer base {
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-teal-300);
+    outline-offset: 2px;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #2b7478 #08212b;
@@ -100,6 +117,31 @@ body {
 .smart-aqua-app[data-theme='light'] .shadow-slate-950\/35,
 .smart-aqua-app[data-theme='light'] .shadow-slate-950\/50 {
   --tw-shadow-color: rgba(15, 23, 42, 0.12);
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f2fbfa;
+  caret-color: #f2fbfa;
+  -webkit-box-shadow: 0 0 0 1000px #08212b inset;
+  transition: background-color 9999s ease-out;
+}
+
+.smart-aqua-app[data-theme='light'] :is(.text-teal-100, .text-teal-200, .text-teal-300) {
+  color: #0f766e;
+}
+
+.smart-aqua-app[data-theme='light'] :is(.text-rose-200, .text-rose-300, .text-red-300, .text-red-400) {
+  color: #be123c;
+}
+
+.smart-aqua-app[data-theme='light'] :is(.text-amber-200, .text-amber-300, .text-amber-400) {
+  color: #92400e;
+}
+
+.smart-aqua-app[data-theme='light'] :is(.text-emerald-300, .text-emerald-400) {
+  color: #047857;
 }
 
 @keyframes swim {

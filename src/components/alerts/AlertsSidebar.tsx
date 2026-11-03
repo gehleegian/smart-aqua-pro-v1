@@ -19,7 +19,7 @@ export function AlertsSidebar({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white">Distribution</h3>
+          <h3 className="text-base font-semibold text-white">Distribution</h3>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -43,7 +43,7 @@ export function AlertsSidebar({
 
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold text-white">Recently Resolved</h3>
+          <h3 className="text-base font-semibold text-white">Recently Resolved</h3>
         </CardHeader>
         <CardContent>
           {recentResolvedAlerts.length === 0 ? (
@@ -53,7 +53,7 @@ export function AlertsSidebar({
               {recentResolvedAlerts.map((alert) => (
                 <div key={alert.id} className="text-sm">
                   <p className="text-slate-200">{alert.tankName}</p>
-                  <p className="text-xs text-slate-500">{formatAlertTimestamp(alert)}</p>
+                  <p className="text-xs text-slate-400">{formatAlertTimestamp(alert)}</p>
                 </div>
               ))}
             </div>

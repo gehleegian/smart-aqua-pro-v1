@@ -20,7 +20,7 @@ export function HistoricalDataTable({
   return (
     <Card>
       <CardHeader>
-        <h3 className="text-lg font-semibold text-white">Historical Data</h3>
+        <h3 className="text-base font-semibold text-white">Historical Data</h3>
       </CardHeader>
       <CardContent>
         {historyLoading ? (
@@ -30,7 +30,7 @@ export function HistoricalDataTable({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="text-xs uppercase text-slate-500">
+              <thead className="text-xs uppercase text-slate-400">
                 <tr>
                   <th className="px-3 py-2">Recorded</th>
                   <th className="px-3 py-2">Temp</th>
@@ -49,7 +49,7 @@ export function HistoricalDataTable({
                   return (
                     <tr key={`${entry.recordedAtEpoch}-${entry.sampleCount || 1}`} className="text-slate-300">
                       <td className="px-3 py-2">{entry.recordedAt}</td>
-                      <td className="px-3 py-2">{toFixedValue(entry.temperatureC)} C</td>
+                      <td className="px-3 py-2">{toFixedValue(entry.temperatureC)}°C</td>
                       <td className="px-3 py-2">{toFixedValue(entry.waterLevelPercent, 0)}%</td>
                       <td className="px-3 py-2">
                         {typeof entry.tdsPpm === 'number' ? `${toFixedValue(entry.tdsPpm, 0)} ppm` : '--'}

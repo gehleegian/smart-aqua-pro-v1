@@ -96,7 +96,12 @@ function writeRateLimitState(state: AuthRateLimitState) {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    // Storage can be full or blocked; that must not stop sign-in or sign-up.
+    console.error('Failed to save auth rate limit state:', error);
+  }
 }
 
 function normalizeRecord(

@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useId } from 'react';
 import { Mail, Phone, Shield, UserRound, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import Modal from '../ui/Modal';
 import type { UserData } from '../../types/user';
 
 interface ProfileModalProps {
@@ -27,21 +28,7 @@ export default function ProfileModal({
   onChangeFullName,
   onChangeContactNumber,
 }: ProfileModalProps) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, open]);
+  const titleId = useId();
 
   if (!open) {
     return null;
@@ -53,26 +40,11 @@ export default function ProfileModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="profile-modal-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default"
-        aria-label="Close profile modal"
-        onClick={onClose}
-      />
-
-      <form
-        onSubmit={handleSubmit}
-        className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl shadow-slate-950/50"
-      >
+    <Modal labelledBy={titleId} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
         <div className="flex items-center justify-between gap-4 border-b border-slate-700 px-6 py-4">
           <div>
-            <h2 id="profile-modal-title" className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-white">
               <UserRound className="h-5 w-5 text-teal-200" />
               Edit Profile
             </h2>
@@ -109,14 +81,14 @@ export default function ProfileModal({
 
           <div className="grid gap-3 rounded-lg border border-slate-700/70 bg-slate-800/40 p-4 text-sm sm:grid-cols-2">
             <div className="space-y-1">
-              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
                 <Mail className="h-3.5 w-3.5" />
                 Email
               </p>
               <p className="truncate text-slate-200">{profile?.email || 'Not available'}</p>
             </div>
             <div className="space-y-1">
-              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
                 <Shield className="h-3.5 w-3.5" />
                 Role
               </p>
@@ -135,6 +107,6 @@ export default function ProfileModal({
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

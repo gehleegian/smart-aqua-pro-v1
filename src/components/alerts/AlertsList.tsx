@@ -30,7 +30,7 @@ export function AlertsList({
   return (
     <Card>
       <CardHeader>
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <h3 className="text-base font-semibold text-white">{title}</h3>
       </CardHeader>
       <CardContent>
         {alerts.length === 0 ? (
@@ -55,19 +55,19 @@ export function AlertsList({
                         <p className="font-medium text-white">{alert.tankName}</p>
                         <p className="mt-1 text-sm text-slate-400">{alert.message}</p>
                         {userRole === 'Admin' ? (
-                          <p className="mt-1 text-xs text-slate-500">{alert.ownerName}</p>
+                          <p className="mt-1 text-xs text-slate-400">{alert.ownerName}</p>
                         ) : null}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Badge variant={badge.variant}>{badge.label}</Badge>
-                      <ChevronDown className={`h-4 w-4 text-slate-500 ${expanded ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-4 w-4 text-slate-400 ${expanded ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
 
                   {expanded ? (
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-600/30 pt-4">
-                      <p className="text-xs text-slate-500">Last detected {formatAlertTimestamp(alert)}</p>
+                      <p className="text-xs text-slate-400">Last detected {formatAlertTimestamp(alert)}</p>
                       {!alert.acknowledgedAt && !alert.resolvedAt ? (
                         <Button size="sm" variant="secondary" onClick={() => onAcknowledgeAlert(alert.id)}>
                           <Check className="h-4 w-4" />

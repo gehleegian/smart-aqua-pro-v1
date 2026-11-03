@@ -16,6 +16,7 @@ import {
 import type { Aquarium } from '../types/aquarium';
 import {
   getDeviceTelemetryStatusText,
+  getDeviceTelemetryUpdatedAt,
   getFreshTelemetrySnapshot,
   getDeviceTelemetryState,
   type DeviceShadow,
@@ -58,6 +59,7 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     hasFreshTurbidityTelemetry: false,
     hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
+    lastUpdatedAt: null,
   }));
 }
 
@@ -84,6 +86,10 @@ export function mergeDashboardAquariums(
         ? snapshot.powerStatus ?? aquarium.powerStatus
         : aquarium.powerStatus,
       quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
+      filter: snapshot?.filterState ?? aquarium.filter,
+      manualStatus: snapshot?.filterState && aquarium.manualStatus
+        ? { ...aquarium.manualStatus, filter: snapshot.filterState }
+        : aquarium.manualStatus,
     };
     const assessmentTelemetry: AssessmentTelemetry | null = snapshot
       ? {
@@ -123,6 +129,7 @@ export function mergeDashboardAquariums(
       hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       telemetryState,
+      lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
     };
   });
 }

@@ -10,7 +10,7 @@ import Button from '../components/ui/Button';
 export default function Monitoring() {
   const monitoring = useMonitoringController();
   const { actions } = monitoring;
-  const simulationPanel = import.meta.env.DEV ? (
+  const simulationPanel = process.env.NODE_ENV !== 'production' ? (
     <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

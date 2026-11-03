@@ -1,117 +1,217 @@
 import {
   createUserWithEmailAndPassword,
-  deleteUser,
-  getIdToken,
   reload,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
-  updateProfile,
+  signOut,
+  type User,
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { UserData } from '../types/user';
+import { getAuthErrorCode } from '../utils/authErrors';
 import { registerAuthAttempt, resetAuthRateLimit } from '../utils/authRateLimit';
-import { getCurrentEmailAccessState } from './emailVerificationPolicyService';
 import { getCurrentUserProfile } from './userService';
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
+export class EmailVerificationRequiredError extends Error {
+  constructor() {
+    super('Please verify your email first.');
+    this.name = 'EmailVerificationRequiredError';
+  }
 }
 
-export async function registerUser(
-  name: string,
-  email: string,
-  password: string
-): Promise<void> {
-  registerAuthAttempt('signup');
+let activeAuthFlows = 0;
 
-  const normalizedName = name.trim();
-  const normalizedEmail = normalizeEmail(email);
-  const credential = await createUserWithEmailAndPassword(
-    auth,
-    normalizedEmail,
-    password
-  );
-  const firebaseUser = credential.user;
-  const now = new Date().toISOString();
+/**
+ * True while signup, login, or resend is signing a user in and out. Layout's
+ * onAuthStateChanged listener ignores events during this window, because those
+ * sign-ins are temporary and the page running the flow owns the outcome.
+ */
+export function isAuthFlowActive(): boolean {
+  return activeAuthFlows > 0;
+}
+
+async function runAuthFlow<T>(flow: () => Promise<T>): Promise<T> {
+  activeAuthFlows += 1;
 
   try {
-    await updateProfile(firebaseUser, { displayName: normalizedName });
-    await setDoc(doc(db, 'users', firebaseUser.uid), {
-      full_name: normalizedName,
-      name: normalizedName,
-      email: normalizedEmail,
-      contact_number: '',
-      role: 'User',
-      account_status: 'active',
-      created_at: now,
-      updated_at: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-  } catch (error) {
-    await deleteUser(firebaseUser).catch(() => undefined);
-    throw error;
+    return await flow();
+  } finally {
+    // Firebase notifies listeners in microtasks, so a macrotask delay keeps the
+    // guard up until the flow's final auth event has been delivered.
+    setTimeout(() => {
+      activeAuthFlows -= 1;
+    }, 0);
   }
-
-  await sendEmailVerification(firebaseUser);
-  resetAuthRateLimit('signup');
 }
 
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<UserData | null> {
-  registerAuthAttempt('login');
-
-  const userCredential = await signInWithEmailAndPassword(
-    auth,
-    normalizeEmail(email),
-    password
-  );
-  const firebaseUser = userCredential.user;
-
-  if ((await getCurrentEmailAccessState(firebaseUser)) !== 'access-allowed') {
-    resetAuthRateLimit('login');
-    return null;
+async function signOutSafely(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error('Failed to sign out:', error);
   }
+}
+
+function buildUserProfile(firebaseUser: User, name: string) {
+  // Firestore rules require email to equal the token's email, which Firebase
+  // normalizes, so the typed value can differ (for example in letter case).
+  if (!firebaseUser.email) {
+    throw new Error('The signed-in account has no email address.');
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    full_name: name,
+    name,
+    email: firebaseUser.email,
+    contact_number: '',
+    role: 'User',
+    account_status: 'active',
+    created_at: now,
+    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function recreateUserProfile(firebaseUser: User): Promise<UserData> {
+  const name = firebaseUser.displayName?.trim() || firebaseUser.email?.split('@')[0] || '';
+
+  await setDoc(doc(db, 'users', firebaseUser.uid), buildUserProfile(firebaseUser, name));
 
   const profile = await getCurrentUserProfile(firebaseUser.uid);
 
-  resetAuthRateLimit('login');
+  if (!profile) {
+    throw new Error('User profile could not be recreated.');
+  }
 
   return profile;
 }
 
-export async function resendVerificationEmail(): Promise<void> {
-  const firebaseUser = auth.currentUser;
-
-  if (!firebaseUser) {
-    throw new Error('Please sign in again before requesting another verification email.');
-  }
-
-  if (
-    !firebaseUser.emailVerified &&
-    (await getCurrentEmailAccessState(firebaseUser)) === 'verification-required'
-  ) {
-    await sendEmailVerification(firebaseUser);
-  }
-}
-
-export async function confirmEmailVerification(): Promise<UserData | null> {
-  const firebaseUser = auth.currentUser;
-
-  if (!firebaseUser) {
-    throw new Error('Your session expired. Please sign in again.');
-  }
-
+/**
+ * Loads the profile for a signed-in user. Unverified users still get one read,
+ * so accounts exempted by the security rules can continue. A read the rules
+ * allow is treated as "verified or exempt", which is what permits recreating a
+ * missing profile.
+ */
+export async function resolveSessionProfile(firebaseUser: User): Promise<UserData> {
   await reload(firebaseUser);
 
-  if ((await getCurrentEmailAccessState(firebaseUser)) !== 'access-allowed') {
-    return null;
+  if (firebaseUser.emailVerified) {
+    await firebaseUser.getIdToken(true);
   }
 
-  await getIdToken(firebaseUser, true);
+  let profile: UserData | null;
 
-  return getCurrentUserProfile(firebaseUser.uid);
+  try {
+    profile = await getCurrentUserProfile(firebaseUser.uid);
+  } catch (error) {
+    if (!firebaseUser.emailVerified && getAuthErrorCode(error) === 'permission-denied') {
+      throw new EmailVerificationRequiredError();
+    }
+
+    throw error;
+  }
+
+  return profile ?? recreateUserProfile(firebaseUser);
+}
+
+export async function endUnverifiedSession(): Promise<void> {
+  await runAuthFlow(signOutSafely);
+}
+
+/** Resolves to whether the verification email was sent. */
+export async function registerUser(
+  name: string,
+  email: string,
+  password: string
+): Promise<boolean> {
+  registerAuthAttempt('signup');
+
+  return runAuthFlow(async () => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const firebaseUser = userCredential.user;
+
+    try {
+      await setDoc(doc(db, 'users', firebaseUser.uid), buildUserProfile(firebaseUser, name));
+
+      let verificationEmailSent = true;
+
+      try {
+        await sendEmailVerification(firebaseUser);
+      } catch (error) {
+        // The account already exists, so this must not read as a failed signup.
+        console.error('Failed to send verification email:', error);
+        verificationEmailSent = false;
+      }
+
+      resetAuthRateLimit('signup');
+
+      return verificationEmailSent;
+    } finally {
+      await signOutSafely();
+    }
+  });
+}
+
+export async function loginUser(email: string, password: string): Promise<UserData> {
+  registerAuthAttempt('login');
+
+  return runAuthFlow(async () => {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+    try {
+      const profile = await resolveSessionProfile(userCredential.user);
+
+      resetAuthRateLimit('login');
+
+      return profile;
+    } catch (error) {
+      await signOutSafely();
+      throw error;
+    }
+  });
+}
+
+/**
+ * Unverified users are signed out, so sending the email needs a fresh sign-in.
+ * This counts toward the login rate limit because it checks the password.
+ */
+export async function resendVerificationEmail(
+  email: string,
+  password: string
+): Promise<'sent' | 'already-verified'> {
+  registerAuthAttempt('login');
+
+  return runAuthFlow(async () => {
+    const { user } = await signInWithEmailAndPassword(auth, email, password);
+
+    try {
+      await reload(user);
+
+      if (user.emailVerified) {
+        return 'already-verified';
+      }
+
+      await sendEmailVerification(user);
+
+      return 'sent';
+    } finally {
+      await signOutSafely();
+    }
+  });
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error) {
+    // Reported as success so the form does not reveal whether an account exists.
+    if (getAuthErrorCode(error) !== 'auth/user-not-found') {
+      throw error;
+    }
+  }
 }

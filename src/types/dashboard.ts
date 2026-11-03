@@ -20,6 +20,7 @@ export type DashboardAquarium = Aquarium & {
   hasFreshTurbidityTelemetry: boolean;
   hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
+  lastUpdatedAt: number | null;
 };
 
 export type OwnerGroup = {
