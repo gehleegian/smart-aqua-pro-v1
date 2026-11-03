@@ -4,10 +4,44 @@ import { AquariumDetailsView } from '../components/monitoring/AquariumDetailsVie
 import { AutomationSettingsModal } from '../components/monitoring/AutomationSettingsModal';
 import { UserAquariumList } from '../components/monitoring/UserAquariumList';
 import { useMonitoringController } from '../hooks/useMonitoringController';
+import type { SimulationScenario } from '../types/monitoring';
+import Button from '../components/ui/Button';
 
 export default function Monitoring() {
   const monitoring = useMonitoringController();
   const { actions } = monitoring;
+  const simulationPanel = import.meta.env.DEV ? (
+    <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-200">Development telemetry simulator</p>
+          <p className="mt-1 text-xs text-amber-100/80">
+            Simulated readings stay in this browser, are never saved to Firebase, and cannot operate equipment.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Simulation scenario"
+            value={monitoring.simulationScenario}
+            disabled={!monitoring.simulationEnabled}
+            onChange={(event) => actions.setSimulationScenario(event.target.value as SimulationScenario)}
+            className="rounded-lg border border-amber-300/30 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50"
+          >
+            <option value="normal">Normal</option>
+            <option value="warning">Warning</option>
+            <option value="critical">Critical</option>
+          </select>
+          <Button
+            type="button"
+            variant={monitoring.simulationEnabled ? 'danger' : 'secondary'}
+            onClick={() => actions.setSimulationEnabled(!monitoring.simulationEnabled)}
+          >
+            {monitoring.simulationEnabled ? 'Stop simulation' : 'Start simulation'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
   const liveDataWarning = monitoring.liveDataError ? (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
       {monitoring.liveDataError}
@@ -29,6 +63,7 @@ export default function Monitoring() {
   if (monitoring.userRole === 'Admin') {
     return (
       <div className="space-y-6">
+        {simulationPanel}
         {liveDataWarning}
         <AdminMonitoringView
           ownerCards={monitoring.ownerCards}
@@ -54,6 +89,7 @@ export default function Monitoring() {
   if (!monitoring.selectedAquarium) {
     return (
       <div className="space-y-6">
+        {simulationPanel}
         {liveDataWarning}
         <UserAquariumList
           aquariums={monitoring.aquariums}
@@ -71,6 +107,7 @@ export default function Monitoring() {
 
   return (
     <>
+      {simulationPanel}
       {liveDataWarning}
       <AquariumDetailsView
         aquarium={monitoring.selectedAquarium}
@@ -83,6 +120,7 @@ export default function Monitoring() {
         savingSystemKey={monitoring.savingSystemKey}
         systemError={monitoring.systemError}
         systemMode={monitoring.systemMode}
+        controlsDisabled={monitoring.simulationEnabled}
         onAutomationToggle={() => void actions.handleAutomationEnabledToggle()}
         onBack={actions.backToAquariums}
         onManualAction={(field) => void actions.handleManualAction(field)}

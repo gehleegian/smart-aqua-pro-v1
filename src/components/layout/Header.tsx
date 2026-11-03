@@ -13,11 +13,11 @@ interface HeaderProps {
 const pageNames: Record<string, string> = {
   dashboard: 'Dashboard',
   monitoring: 'Real-time Monitoring',
-  automation: 'Automation & Control',
   alerts: 'Alerts & Notifications',
   datalogs: 'Data Logs & Reports',
   aquariums: 'Aquarium Management',
   users: 'User & Aquarium Directory',
+  support: 'Support Messages',
   settings: 'Settings & Configuration',
 };
 

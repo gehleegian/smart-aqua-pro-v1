@@ -37,13 +37,15 @@ export default function Aquariums() {
           </p>
         </div>
 
-        <button
-          onClick={aquariums.actions.openAddModal}
-          className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500"
-        >
-          <Plus className="h-4 w-4" />
-          Add Aquarium
-        </button>
+        {aquariums.currentUserRole === 'User' ? (
+          <button
+            onClick={aquariums.actions.openAddModal}
+            className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500"
+          >
+            <Plus className="h-4 w-4" />
+            Add Aquarium
+          </button>
+        ) : null}
       </div>
 
       {aquariums.currentUserRole === 'Admin' && (
@@ -91,11 +93,13 @@ export default function Aquariums() {
           formData={aquariums.formData}
           formMode={aquariums.formMode}
           saving={aquariums.saving}
+          error={aquariums.error}
           currentUserRole={aquariums.currentUserRole}
           selectedOwnerName={aquariums.selectedOwnerName}
           onClose={aquariums.actions.closeModal}
           onSave={() => void aquariums.actions.saveAquarium()}
           onFieldChange={aquariums.actions.updateFormField}
+          onFishWeightChange={aquariums.actions.updateFishWeight}
         />
       )}
     </div>

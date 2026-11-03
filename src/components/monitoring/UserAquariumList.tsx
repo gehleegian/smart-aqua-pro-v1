@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
 import type { MonitoringAquarium } from '../../types/monitoring';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -42,12 +43,24 @@ export function UserAquariumList({
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium text-white">{aquarium.name}</p>
-                <Badge variant={aquarium.healthStatus === 'healthy' ? 'success' : 'warning'}>
-                  {aquarium.healthStatus}
+                <Badge
+                  variant={
+                    aquarium.assessment.overallSeverity === 'normal'
+                      ? 'success'
+                      : aquarium.assessment.overallSeverity === 'critical'
+                        ? 'danger'
+                        : aquarium.assessment.overallSeverity === 'warning'
+                          ? 'warning'
+                          : 'default'
+                  }
+                >
+                  {aquarium.telemetrySource} · {aquarium.assessment.overallSeverity}
                 </Badge>
               </div>
               <p className="mt-2 text-sm text-slate-400">
-                {aquarium.temp.toFixed(1)} C · {aquarium.level}% level · {aquarium.quality}% TDS
+                {aquarium.hasFreshTelemetry
+                  ? `${aquarium.temp.toFixed(1)} C · ${formatWaterLevel(aquarium.level)} level · ${aquarium.quality}% TDS purity`
+                  : 'Waiting for valid telemetry'}
               </p>
             </button>
           ))}

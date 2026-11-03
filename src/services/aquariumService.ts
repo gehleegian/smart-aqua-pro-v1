@@ -7,13 +7,26 @@ import type {
   ManualSystemStatus,
 } from '../types/aquarium';
 import { getCurrentUserProfile } from './userService';
+import {
+  prepareAquariumDeletionTrusted,
+  transferAquariumOwnershipTrusted,
+} from './trustedMutationService';
+import {
+  createIdempotencyKey,
+  type TrustedMutationResult,
+} from './trustedMutationContracts';
+import {
+  calculateAquariumBioload,
+  readFishWeights,
+} from '../utils/aquariumProfileCalculations';
 
 type AquariumProfileUpdateField =
   | 'name'
   | 'species'
-  | 'bioload'
   | 'minTemp'
   | 'maxTemp'
+  | 'minPh'
+  | 'maxPh'
   | 'minLevel'
   | 'minQuality'
   | 'feeder'
@@ -29,9 +42,11 @@ type AquariumTankProfileUpdateField =
   | 'tankWidthCm'
   | 'tankHeightCm'
   | 'workingWaterVolumeLiters'
+  | 'hasFiltrationSystem'
   | 'filtrationSetup'
   | 'filterCapacity'
-  | 'fishCount';
+  | 'fishCount'
+  | 'fishWeightsG';
 
 type AquariumUpdateField = AquariumProfileUpdateField | AquariumTankProfileUpdateField;
 
@@ -40,9 +55,10 @@ export type AquariumUpdateData = Partial<Pick<Aquarium, AquariumUpdateField>>;
 const AQUARIUM_UPDATE_FIELDS = new Set<AquariumUpdateField>([
   'name',
   'species',
-  'bioload',
   'minTemp',
   'maxTemp',
+  'minPh',
+  'maxPh',
   'minLevel',
   'minQuality',
   'feeder',
@@ -56,13 +72,15 @@ const AQUARIUM_UPDATE_FIELDS = new Set<AquariumUpdateField>([
   'tankWidthCm',
   'tankHeightCm',
   'workingWaterVolumeLiters',
+  'hasFiltrationSystem',
   'filtrationSetup',
   'filterCapacity',
   'fishCount',
+  'fishWeightsG',
 ]);
 
 const AQUARIUM_DIRECTORY_COLLECTION = 'aquarium_directory';
-const AQUARIUM_DIRECTORY_SCHEMA_VERSION = 1;
+const AQUARIUM_DIRECTORY_SCHEMA_VERSION = 3;
 
 const MANUAL_STATUS_UPDATE_FIELDS: ReadonlyArray<keyof ManualSystemStatus> = [
   'feeder',
@@ -78,6 +96,20 @@ function readNumber(value: unknown, fallback: number) {
   const numberValue = Number(value);
 
   return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function readOptionalNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readFiltrationPresence(data: Record<string, unknown>) {
+  if (typeof data.hasFiltrationSystem === 'boolean') {
+    return data.hasFiltrationSystem;
+  }
+
+  return typeof data.filtrationSetup === 'string' && data.filtrationSetup.trim()
+    ? true
+    : undefined;
 }
 
 function readBoolean(value: unknown, fallback: boolean) {
@@ -161,6 +193,13 @@ function mapManualStatus(data: Record<string, unknown>): ManualSystemStatus | un
 }
 
 function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
+  const fishCount = readOptionalNumber(data.fishCount);
+  const workingWaterVolumeLiters = readOptionalNumber(data.workingWaterVolumeLiters);
+  const fishWeightsG = readFishWeights(data.fishWeightsG, fishCount);
+  const calculation = fishWeightsG
+    ? calculateAquariumBioload(fishWeightsG, workingWaterVolumeLiters ?? Number.NaN)
+    : null;
+
   return {
     id: docId,
     name: readString(data.name, 'Unnamed Aquarium'),
@@ -168,9 +207,9 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
       ? data.species.filter((species): species is string => typeof species === 'string')
       : [],
     bioload:
-      data.bioload === 'medium' || data.bioload === 'high'
+      data.bioload === 'low' || data.bioload === 'medium' || data.bioload === 'high'
         ? data.bioload
-        : 'low',
+        : undefined,
     temp: Number(data.temp ?? 0),
     level: Number(data.level ?? 0),
     quality: readNumber(data.quality, 100),
@@ -179,37 +218,33 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     filter: readString(data.filter, 'Inactive'),
     minTemp: Number(data.minTemp ?? 0),
     maxTemp: Number(data.maxTemp ?? 0),
+    minPh: readOptionalNumber(data.minPh),
+    maxPh: readOptionalNumber(data.maxPh),
     minLevel: readNumber(data.minLevel, 70),
     minQuality: readNumber(data.minQuality, 80),
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     tankType: typeof data.tankType === 'string' ? data.tankType : undefined,
-    tankSizeLiters: Number.isFinite(Number(data.tankSizeLiters))
-      ? Number(data.tankSizeLiters)
-      : undefined,
+    tankSizeLiters: readOptionalNumber(data.tankSizeLiters),
     tankSizeCategory:
       data.tankSizeCategory === 'small' ||
       data.tankSizeCategory === 'medium' ||
       data.tankSizeCategory === 'large'
         ? data.tankSizeCategory
         : undefined,
-    tankLengthCm: Number.isFinite(Number(data.tankLengthCm))
-      ? Number(data.tankLengthCm)
-      : undefined,
-    tankWidthCm: Number.isFinite(Number(data.tankWidthCm))
-      ? Number(data.tankWidthCm)
-      : undefined,
-    tankHeightCm: Number.isFinite(Number(data.tankHeightCm))
-      ? Number(data.tankHeightCm)
-      : undefined,
-    workingWaterVolumeLiters: Number.isFinite(Number(data.workingWaterVolumeLiters))
-      ? Number(data.workingWaterVolumeLiters)
-      : undefined,
+    tankLengthCm: readOptionalNumber(data.tankLengthCm),
+    tankWidthCm: readOptionalNumber(data.tankWidthCm),
+    tankHeightCm: readOptionalNumber(data.tankHeightCm),
+    workingWaterVolumeLiters,
+    hasFiltrationSystem: readFiltrationPresence(data),
     filtrationSetup:
       typeof data.filtrationSetup === 'string' ? data.filtrationSetup : undefined,
     filterCapacity:
       typeof data.filterCapacity === 'string' ? data.filterCapacity : undefined,
-    fishCount: Number.isFinite(Number(data.fishCount)) ? Number(data.fishCount) : undefined,
+    fishCount,
+    fishWeightsG,
+    totalFishBiomassG: calculation?.totalFishBiomassG,
+    estimatedBioloadGL: calculation?.estimatedBioloadGL,
     automationSettings: mapAutomationSettings(data),
     manualStatus: mapManualStatus(data),
     createdAt: readTimestampLike(data.created_at || data.createdAt) || undefined,
@@ -226,20 +261,34 @@ function buildAquariumDirectoryDocument(
     ? data.species.filter((item): item is string => typeof item === 'string')
     : [];
   const createdAt = readTimestampLike(data.created_at || data.createdAt);
-  const fishCount = Number(data.fishCount);
-  const tankSizeLiters = Number(data.tankSizeLiters);
-  const workingWaterVolumeLiters = Number(data.workingWaterVolumeLiters);
+  const fishCount = readOptionalNumber(data.fishCount);
+  const tankSizeLiters = readOptionalNumber(data.tankSizeLiters);
+  const tankLengthCm = readOptionalNumber(data.tankLengthCm);
+  const tankWidthCm = readOptionalNumber(data.tankWidthCm);
+  const tankHeightCm = readOptionalNumber(data.tankHeightCm);
+  const workingWaterVolumeLiters = readOptionalNumber(data.workingWaterVolumeLiters);
+  const hasFiltrationSystem = readFiltrationPresence(data);
 
   return {
     name: readString(data.name, 'Unnamed Aquarium'),
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     species,
-    ...(Number.isFinite(fishCount) ? { fishCount } : {}),
+    ...(data.bioload === 'low' || data.bioload === 'medium' || data.bioload === 'high'
+      ? { bioload: data.bioload }
+      : {}),
+    ...(fishCount !== undefined ? { fishCount } : {}),
     ...(typeof data.tankType === 'string' ? { tankType: data.tankType } : {}),
-    ...(Number.isFinite(tankSizeLiters) ? { tankSizeLiters } : {}),
-    ...(Number.isFinite(workingWaterVolumeLiters)
+    ...(tankSizeLiters !== undefined ? { tankSizeLiters } : {}),
+    ...(tankLengthCm !== undefined ? { tankLengthCm } : {}),
+    ...(tankWidthCm !== undefined ? { tankWidthCm } : {}),
+    ...(tankHeightCm !== undefined ? { tankHeightCm } : {}),
+    ...(workingWaterVolumeLiters !== undefined
       ? { workingWaterVolumeLiters }
+      : {}),
+    ...(hasFiltrationSystem !== undefined ? { hasFiltrationSystem } : {}),
+    ...(typeof data.filtrationSetup === 'string'
+      ? { filtrationSetup: data.filtrationSetup }
       : {}),
     ...(createdAt ? { createdAt } : {}),
     updatedAt,
@@ -254,9 +303,13 @@ function mapAquariumDirectoryEntry(
   const species = Array.isArray(data.species)
     ? data.species.filter((item): item is string => typeof item === 'string')
     : [];
-  const fishCount = Number(data.fishCount);
-  const tankSizeLiters = Number(data.tankSizeLiters);
-  const workingWaterVolumeLiters = Number(data.workingWaterVolumeLiters);
+  const fishCount = readOptionalNumber(data.fishCount);
+  const tankSizeLiters = readOptionalNumber(data.tankSizeLiters);
+  const tankLengthCm = readOptionalNumber(data.tankLengthCm);
+  const tankWidthCm = readOptionalNumber(data.tankWidthCm);
+  const tankHeightCm = readOptionalNumber(data.tankHeightCm);
+  const workingWaterVolumeLiters = readOptionalNumber(data.workingWaterVolumeLiters);
+  const hasFiltrationSystem = readFiltrationPresence(data);
 
   return {
     id: docId,
@@ -264,12 +317,19 @@ function mapAquariumDirectoryEntry(
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     species,
-    fishCount: Number.isFinite(fishCount) ? fishCount : undefined,
+    bioload:
+      data.bioload === 'low' || data.bioload === 'medium' || data.bioload === 'high'
+        ? data.bioload
+        : undefined,
+    fishCount,
     tankType: readString(data.tankType, ''),
-    tankSizeLiters: Number.isFinite(tankSizeLiters) ? tankSizeLiters : undefined,
-    workingWaterVolumeLiters: Number.isFinite(workingWaterVolumeLiters)
-      ? workingWaterVolumeLiters
-      : undefined,
+    tankSizeLiters,
+    tankLengthCm,
+    tankWidthCm,
+    tankHeightCm,
+    workingWaterVolumeLiters,
+    hasFiltrationSystem,
+    filtrationSetup: readString(data.filtrationSetup, '') || undefined,
     createdAt: readTimestampLike(data.created_at || data.createdAt),
   };
 }
@@ -506,11 +566,24 @@ export async function updateAquariumManualStatus(
   await batch.commit();
 }
 
-export async function deleteAquarium(aquariumId: string): Promise<void> {
-  const { aquariumRef } = await requireAquariumAccess(aquariumId, 'delete');
-  const batch = writeBatch(db);
+export async function prepareAquariumDeletion(
+  aquariumId: string,
+  idempotencyKey = createIdempotencyKey('aquarium-deletion', aquariumId)
+): Promise<TrustedMutationResult> {
+  await requireAquariumAccess(aquariumId, 'delete');
+  return prepareAquariumDeletionTrusted(aquariumId, idempotencyKey);
+}
 
-  batch.delete(aquariumRef);
-  batch.delete(doc(db, AQUARIUM_DIRECTORY_COLLECTION, aquariumId));
-  await batch.commit();
+export async function transferAquariumOwnership(
+  aquariumId: string,
+  newOwnerUid: string,
+  idempotencyKey = createIdempotencyKey('aquarium-transfer', aquariumId)
+): Promise<TrustedMutationResult> {
+  const currentProfile = await requireAuthenticatedProfile();
+
+  if (currentProfile.role !== 'Admin') {
+    throw new Error('Admin access is required to transfer aquarium ownership.');
+  }
+
+  return transferAquariumOwnershipTrusted(aquariumId, newOwnerUid, idempotencyKey);
 }

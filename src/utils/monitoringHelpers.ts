@@ -14,6 +14,7 @@ import type {
   SystemField,
 } from '../types/monitoring';
 import type { UserData, UserRole } from '../types/user';
+import { assessAquariumCondition } from './monitoringAssessment';
 
 export const systemStatusConfig: Record<
   SystemField,
@@ -91,6 +92,12 @@ export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquariu
   return aquariums.map((aquarium) => ({
     ...aquarium,
     healthStatus: 'warning',
+    assessment: assessAquariumCondition({
+      profile: aquarium,
+      telemetry: null,
+      source: 'unavailable',
+    }),
+    telemetrySource: 'unavailable',
     hasFreshTelemetry: false,
     hasFreshTemperatureTelemetry: false,
     hasFreshPurityTelemetry: false,

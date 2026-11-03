@@ -6,16 +6,42 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function hasProtectedAccess() {
       return isSignedIn()
+        && !exists(
+          /databases/$(database)/documents/security_user_blocks/$(request.auth.uid)
+        )
+        && (
+          request.auth.token.email_verified == true
+          || (
+            exists(
+              /databases/$(database)/documents/authorization_user_policies/$(request.auth.uid)
+            )
+            && get(
+              /databases/$(database)/documents/authorization_user_policies/$(request.auth.uid)
+            ).data.emailVerificationRequired == false
+          )
+        );
+    }
+
+    function aquariumAccessOpen(aquariumId) {
+      return aquariumId is string
+        && !exists(
+          /databases/$(database)/documents/security_aquarium_blocks/$(aquariumId)
+        );
+    }
+
+    function isAdmin() {
+      return hasProtectedAccess()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
     function ownsAquarium(aquariumId) {
-      return isSignedIn()
+      return hasProtectedAccess()
         && !isAdmin()
         && aquariumId is string
+        && aquariumAccessOpen(aquariumId)
         && exists(/databases/$(database)/documents/aquariums/$(aquariumId))
         && get(/databases/$(database)/documents/aquariums/$(aquariumId)).data.ownerId
           == request.auth.uid;
@@ -62,6 +88,165 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email;
     }
 
+    function supportThreadFields() {
+      return [
+        'ownerId',
+        'ownerName',
+        'ownerEmail',
+        'subject',
+        'status',
+        'lastMessage',
+        'lastMessageAt',
+        'lastSenderRole',
+        'userUnreadCount',
+        'adminUnreadCount',
+        'visibleToUser',
+        'visibleToAdmin',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validSupportText(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function validSupportThreadCreate() {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return hasProtectedAccess()
+        && !isAdmin()
+        && request.resource.data.keys().hasAll(supportThreadFields())
+        && request.resource.data.keys().hasOnly(supportThreadFields())
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerName == profile.name
+        && request.resource.data.ownerEmail == profile.email
+        && validSupportText(request.resource.data.subject, 120)
+        && validSupportText(request.resource.data.lastMessage, 4000)
+        && request.resource.data.status == 'open'
+        && request.resource.data.lastSenderRole == 'User'
+        && request.resource.data.userUnreadCount == 0
+        && request.resource.data.adminUnreadCount == 1
+        && request.resource.data.visibleToUser == true
+        && request.resource.data.visibleToAdmin == true
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.lastMessageAt == request.time;
+    }
+
+    function supportThreadIdentityUnchanged() {
+      return request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.ownerName == resource.data.ownerName
+        && request.resource.data.ownerEmail == resource.data.ownerEmail
+        && request.resource.data.subject == resource.data.subject
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validSupportReplyUpdate(role) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let isUserReply = role == 'User'
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.lastSenderRole == 'User'
+        && request.resource.data.adminUnreadCount == resource.data.adminUnreadCount + 1
+        && request.resource.data.userUnreadCount == 0;
+      let isAdminReply = role == 'Admin'
+        && isAdmin()
+        && request.resource.data.lastSenderRole == 'Admin'
+        && request.resource.data.userUnreadCount == resource.data.userUnreadCount + 1
+        && request.resource.data.adminUnreadCount == 0;
+      return request.resource.data.keys().hasOnly(supportThreadFields())
+        && supportThreadIdentityUnchanged()
+        && resource.data.status == 'open'
+        && request.resource.data.status == resource.data.status
+        && changed.hasOnly([
+          'lastMessage',
+          'lastMessageAt',
+          'lastSenderRole',
+          'userUnreadCount',
+          'adminUnreadCount',
+          'updatedAt'
+        ])
+        && validSupportText(request.resource.data.lastMessage, 4000)
+        && request.resource.data.lastMessageAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (isUserReply || isAdminReply);
+    }
+
+    function validSupportReadUpdate(role) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return supportThreadIdentityUnchanged()
+        && request.resource.data.keys().hasOnly(supportThreadFields())
+        && (
+          (role == 'User'
+            && resource.data.ownerId == request.auth.uid
+            && changed.hasOnly(['userUnreadCount'])
+            && request.resource.data.userUnreadCount == 0)
+          ||
+          (role == 'Admin'
+            && isAdmin()
+            && changed.hasOnly(['adminUnreadCount'])
+            && request.resource.data.adminUnreadCount == 0)
+        );
+    }
+
+    function validSupportStatusUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAdmin()
+        && supportThreadIdentityUnchanged()
+        && request.resource.data.keys().hasOnly(supportThreadFields())
+        && changed.hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['open', 'closed']
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validSupportVisibilityUpdate(role) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return supportThreadIdentityUnchanged()
+        && request.resource.data.keys().hasOnly(supportThreadFields())
+        && (
+          (role == 'User'
+            && resource.data.ownerId == request.auth.uid
+            && resource.data.get('visibleToUser', true) == true
+            && changed.hasOnly(['visibleToUser'])
+            && request.resource.data.visibleToUser == false)
+          ||
+          (role == 'Admin'
+            && isAdmin()
+            && resource.data.get('visibleToAdmin', true) == true
+            && changed.hasOnly(['visibleToAdmin'])
+            && request.resource.data.visibleToAdmin == false)
+        );
+    }
+
+    function validSupportMessageCreate(threadId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let thread = getAfter(
+        /databases/$(database)/documents/support_threads/$(threadId)
+      ).data;
+      let role = isAdmin() ? 'Admin' : 'User';
+      return hasProtectedAccess()
+        && thread.status == 'open'
+        && (isAdmin() || thread.ownerId == request.auth.uid)
+        && request.resource.data.keys().hasAll([
+          'senderId',
+          'senderName',
+          'senderRole',
+          'body',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'senderId',
+          'senderName',
+          'senderRole',
+          'body',
+          'createdAt'
+        ])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderName == profile.name
+        && request.resource.data.senderRole == role
+        && validSupportText(request.resource.data.body, 4000)
+        && request.resource.data.createdAt == request.time;
+    }
+
     function validSelfProfileUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return changed.hasOnly([
@@ -82,9 +267,10 @@ service cloud.firestore {
       return [
         'name',
         'species',
-        'bioload',
         'minTemp',
         'maxTemp',
+        'minPh',
+        'maxPh',
         'minLevel',
         'minQuality',
         'feeder',
@@ -99,9 +285,11 @@ service cloud.firestore {
         'tankWidthCm',
         'tankHeightCm',
         'workingWaterVolumeLiters',
+        'hasFiltrationSystem',
         'filtrationSetup',
         'filterCapacity',
         'fishCount',
+        'fishWeightsG',
         'updatedAt',
         'directorySchemaVersion'
       ];
@@ -111,9 +299,18 @@ service cloud.firestore {
       return [
         'name',
         'species',
-        'bioload',
+        'tankType',
+        'tankLengthCm',
+        'tankWidthCm',
+        'tankHeightCm',
+        'workingWaterVolumeLiters',
+        'hasFiltrationSystem',
+        'fishCount',
+        'fishWeightsG',
         'minTemp',
         'maxTemp',
+        'minPh',
+        'maxPh',
         'minLevel',
         'minQuality',
         'temp',
@@ -134,16 +331,10 @@ service cloud.firestore {
       return aquariumCreateRequiredFields().concat([
         'automationSettings',
         'manualStatus',
-        'tankType',
         'tankSizeLiters',
         'tankSizeCategory',
-        'tankLengthCm',
-        'tankWidthCm',
-        'tankHeightCm',
-        'workingWaterVolumeLiters',
         'filtrationSetup',
-        'filterCapacity',
-        'fishCount'
+        'filterCapacity'
       ]);
     }
 
@@ -153,10 +344,16 @@ service cloud.firestore {
         'ownerId',
         'ownerName',
         'species',
+        'bioload',
         'fishCount',
         'tankType',
         'tankSizeLiters',
+        'tankLengthCm',
+        'tankWidthCm',
+        'tankHeightCm',
         'workingWaterVolumeLiters',
+        'hasFiltrationSystem',
+        'filtrationSetup',
         'createdAt',
         'updatedAt',
         'schemaVersion'
@@ -200,13 +397,33 @@ service cloud.firestore {
           || status.filter in ['Active', 'Inactive']);
     }
 
+    // Firestore Rules cannot iterate through an arbitrarily sized list. The
+    // client validates every weight; rules enforce the canonical list shape,
+    // count match, and a positive numeric first entry. A future trusted backend
+    // should validate every entry if writes move behind a callable API.
+    function validFishProfile(data) {
+      return data.fishCount is int
+        && data.fishCount > 0
+        && data.fishWeightsG is list
+        && data.fishWeightsG.size() == data.fishCount
+        && data.fishWeightsG[0] is number
+        && data.fishWeightsG[0] > 0;
+    }
+
     function validAquariumFieldValues(changed) {
       return (!changed.hasAny(['name']) || request.resource.data.name is string)
-        && (!changed.hasAny(['species']) || request.resource.data.species is list)
-        && (!changed.hasAny(['bioload'])
-          || request.resource.data.bioload in ['low', 'medium', 'high'])
+        && (!changed.hasAny(['species'])
+          || (request.resource.data.species is list
+            && request.resource.data.species.size() == 1
+            && request.resource.data.species[0] == 'Goldfish'))
         && (!changed.hasAny(['minTemp']) || request.resource.data.minTemp is number)
         && (!changed.hasAny(['maxTemp']) || request.resource.data.maxTemp is number)
+        && (!changed.hasAny(['minPh', 'maxPh'])
+          || (request.resource.data.minPh is number
+            && request.resource.data.maxPh is number
+            && request.resource.data.minPh >= 0
+            && request.resource.data.maxPh <= 14
+            && request.resource.data.minPh <= request.resource.data.maxPh))
         && (!changed.hasAny(['minLevel']) || request.resource.data.minLevel is number)
         && (!changed.hasAny(['minQuality']) || request.resource.data.minQuality is number)
         && (!changed.hasAny(['feeder'])
@@ -219,37 +436,67 @@ service cloud.firestore {
           || validAutomationSettings(request.resource.data.automationSettings))
         && (!changed.hasAny(['manualStatus'])
           || validManualStatus(request.resource.data.manualStatus))
-        && (!changed.hasAny(['tankType']) || request.resource.data.tankType is string)
+        && (!changed.hasAny(['tankType'])
+          || request.resource.data.tankType == 'Freshwater')
         && (!changed.hasAny(['tankSizeLiters'])
           || request.resource.data.tankSizeLiters is number)
         && (!changed.hasAny(['tankSizeCategory'])
           || request.resource.data.tankSizeCategory in ['small', 'medium', 'large'])
         && (!changed.hasAny(['tankLengthCm'])
-          || request.resource.data.tankLengthCm is number)
+          || (request.resource.data.tankLengthCm is number
+            && request.resource.data.tankLengthCm > 0))
         && (!changed.hasAny(['tankWidthCm'])
-          || request.resource.data.tankWidthCm is number)
+          || (request.resource.data.tankWidthCm is number
+            && request.resource.data.tankWidthCm > 0))
         && (!changed.hasAny(['tankHeightCm'])
-          || request.resource.data.tankHeightCm is number)
+          || (request.resource.data.tankHeightCm is number
+            && request.resource.data.tankHeightCm > 0))
         && (!changed.hasAny(['workingWaterVolumeLiters'])
-          || request.resource.data.workingWaterVolumeLiters is number)
+          || (request.resource.data.workingWaterVolumeLiters is number
+            && request.resource.data.workingWaterVolumeLiters > 0))
+        && (!changed.hasAny(['hasFiltrationSystem'])
+          || request.resource.data.hasFiltrationSystem is bool)
         && (!changed.hasAny(['filtrationSetup'])
-          || request.resource.data.filtrationSetup is string)
+          || (request.resource.data.filtrationSetup is string
+            && request.resource.data.filtrationSetup.size() > 0))
         && (!changed.hasAny(['filterCapacity'])
           || request.resource.data.filterCapacity is string)
-        && (!changed.hasAny(['fishCount']) || request.resource.data.fishCount is number)
+        && (!changed.hasAny(['fishCount', 'fishWeightsG'])
+          || validFishProfile(request.resource.data))
         && (!changed.hasAny(['updatedAt']) || request.resource.data.updatedAt is string)
         && (!changed.hasAny(['directorySchemaVersion'])
-          || request.resource.data.directorySchemaVersion == 1);
+          || request.resource.data.directorySchemaVersion == 3);
     }
 
     function validAquariumCreate(allowedFields) {
       return request.resource.data.keys().hasAll(aquariumCreateRequiredFields())
         && request.resource.data.keys().hasOnly(allowedFields)
         && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
         && request.resource.data.species is list
-        && request.resource.data.bioload in ['low', 'medium', 'high']
+        && request.resource.data.species.size() == 1
+        && request.resource.data.species[0] == 'Goldfish'
+        && request.resource.data.tankType == 'Freshwater'
+        && request.resource.data.tankLengthCm is number
+        && request.resource.data.tankLengthCm > 0
+        && request.resource.data.tankWidthCm is number
+        && request.resource.data.tankWidthCm > 0
+        && request.resource.data.tankHeightCm is number
+        && request.resource.data.tankHeightCm > 0
+        && request.resource.data.workingWaterVolumeLiters is number
+        && request.resource.data.workingWaterVolumeLiters > 0
+        && request.resource.data.hasFiltrationSystem is bool
+        && (!request.resource.data.keys().hasAny(['filtrationSetup'])
+          || (request.resource.data.filtrationSetup is string
+            && request.resource.data.filtrationSetup.size() > 0))
+        && validFishProfile(request.resource.data)
         && request.resource.data.minTemp is number
         && request.resource.data.maxTemp is number
+        && request.resource.data.minPh is number
+        && request.resource.data.maxPh is number
+        && request.resource.data.minPh >= 0
+        && request.resource.data.maxPh <= 14
+        && request.resource.data.minPh <= request.resource.data.maxPh
         && request.resource.data.minLevel is number
         && request.resource.data.minQuality is number
         && request.resource.data.temp == request.resource.data.minTemp
@@ -262,7 +509,7 @@ service cloud.firestore {
         && request.resource.data.ownerName is string
         && request.resource.data.createdAt is string
         && request.resource.data.updatedAt is string
-        && request.resource.data.directorySchemaVersion == 1
+        && request.resource.data.directorySchemaVersion == 3
         && (!request.resource.data.keys().hasAny(['automationSettings'])
           || validAutomationSettings(request.resource.data.automationSettings))
         && (!request.resource.data.keys().hasAny(['manualStatus'])
@@ -284,12 +531,27 @@ service cloud.firestore {
         && data.ownerName is string
         && data.species is list
         && data.updatedAt is string
-        && data.schemaVersion == 1
-        && (!data.keys().hasAny(['fishCount']) || data.fishCount is number)
+        && data.schemaVersion == 3
+        && (!data.keys().hasAny(['bioload'])
+          || data.bioload in ['low', 'medium', 'high'])
+        && (!data.keys().hasAny(['fishCount'])
+          || (data.fishCount is int && data.fishCount >= 0))
         && (!data.keys().hasAny(['tankType']) || data.tankType is string)
         && (!data.keys().hasAny(['tankSizeLiters']) || data.tankSizeLiters is number)
+        && (!data.keys().hasAny(['tankLengthCm'])
+          || (data.tankLengthCm is number && data.tankLengthCm > 0))
+        && (!data.keys().hasAny(['tankWidthCm'])
+          || (data.tankWidthCm is number && data.tankWidthCm > 0))
+        && (!data.keys().hasAny(['tankHeightCm'])
+          || (data.tankHeightCm is number && data.tankHeightCm > 0))
         && (!data.keys().hasAny(['workingWaterVolumeLiters'])
-          || data.workingWaterVolumeLiters is number)
+          || (data.workingWaterVolumeLiters is number
+            && data.workingWaterVolumeLiters > 0))
+        && (!data.keys().hasAny(['hasFiltrationSystem'])
+          || data.hasFiltrationSystem is bool)
+        && (!data.keys().hasAny(['filtrationSetup'])
+          || (data.filtrationSetup is string
+            && data.filtrationSetup.size() > 0))
         && (!data.keys().hasAny(['createdAt']) || data.createdAt is string);
     }
 
@@ -300,16 +562,23 @@ service cloud.firestore {
       let directory = getAfter(directoryPath).data;
       return existsAfter(aquariumPath)
         && existsAfter(directoryPath)
-        && validAquariumDirectoryDocument(directory)
         && aquarium.ownerId == directory.ownerId
         && aquarium.name == directory.name
         && aquarium.ownerName == directory.ownerName
         && aquarium.species == directory.species
+        && aquarium.get('bioload', null) == directory.get('bioload', null)
         && aquarium.get('fishCount', null) == directory.get('fishCount', null)
         && aquarium.get('tankType', null) == directory.get('tankType', null)
         && aquarium.get('tankSizeLiters', null) == directory.get('tankSizeLiters', null)
+        && aquarium.get('tankLengthCm', null) == directory.get('tankLengthCm', null)
+        && aquarium.get('tankWidthCm', null) == directory.get('tankWidthCm', null)
+        && aquarium.get('tankHeightCm', null) == directory.get('tankHeightCm', null)
         && aquarium.get('workingWaterVolumeLiters', null)
-          == directory.get('workingWaterVolumeLiters', null);
+          == directory.get('workingWaterVolumeLiters', null)
+        && aquarium.get('hasFiltrationSystem', null)
+          == directory.get('hasFiltrationSystem', null)
+        && aquarium.get('filtrationSetup', null)
+          == directory.get('filtrationSetup', null);
     }
 
     function validUserAquariumUpdate() {
@@ -321,37 +590,43 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow get: if hasProtectedAccess() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
       allow create: if isSignedIn() && validUserProfileCreate(uid);
-      allow update: if isSignedIn()
+      allow update: if hasProtectedAccess()
         && request.auth.uid == uid
         && validSelfProfileUpdate();
       allow delete: if false;
     }
 
     match /aquariums/{aquariumId} {
-      allow read: if isSignedIn()
+      allow get: if hasProtectedAccess()
+        && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
+        && resource.data.ownerId == request.auth.uid;
+
+      // Collection queries cannot safely resolve an access-block document whose
+      // ID comes from the collection wildcard. Keep list authorization limited
+      // to the authenticated owner's query; protected child data and direct
+      // document access still require aquariumAccessOpen().
+      allow list: if hasProtectedAccess()
         && !isAdmin()
         && resource.data.ownerId == request.auth.uid;
 
-      allow create: if isSignedIn()
+      allow create: if hasProtectedAccess()
         && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
         && request.resource.data.ownerId == request.auth.uid
         && validAquariumCreate(userAquariumCreateFields())
         && aquariumDirectoryMatchesSource(aquariumId);
 
-      allow update: if isSignedIn()
+      allow update: if hasProtectedAccess()
         && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
         && validUserAquariumUpdate()
         && aquariumDirectoryMatchesSource(aquariumId);
 
-      allow delete: if isSignedIn()
-        && !isAdmin()
-        && resource.data.ownerId == request.auth.uid
-        && !existsAfter(
-          /databases/$(database)/documents/aquarium_directory/$(aquariumId)
-        );
+      allow delete: if false;
 
       match /sensor_readings/{dateKey} {
         allow read: if ownsAquarium(aquariumId);
@@ -366,25 +641,26 @@ service cloud.firestore {
 
     match /aquarium_directory/{aquariumId} {
       allow read: if isAdmin()
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+        || (hasProtectedAccess()
+          && aquariumAccessOpen(aquariumId)
+          && resource.data.ownerId == request.auth.uid);
 
-      allow create: if isSignedIn()
+      allow create: if hasProtectedAccess()
         && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
         && request.resource.data.ownerId == request.auth.uid
+        && validAquariumDirectoryDocument(request.resource.data)
         && aquariumDirectoryMatchesSource(aquariumId);
 
-      allow update: if isSignedIn()
+      allow update: if hasProtectedAccess()
         && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
+        && validAquariumDirectoryDocument(request.resource.data)
         && aquariumDirectoryMatchesSource(aquariumId);
 
-      allow delete: if isSignedIn()
-        && !isAdmin()
-        && resource.data.ownerId == request.auth.uid
-        && !existsAfter(
-          /databases/$(database)/documents/aquariums/$(aquariumId)
-        );
+      allow delete: if false;
     }
 
     match /sensor_readings/{readingId} {
@@ -404,6 +680,39 @@ service cloud.firestore {
     match /monitoring_reports/{reportId} {
       allow read: if ownsAquarium(resource.data.aquarium_id);
       allow write: if false;
+    }
+
+    match /support_threads/{threadId} {
+      allow get: if hasProtectedAccess()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+      allow list: if hasProtectedAccess()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+      allow create: if validSupportThreadCreate();
+      allow update: if hasProtectedAccess()
+        && (
+          validSupportReplyUpdate(isAdmin() ? 'Admin' : 'User')
+          || validSupportReadUpdate(isAdmin() ? 'Admin' : 'User')
+          || validSupportStatusUpdate()
+          || validSupportVisibilityUpdate(isAdmin() ? 'Admin' : 'User')
+        );
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if hasProtectedAccess()
+          && (
+            isAdmin()
+            || get(
+              /databases/$(database)/documents/support_threads/$(threadId)
+            ).data.ownerId == request.auth.uid
+          );
+        allow create: if validSupportMessageCreate(threadId);
+        allow update, delete: if false;
+      }
+    }
+
+    match /authorization_user_policies/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
     }
 
     match /{document=**} {

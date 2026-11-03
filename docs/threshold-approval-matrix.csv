@@ -1,0 +1,13 @@
+rule_id,parameter_or_event,unit_or_state,validity_expression,normal_expression,warning_expression,critical_expression,persistence_policy,context_conditions,recommendation_rule_ids,status,approved_by,approval_date,approval_reference
+THR-TEMP-001,water_temperature,degC,TBD,TBD,TBD,TBD,TBD,Small freshwater aquarium and Goldfish,TBD,APPROVAL_REQUIRED,,,,
+THR-PH-001,ph,pH,TBD,TBD,TBD,TBD,TBD,Small freshwater aquarium and Goldfish,TBD,APPROVAL_REQUIRED,,,,
+THR-TDS-001,total_dissolved_solids,ppm,TBD,TBD,TBD,TBD,TBD,Small freshwater aquarium and Goldfish,TBD,APPROVAL_REQUIRED,,,,
+THR-TURB-001,turbidity,TBD,TBD,TBD,TBD,TBD,TBD,Calibration and authoritative unit required,TBD,APPROVAL_REQUIRED,,,,
+THR-LEVEL-001,water_level,percent,TBD,TBD,TBD,TBD,TBD,Operational volume and calibrated tank geometry,TBD,APPROVAL_REQUIRED,,,,
+THR-FILTER-001,filtration_status,Active|Inactive|Fault|Unknown,TBD,TBD,TBD,TBD,TBD,Use hasFiltrationSystem as profile context; legacy filtrationSetup is compatibility-only; no type capacity or flow fields,TBD,APPROVAL_REQUIRED,,,,
+THR-EQUIP-001,equipment_operation,TBD,TBD,TBD,TBD,TBD,TBD,Feeder filtration and lighting observation contract required,TBD,APPROVAL_REQUIRED,,,,
+THR-POWER-001,power_status,TBD,TBD,TBD,TBD,TBD,TBD,Primary power and UPS semantics required,TBD,APPROVAL_REQUIRED,,,,
+THR-STALE-001,telemetry_availability,milliseconds,TBD,TBD,TBD,TBD,TBD,Network and device recovery policy required,TBD,APPROVAL_REQUIRED,,,,
+THR-INVALID-001,sensor_reading_validity,validation_result,TBD,TBD,TBD,TBD,TBD,Separate from water-quality classification,TBD,APPROVAL_REQUIRED,,,,
+THR-OVERALL-001,overall_aquarium_condition,classification_set,TBD,TBD,TBD,TBD,TBD,Aggregation across parameter and event results,TBD,APPROVAL_REQUIRED,,,,
+THR-BIOLOAD-001,estimated_bioload_context,g_per_L,TBD,TBD,TBD,TBD,TBD,Specify whether bioload selects or modifies rules,TBD,APPROVAL_REQUIRED,,,,

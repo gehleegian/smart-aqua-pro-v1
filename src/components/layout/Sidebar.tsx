@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   LayoutDashboard,
   Activity,
-  Cpu,
   Bell,
   BarChart3,
   Fish,
@@ -13,6 +12,7 @@ import {
   Waves,
   LogOut,
   X,
+  MessageSquareText,
 } from 'lucide-react';
 import type { UserRole } from '../../types/user';
 import { normalizeRole } from '../../utils/roleHelpers';
@@ -36,11 +36,11 @@ type MenuItem = {
 const allMenuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
   { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['User'] },
-  { id: 'automation', label: 'Automation', icon: Cpu, roles: ['User'] },
   { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['User'] },
   { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['User'] },
   { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['User'] },
   { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
+  { id: 'support', label: 'Support Messages', icon: MessageSquareText, roles: ['Admin', 'User'] },
   { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] },
 ];
 

@@ -1,3 +1,4 @@
+import { formatWaterLevel } from './monitoringAssessmentCore';
 import {
   AlertTriangle,
   Droplets,
@@ -24,9 +25,12 @@ import type {
   DashboardData,
   DashboardSummaryCard,
   DashboardTankStat,
-  DashboardStatus,
   OwnerGroup,
 } from '../types/dashboard';
+import {
+  assessAquariumCondition,
+  type AssessmentTelemetry,
+} from './monitoringAssessment';
 
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -36,30 +40,19 @@ export function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-export function getAquariumStatus(
-  aquarium: Pick<Aquarium, 'level' | 'minLevel' | 'quality' | 'minQuality' | 'tdsPpm'>,
-  hasFreshPurityTelemetry = true
-): DashboardStatus {
-  const purityIsHealthy =
-    typeof aquarium.tdsPpm === 'number' ? aquarium.tdsPpm <= 500 : aquarium.quality >= aquarium.minQuality;
-
-  if (
-    !hasFreshPurityTelemetry ||
-    aquarium.level < aquarium.minLevel ||
-    !purityIsHealthy
-  ) {
-    return 'warning';
-  }
-
-  return 'healthy';
-}
-
 export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
     status: 'warning',
-    fishCount: Array.isArray(aquarium.species) ? aquarium.species.length : 0,
+    assessment: assessAquariumCondition({
+      profile: aquarium,
+      telemetry: null,
+      source: 'unavailable',
+    }),
+    telemetrySource: 'unavailable',
+    fishCount: aquarium.fishCount ?? 0,
     hasFreshTelemetry: false,
+    hasFreshTemperatureTelemetry: false,
     hasFreshPurityTelemetry: false,
     hasFreshPhTelemetry: false,
     hasFreshTurbidityTelemetry: false,
@@ -92,12 +85,39 @@ export function mergeDashboardAquariums(
         : aquarium.powerStatus,
       quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
     };
+    const assessmentTelemetry: AssessmentTelemetry | null = snapshot
+      ? {
+          temperatureC: snapshot.temperatureC,
+          temperatureValid: snapshot.hasFreshTemperatureTelemetry,
+          waterLevelPercent: snapshot.waterLevelPercent,
+          waterLevelValid: true,
+          tdsPpm: snapshot.tdsPpm,
+          tdsPurityPercent: snapshot.tdsPercent,
+          tdsValid: snapshot.hasFreshPurityTelemetry,
+          ph: snapshot.ph,
+          phValid: snapshot.hasFreshPhTelemetry,
+          turbidity: snapshot.turbidity,
+          turbidityValid: snapshot.hasFreshTurbidityTelemetry,
+          filterState: snapshot.filterState,
+          equipmentStatus: snapshot.equipmentStatus,
+          powerStatus: snapshot.powerStatus,
+        }
+      : null;
+    const assessment = assessAquariumCondition({
+      profile: nextAquarium,
+      telemetry: assessmentTelemetry,
+      source: snapshot ? 'live' : 'unavailable',
+      assessedAt: now,
+    });
 
     return {
       ...nextAquarium,
-      status: snapshot ? getAquariumStatus(nextAquarium, snapshot.hasFreshPurityTelemetry) : 'warning',
-      fishCount: Array.isArray(nextAquarium.species) ? nextAquarium.species.length : 0,
+      status: assessment.overallSeverity === 'normal' ? 'healthy' : 'warning',
+      assessment,
+      telemetrySource: snapshot ? 'live' : 'unavailable',
+      fishCount: nextAquarium.fishCount ?? 0,
       hasFreshTelemetry: Boolean(snapshot),
+      hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
       hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
       hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
       hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
@@ -144,7 +164,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Thermometer,
         change: message,
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'Water Level',
@@ -152,7 +172,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Droplets,
         change: message,
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'Water Purity (TDS)',
@@ -160,7 +180,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Waves,
         change: message,
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'System Status',
@@ -168,7 +188,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Zap,
         change: message,
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'pH Level',
@@ -176,7 +196,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Activity,
         change: 'Waiting for telemetry',
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'Turbidity',
@@ -184,7 +204,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Gauge,
         change: 'Waiting for telemetry',
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
       {
         title: 'Power Status',
@@ -192,43 +212,33 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         icon: Power,
         change: 'Waiting for telemetry',
         trend: 'warning',
-        sparkline: [0, 0, 0, 0, 0, 0],
+        sparkline: [],
       },
     ];
   }
 
+  const condition = (parameter: string) =>
+    tank.assessment.parameters.find((item) => item.parameter === parameter);
+  const trend = (parameter: string): DashboardTankStat['trend'] =>
+    condition(parameter)?.severity === 'normal' ? 'good' : 'warning';
+
   return [
     {
       title: 'Temperature',
-      value: `${tank.temp.toFixed(1)}\u00B0C`,
+      value: tank.hasFreshTemperatureTelemetry ? `${tank.temp.toFixed(1)}\u00B0C` : '--',
       icon: Thermometer,
       change:
-        tank.temp >= tank.minTemp && tank.temp <= tank.maxTemp ? 'Normal' : 'Check range',
-      trend:
-        tank.temp >= tank.minTemp && tank.temp <= tank.maxTemp ? 'good' : 'warning',
-      sparkline: [
-        tank.temp - 1.5,
-        tank.temp - 1,
-        tank.temp - 0.5,
-        tank.temp - 0.2,
-        tank.temp + 0.1,
-        tank.temp,
-      ],
+        condition('temperature')?.message || 'Assessment unavailable',
+      trend: trend('temperature'),
+      sparkline: [],
     },
     {
       title: 'Water Level',
-      value: `${tank.level}%`,
+      value: formatWaterLevel(tank.level, tank.hasFreshTelemetry),
       icon: Droplets,
-      change: tank.level >= tank.minLevel ? 'Normal' : 'Needs attention',
-      trend: tank.level >= tank.minLevel ? 'good' : 'warning',
-      sparkline: [
-        tank.level + 5,
-        tank.level + 3,
-        tank.level + 2,
-        tank.level + 1,
-        tank.level,
-        tank.level,
-      ],
+      change: condition('waterLevel')?.message || 'Assessment unavailable',
+      trend: trend('waterLevel'),
+      sparkline: [],
     },
     {
       title: 'Water Purity (TDS)',
@@ -238,32 +248,9 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
           : `${tank.quality}%`
         : '--',
       icon: Waves,
-      change: tank.hasFreshPurityTelemetry
-        ? typeof tank.tdsPpm === 'number'
-          ? tank.tdsPpm <= 300
-            ? 'Healthy'
-            : tank.tdsPpm <= 500
-              ? 'Moderate'
-              : 'Poor'
-          : tank.quality >= tank.minQuality
-            ? 'Healthy'
-            : tank.quality >= 65
-              ? 'Moderate'
-              : 'Poor'
-        : 'Sensor unavailable',
-      trend:
-        tank.hasFreshPurityTelemetry &&
-        (typeof tank.tdsPpm === 'number' ? tank.tdsPpm <= 500 : tank.quality >= tank.minQuality)
-          ? 'good'
-          : 'warning',
-      sparkline: [
-        tank.quality - 4,
-        tank.quality - 3,
-        tank.quality - 2,
-        tank.quality - 1,
-        tank.quality,
-        tank.quality,
-      ],
+      change: condition('tds')?.message || 'Sensor unavailable',
+      trend: trend('tds'),
+      sparkline: [],
     },
     {
       title: 'pH Level',
@@ -271,19 +258,9 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         ? tank.ph.toFixed(1)
         : '--',
       icon: Activity,
-      change: tank.hasFreshPhTelemetry && typeof tank.ph === 'number'
-        ? tank.ph >= 6.5 && tank.ph <= 8.5
-          ? 'Normal'
-          : 'Check range'
-        : 'Waiting for telemetry',
-      trend:
-        tank.hasFreshPhTelemetry &&
-        typeof tank.ph === 'number' &&
-        tank.ph >= 6.5 &&
-        tank.ph <= 8.5
-          ? 'good'
-          : 'warning',
-      sparkline: [0, 0, 0, 0, 0, 0],
+      change: condition('ph')?.message || 'Waiting for telemetry',
+      trend: trend('ph'),
+      sparkline: [],
     },
     {
       title: 'Turbidity',
@@ -291,38 +268,25 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
         ? `${tank.turbidity.toFixed(0)} NTU`
         : '--',
       icon: Gauge,
-      change: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
-        ? tank.turbidity <= 5
-          ? 'Clear'
-          : 'Check clarity'
-        : 'Waiting for telemetry',
-      trend:
-        tank.hasFreshTurbidityTelemetry &&
-        typeof tank.turbidity === 'number' &&
-        tank.turbidity <= 5
-          ? 'good'
-          : 'warning',
-      sparkline: [0, 0, 0, 0, 0, 0],
+      change: condition('turbidity')?.message || 'Waiting for telemetry',
+      trend: trend('turbidity'),
+      sparkline: [],
     },
     {
       title: 'Power Status',
       value: tank.hasFreshPowerTelemetry ? tank.powerStatus || '--' : '--',
       icon: Power,
-      change: tank.hasFreshPowerTelemetry
-        ? tank.powerStatus === 'Online'
-          ? 'Normal'
-          : 'Check power'
-        : 'Waiting for telemetry',
-      trend: tank.hasFreshPowerTelemetry && tank.powerStatus === 'Online' ? 'good' : 'warning',
-      sparkline: [0, 0, 0, 0, 0, 0],
+      change: condition('power')?.message || 'Waiting for telemetry',
+      trend: trend('power'),
+      sparkline: [],
     },
     {
       title: 'System Status',
-      value: tank.status === 'healthy' ? 'Stable' : 'Warning',
+      value: tank.assessment.overallSeverity,
       icon: Zap,
-      change: tank.status === 'healthy' ? 'All normal' : 'Check tank',
+      change: tank.status === 'healthy' ? 'All assessed parameters normal' : 'Check condition assessment',
       trend: tank.status === 'healthy' ? 'good' : 'warning',
-      sparkline: [100, 100, 100, 100, 100, tank.status === 'healthy' ? 100 : 85],
+      sparkline: [],
     },
   ];
 }

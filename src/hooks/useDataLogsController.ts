@@ -72,7 +72,11 @@ export function useDataLogsController() {
   }, []);
 
   useEffect(() => {
-    void loadPageData();
+    const loadTimer = window.setTimeout(() => {
+      void loadPageData();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadPageData]);
 
   const selectedAquarium = useMemo(
@@ -85,39 +89,44 @@ export function useDataLogsController() {
   );
 
   useEffect(() => {
-    if (!selectedAquarium) {
-      setHistoryEntries([]);
-      return;
-    }
-
     let cancelled = false;
-
-    void (async () => {
-      try {
-        setHistoryLoading(true);
-        const entriesByDate = await Promise.all(
-          rangeDateKeys.map((dateKey) => getDeviceTelemetryHistory(selectedAquarium.id, dateKey))
-        );
-
-        if (!cancelled) {
-          setHistoryEntries(entriesByDate.flat());
-        }
-      } catch (historyError) {
-        console.error(historyError);
-
-        if (!cancelled) {
-          setError(getErrorMessage(historyError, 'Failed to load telemetry history.'));
-          setHistoryEntries([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setHistoryLoading(false);
-        }
+    const historyTimer = window.setTimeout(() => {
+      if (!selectedAquarium) {
+        setHistoryEntries([]);
+        setHistoryLoading(false);
+        return;
       }
-    })();
+
+      void (async () => {
+        try {
+          setHistoryLoading(true);
+          const entriesByDate = await Promise.all(
+            rangeDateKeys.map((dateKey) =>
+              getDeviceTelemetryHistory(selectedAquarium.id, dateKey)
+            )
+          );
+
+          if (!cancelled) {
+            setHistoryEntries(entriesByDate.flat());
+          }
+        } catch (historyError) {
+          console.error(historyError);
+
+          if (!cancelled) {
+            setError(getErrorMessage(historyError, 'Failed to load telemetry history.'));
+            setHistoryEntries([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setHistoryLoading(false);
+          }
+        }
+      })();
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(historyTimer);
     };
   }, [rangeDateKeys, selectedAquarium]);
 

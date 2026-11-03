@@ -8,7 +8,9 @@ import {
 } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, rtdb } from '../firebase';
+import { normalizeTelemetry } from '../utils/deviceTelemetryParser';
 import { getCurrentUserProfile } from './userService';
+import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
 import {
   appendSensorReading,
   buildSensorReadingDocument,
@@ -36,6 +38,7 @@ const emptyDeviceShadow: DeviceShadow = {
 };
 
 let serverTimeOffsetUnsubscribe: (() => void) | null = null;
+let serverTimeOffsetSubscriberCount = 0;
 
 type DeviceShadowSubscriptionOptions = {
   onError?: (error: Error) => void;
@@ -52,6 +55,8 @@ async function assertRealtimeDeviceAccess(
   if (!currentUser) {
     throw new Error('You must be logged in to access aquarium device data.');
   }
+
+  await assertCurrentEmailAccess(currentUser);
 
   const currentProfile = await getCurrentUserProfile(currentUser.uid);
 
@@ -91,14 +96,45 @@ export function isRealtimeDatabaseConfigured() {
   return Boolean(rtdb);
 }
 
-function ensureServerTimeOffsetSubscription() {
-  if (!rtdb || serverTimeOffsetUnsubscribe) {
-    return;
+function subscribeToServerTimeOffset() {
+  if (!rtdb) {
+    return () => undefined;
   }
 
-  serverTimeOffsetUnsubscribe = onValue(ref(rtdb, '.info/serverTimeOffset'), (snapshot) => {
-    setDeviceTelemetryClockOffsetMs(Number(snapshot.val() || 0));
-  });
+  serverTimeOffsetSubscriberCount += 1;
+
+  if (!serverTimeOffsetUnsubscribe) {
+    serverTimeOffsetUnsubscribe = onValue(
+      ref(rtdb, '.info/serverTimeOffset'),
+      (snapshot) => {
+        setDeviceTelemetryClockOffsetMs(Number(snapshot.val() || 0));
+      },
+      (error) => {
+        console.error('Failed to read Firebase server time offset.', error);
+        setDeviceTelemetryClockOffsetMs(0);
+      }
+    );
+  }
+
+  let released = false;
+
+  return () => {
+    if (released) {
+      return;
+    }
+
+    released = true;
+    serverTimeOffsetSubscriberCount = Math.max(
+      0,
+      serverTimeOffsetSubscriberCount - 1
+    );
+
+    if (serverTimeOffsetSubscriberCount === 0 && serverTimeOffsetUnsubscribe) {
+      serverTimeOffsetUnsubscribe();
+      serverTimeOffsetUnsubscribe = null;
+      setDeviceTelemetryClockOffsetMs(0);
+    }
+  };
 }
 
 function toReadableDeviceError(error: unknown, fallbackMessage: string) {
@@ -109,64 +145,7 @@ function toReadableDeviceError(error: unknown, fallbackMessage: string) {
   return new Error(fallbackMessage);
 }
 
-function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
 
-  const telemetry = value as Record<string, unknown>;
-  const temperatureC = Number(telemetry.temperatureC);
-  const waterLevelPercent = Number(telemetry.waterLevelPercent);
-  const tdsPpm = Number(telemetry.tdsPpm);
-  const tdsPercent = Number(telemetry.tdsPercent ?? telemetry.waterQualityPercent);
-  const turbidity = Number(telemetry.turbidity);
-  const ammoniaPpm = Number(telemetry.ammoniaPpm);
-  const updatedAt = Number(telemetry.updatedAt);
-  const hasTdsPpm = Number.isFinite(tdsPpm);
-  const hasTdsPercent = Number.isFinite(tdsPercent);
-  const tdsReadingValid =
-    typeof telemetry.tdsReadingValid === 'boolean'
-      ? telemetry.tdsReadingValid
-      : hasTdsPercent;
-
-  if (
-    !Number.isFinite(temperatureC) ||
-    !Number.isFinite(waterLevelPercent) ||
-    !Number.isFinite(updatedAt)
-  ) {
-    return null;
-  }
-
-  return {
-    temperatureC,
-    temperatureReadingValid:
-      typeof telemetry.temperatureReadingValid === 'boolean'
-        ? telemetry.temperatureReadingValid
-        : true,
-    waterLevelPercent,
-    waterPresent: typeof telemetry.waterPresent === 'boolean' ? telemetry.waterPresent : true,
-    tdsPpm: hasTdsPpm ? tdsPpm : undefined,
-    tdsPercent: hasTdsPercent ? tdsPercent : undefined,
-    tdsReadingValid,
-    turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
-    ammoniaPpm: Number.isFinite(ammoniaPpm) ? ammoniaPpm : undefined,
-    filterState:
-      telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
-        ? telemetry.filterState
-        : undefined,
-    equipmentStatus:
-      telemetry.equipmentStatus === 'Normal' ||
-      telemetry.equipmentStatus === 'Warning' ||
-      telemetry.equipmentStatus === 'Fault' ||
-      telemetry.equipmentStatus === 'Unknown'
-        ? telemetry.equipmentStatus
-        : undefined,
-    powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
-    ph: Number.isFinite(Number(telemetry.ph)) ? Number(telemetry.ph) : undefined,
-    updatedAt,
-    online: typeof telemetry.online === 'boolean' ? telemetry.online : true,
-  };
-}
 
 export async function syncDeviceControlProfile(
   aquariumId: string,
@@ -451,10 +430,62 @@ export function subscribeToDeviceShadow(
     return () => undefined;
   }
 
-  ensureServerTimeOffsetSubscription();
-
   let cancelled = false;
-  let unsubscribe: (() => void) | undefined;
+  let subscriptionsClosed = false;
+  let releaseServerTimeOffset: (() => void) | undefined;
+  const unsubscribers: Array<() => void> = [];
+  const initializedChildren = new Set<keyof DeviceShadow>();
+  let shadow: DeviceShadow = { ...emptyDeviceShadow };
+
+  const closeSubscriptions = () => {
+    if (subscriptionsClosed) {
+      return;
+    }
+
+    subscriptionsClosed = true;
+
+    for (const unsubscribe of unsubscribers) {
+      unsubscribe();
+    }
+
+    unsubscribers.length = 0;
+    releaseServerTimeOffset?.();
+    releaseServerTimeOffset = undefined;
+  };
+
+  const reportSubscriptionError = (error: unknown) => {
+    if (cancelled || subscriptionsClosed) {
+      return;
+    }
+
+    closeSubscriptions();
+    callback(emptyDeviceShadow);
+    options.onError?.(
+      toReadableDeviceError(
+        error,
+        'Live device data could not be loaded for this aquarium.'
+      )
+    );
+  };
+
+  const updateShadow = <Key extends keyof DeviceShadow>(
+    key: Key,
+    value: DeviceShadow[Key]
+  ) => {
+    if (cancelled || subscriptionsClosed) {
+      return;
+    }
+
+    shadow = {
+      ...shadow,
+      [key]: value,
+    };
+    initializedChildren.add(key);
+
+    if (initializedChildren.size === 3) {
+      callback(shadow);
+    }
+  };
 
   void (async () => {
     try {
@@ -464,50 +495,68 @@ export function subscribeToDeviceShadow(
         return;
       }
 
-      unsubscribe = onValue(
-        deviceRootRef,
-        (snapshot) => {
-          const value = snapshot.val() as Partial<DeviceShadow> | null;
+      releaseServerTimeOffset = subscribeToServerTimeOffset();
 
-          callback({
-            control: value?.control || null,
-            latestCommand: value?.latestCommand || null,
-            telemetry: normalizeTelemetry(value?.telemetry) || null,
-          });
+      const telemetryUnsubscribe = onValue(
+        child(deviceRootRef, 'telemetry'),
+        (snapshot) => {
+          updateShadow('telemetry', normalizeTelemetry(snapshot.val()) || null);
         },
         (error) => {
           console.error(error);
-
-          if (cancelled) {
-            return;
-          }
-
-          callback(emptyDeviceShadow);
-          options.onError?.(
-            toReadableDeviceError(
-              error,
-              'Live device data could not be loaded for this aquarium.'
-            )
-          );
+          reportSubscriptionError(error);
         }
       );
+      unsubscribers.push(telemetryUnsubscribe);
+
+      if (subscriptionsClosed) {
+        telemetryUnsubscribe();
+        return;
+      }
+
+      const controlUnsubscribe = onValue(
+        child(deviceRootRef, 'control'),
+        (snapshot) => {
+          updateShadow('control', snapshot.val() || null);
+        },
+        (error) => {
+          console.error(error);
+          reportSubscriptionError(error);
+        }
+      );
+      unsubscribers.push(controlUnsubscribe);
+
+      if (subscriptionsClosed) {
+        controlUnsubscribe();
+        return;
+      }
+
+      const latestCommandUnsubscribe = onValue(
+        child(deviceRootRef, 'commands/latest'),
+        (snapshot) => {
+          updateShadow('latestCommand', snapshot.val() || null);
+        },
+        (error) => {
+          console.error(error);
+          reportSubscriptionError(error);
+        }
+      );
+      unsubscribers.push(latestCommandUnsubscribe);
+
+      if (subscriptionsClosed) {
+        latestCommandUnsubscribe();
+      }
     } catch (error) {
       console.error(error);
 
       if (!cancelled) {
-        callback(emptyDeviceShadow);
-        options.onError?.(
-          toReadableDeviceError(
-            error,
-            'Live device data could not be loaded for this aquarium.'
-          )
-        );
+        reportSubscriptionError(error);
       }
     }
   })();
 
   return () => {
     cancelled = true;
-    unsubscribe?.();
+    closeSubscriptions();
   };
 }

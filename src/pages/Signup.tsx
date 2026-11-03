@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { registerUser } from '../services/authService';
 import {
   formatAuthRateLimitDuration,
@@ -7,11 +16,32 @@ import {
   isAuthRateLimitError,
 } from '../utils/authRateLimit';
 
+function getFirebaseErrorCode(error: unknown) {
+  if (!error || typeof error !== 'object' || !('code' in error)) return '';
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : '';
+}
+
+function getSignupError(error: unknown) {
+  if (isAuthRateLimitError(error)) return error.message;
+
+  const messages: Record<string, string> = {
+    'auth/email-already-in-use': 'An account already uses this email address. Sign in instead.',
+    'auth/invalid-email': 'Enter a valid email address.',
+    'auth/weak-password': 'Use a stronger password with at least six characters.',
+    'auth/too-many-requests': 'Too many attempts. Please wait before trying again.',
+  };
+
+  const code = getFirebaseErrorCode(error);
+  if (messages[code]) return messages[code];
+  return error instanceof Error ? error.message : 'Unable to create the account.';
+}
+
 export default function Signup({
-  onSignup,
+  onVerificationRequired,
   onGoToLogin,
 }: {
-  onSignup: () => void;
+  onVerificationRequired: () => void;
   onGoToLogin: () => void;
 }) {
   const [name, setName] = useState('');
@@ -20,347 +50,169 @@ export default function Signup({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   const rateLimitStatus = useMemo(() => getAuthRateLimitStatus('signup', now), [now]);
-  const rateLimitMessage = rateLimitStatus.blocked
-    ? `Too many sign-up attempts. Try again in ${formatAuthRateLimitDuration(
-        rateLimitStatus.retryAfterMs
-      )}.`
-    : '';
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '14px 16px',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    border: '1px solid rgba(59, 130, 246, 0.18)',
-    borderRadius: '12px',
-    fontSize: '14px',
-    color: '#e2e8f0',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#bfdbfe',
-    marginBottom: '8px',
-  };
 
   const handleSignup = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      setError('Please fill in all fields.');
+    if (!name.trim() || !email.trim() || !password || !confirmPassword) {
+      setError('Complete all account fields.');
       return;
     }
-
+    if (password.length < 6) {
+      setError('Password must contain at least six characters.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
     if (rateLimitStatus.blocked) {
-      setError(rateLimitMessage);
+      setError(
+        `Too many requests. Try again in ${formatAuthRateLimitDuration(
+          rateLimitStatus.retryAfterMs
+        )}.`
+      );
       return;
     }
 
     try {
       setLoading(true);
       setError('');
-      setSuccess('');
-
       await registerUser(name, email, password);
-
-      setSuccess('Account created successfully. Please sign in now.');
-
-      setTimeout(() => {
-        onSignup();
-      }, 1500);
-    } catch (err: any) {
-      if (isAuthRateLimitError(err)) {
-        setError(err.message);
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError('Email is already in use.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Invalid email address.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password is too weak.');
-      } else {
-        setError('Signup failed.');
-      }
+      onVerificationRequired();
+    } catch (signupError) {
+      setError(getSignupError(signupError));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background:
-          'radial-gradient(circle at top left, rgba(14,165,233,0.18), transparent 30%), radial-gradient(circle at bottom right, rgba(59,130,246,0.18), transparent 25%), linear-gradient(135deg, #020617 0%, #0f172a 45%, #082f49 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 16px',
-        position: 'relative',
-      }}
-    >
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(8,145,178,0.17),transparent_34%),radial-gradient(circle_at_85%_80%,rgba(37,99,235,0.14),transparent_32%)]" />
+
       <button
+        type="button"
         onClick={onGoToLogin}
-        style={{
-          position: 'absolute',
-          top: '24px',
-          left: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(15,23,42,0.7)',
-          border: '1px solid rgba(96,165,250,0.2)',
-          color: '#e0f2fe',
-          borderRadius: '12px',
-          padding: '10px 14px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 600,
-          backdropFilter: 'blur(8px)',
-        }}
+        className="relative z-10 inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-white"
       >
-        <ArrowLeft size={16} />
-        Back
+        <ArrowLeft size={17} />
+        Back to sign in
       </button>
 
-      <div style={{ width: '100%', maxWidth: '460px' }}>
-        <div
-          style={{
-            background: 'rgba(2, 6, 23, 0.72)',
-            border: '1px solid rgba(96, 165, 250, 0.16)',
-            borderRadius: '24px',
-            padding: '36px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-            backdropFilter: 'blur(14px)',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <div
-              style={{
-                width: '72px',
-                height: '72px',
-                margin: '0 auto 18px',
-                overflow: 'hidden',
-              }}
-            >
-              <img
-                src="/smartaqua-logo.png"
-                alt="SmartAqua logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
-
-            <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-96px)] max-w-6xl items-center justify-center py-8">
+        <div className="grid w-full overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900/90 shadow-2xl shadow-black/35 backdrop-blur-xl lg:grid-cols-[0.9fr_1.1fr]">
+          <section className="border-b border-slate-700/80 bg-gradient-to-br from-cyan-950/80 via-slate-900 to-blue-950/70 p-8 lg:border-b-0 lg:border-r lg:p-12">
+            <img src="/smartaqua-logo.png" alt="SmartAqua Pro" className="h-16 w-16 object-contain" />
+            <p className="mt-8 text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">
               SmartAqua Pro
-            </h1>
-            <p style={{ fontSize: '14px', color: '#93c5fd', marginTop: '8px', marginBottom: 0 }}>
-              Create your account to continue
             </p>
-          </div>
+            <h1 className="mt-3 max-w-sm text-3xl font-bold leading-tight text-white sm:text-4xl">
+              Create a secure caretaker account
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">
+              Create your account, then verify the email address before accessing aquarium data.
+            </p>
 
-          <div style={{ marginBottom: '22px' }}>
-            <h2
-              style={{
-                fontSize: '22px',
-                fontWeight: 700,
-                color: '#ffffff',
-                margin: 0,
-                textAlign: 'center',
-              }}
-            >
-              Sign Up
-            </h2>
-          </div>
-
-          {error && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(239,68,68,0.14)',
-                border: '1px solid rgba(239,68,68,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fca5a5',
-              }}
-            >
-              {error}
+            <div className="mt-9 space-y-5">
+              <Feature icon={<ShieldCheck size={19} />} title="Verified identity" text="Firebase confirms ownership through a verification link sent after registration." />
+              <Feature icon={<LockKeyhole size={19} />} title="Protected access" text="Aquariums remain unavailable until the Firebase account is verified." />
+              <Feature icon={<KeyRound size={19} />} title="One shared account" text="Use the same verified email and password on the web and mobile app." />
             </div>
-          )}
+          </section>
 
-          {!error && rateLimitMessage && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(245,158,11,0.14)',
-                border: '1px solid rgba(245,158,11,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#fcd34d',
+          <section className="p-6 sm:p-9 lg:p-12">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSignup();
               }}
             >
-              {rateLimitMessage}
-            </div>
-          )}
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
+                User / Caretaker registration
+              </p>
+              <h2 className="mt-3 text-3xl font-bold text-white">Create account</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Enter your account details. A verification link will be sent to your email.
+              </p>
 
-          {success && (
-            <div
-              style={{
-                marginBottom: '18px',
-                padding: '13px 14px',
-                backgroundColor: 'rgba(34,197,94,0.14)',
-                border: '1px solid rgba(34,197,94,0.28)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                color: '#86efac',
-              }}
-            >
-              {success}
-            </div>
-          )}
+              <div className="mt-7 space-y-5">
+                {error && <Notice>{error}</Notice>}
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your full name"
-              style={inputStyle}
-            />
-          </div>
+                <Field label="Full name" icon={<UserRound size={18} />}>
+                  <input type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter your full name" autoComplete="name" className="formal-input pl-11" />
+                </Field>
+                <Field label="Email address" icon={<Mail size={18} />}>
+                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" autoComplete="email" className="formal-input pl-11" />
+                </Field>
+                <Field label="Password" icon={<LockKeyhole size={18} />}>
+                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least six characters" autoComplete="new-password" className="formal-input px-11" />
+                  <PasswordToggle visible={showPassword} onClick={() => setShowPassword((visible) => !visible)} />
+                </Field>
+                <Field label="Confirm password" icon={<LockKeyhole size={18} />}>
+                  <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat your password" autoComplete="new-password" className="formal-input px-11" />
+                </Field>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              style={inputStyle}
-            />
-          </div>
+                <button
+                  type="submit"
+                  disabled={loading || rateLimitStatus.blocked}
+                  className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-cyan-950/30 transition hover:from-cyan-400 hover:to-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading
+                    ? 'Creating account...'
+                    : rateLimitStatus.blocked
+                      ? `Try again in ${formatAuthRateLimitDuration(rateLimitStatus.retryAfterMs)}`
+                      : 'Create account and send verification'}
+                </button>
+              </div>
+            </form>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
-                style={{ ...inputStyle, paddingRight: '46px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#93c5fd',
-                }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label style={labelStyle}>Confirm Password</label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm your password"
-              style={inputStyle}
-            />
-          </div>
-
-          <button
-            onClick={handleSignup}
-            disabled={loading || rateLimitStatus.blocked}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: 'linear-gradient(135deg, #06b6d4, #2563eb)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '14px',
-              fontSize: '15px',
-              fontWeight: 700,
-              cursor: loading || rateLimitStatus.blocked ? 'not-allowed' : 'pointer',
-              boxShadow: '0 12px 30px rgba(37,99,235,0.28)',
-              opacity: loading || rateLimitStatus.blocked ? 0.75 : 1,
-            }}
-          >
-            {loading
-              ? 'Creating Account...'
-              : rateLimitStatus.blocked
-                ? `Try Again In ${formatAuthRateLimitDuration(
-                    rateLimitStatus.retryAfterMs
-                  )}`
-                : 'Create Account'}
-          </button>
-
-          <p
-            style={{
-              textAlign: 'center',
-              fontSize: '14px',
-              color: '#94a3b8',
-              marginTop: '22px',
-              marginBottom: 0,
-            }}
-          >
-            Already have an account?{' '}
-            <button
-              onClick={onGoToLogin}
-              style={{
-                color: '#38bdf8',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '14px',
-              }}
-            >
-              Sign In
-            </button>
-          </p>
+            <p className="mt-8 text-center text-xs leading-5 text-slate-500">
+              Access is limited by account role and aquarium ownership permissions.
+            </p>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
+}
+
+function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">{icon}</div>
+      <div><p className="text-sm font-semibold text-white">{title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{text}</p></div>
+    </div>
+  );
+}
+
+function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-semibold text-slate-200">{label}</span>
+      <span className="relative block">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500">{icon}</span>
+        {children}
+      </span>
+    </label>
+  );
+}
+
+function PasswordToggle({ visible, onClick }: { visible: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={visible ? 'Hide password' : 'Show password'} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-cyan-300">
+      {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  );
+}
+
+function Notice({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{children}</div>;
 }

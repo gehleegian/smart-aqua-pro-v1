@@ -68,7 +68,11 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    void loadProfile();
+    const loadTimer = window.setTimeout(() => {
+      void loadProfile();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadProfile]);
 
   const openProfileModal = () => {

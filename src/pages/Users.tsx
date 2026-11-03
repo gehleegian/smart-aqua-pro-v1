@@ -25,6 +25,14 @@ function formatVolume(aquarium: AquariumDirectoryEntry) {
   return typeof volume === 'number' ? `${volume} L` : 'Not recorded';
 }
 
+function formatDimensions(aquarium: AquariumDirectoryEntry) {
+  return typeof aquarium.tankLengthCm === 'number' &&
+    typeof aquarium.tankWidthCm === 'number' &&
+    typeof aquarium.tankHeightCm === 'number'
+    ? `${aquarium.tankLengthCm} × ${aquarium.tankWidthCm} × ${aquarium.tankHeightCm} cm`
+    : 'Not recorded';
+}
+
 export default function Users() {
   const [users, setUsers] = useState<UserDirectoryItem[]>([]);
   const [aquariums, setAquariums] = useState<AquariumDirectoryEntry[]>([]);
@@ -263,12 +271,26 @@ export default function Users() {
                                           <dd className="mt-1 text-slate-300">{formatVolume(aquarium)}</dd>
                                         </div>
                                         <div>
+                                          <dt className="text-slate-500">Dimensions</dt>
+                                          <dd className="mt-1 text-slate-300">{formatDimensions(aquarium)}</dd>
+                                        </div>
+                                        <div>
                                           <dt className="text-slate-500">Fish type</dt>
                                           <dd className="mt-1 text-slate-300">{aquarium.species.join(', ') || 'Not recorded'}</dd>
                                         </div>
                                         <div>
                                           <dt className="text-slate-500">Fish count</dt>
                                           <dd className="mt-1 text-slate-300">{aquarium.fishCount ?? 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Filtration system installed</dt>
+                                          <dd className="mt-1 text-slate-300">
+                                            {aquarium.hasFiltrationSystem === true
+                                              ? 'Yes'
+                                              : aquarium.hasFiltrationSystem === false
+                                                ? 'No'
+                                                : 'Not recorded'}
+                                          </dd>
                                         </div>
                                         <div>
                                           <dt className="text-slate-500">Registered</dt>

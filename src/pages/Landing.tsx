@@ -623,7 +623,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { icon: '🌡️', title: 'Real-time Monitoring', desc: 'Track temperature, water level, water purity (TDS level), and pH in real-time with live sensor data.', color: 'from-orange-500 to-red-500' },
-              { icon: '⚙️', title: 'Intelligent Automation', desc: 'Rule-based automation for feeding, lighting, and filtration with bioload-based fish classification.', color: 'from-purple-500 to-indigo-500' },
+              { icon: '⚙️', title: 'Intelligent Automation', desc: 'Rule-based automation for feeding, lighting, and filtration with aquarium-specific profile context.', color: 'from-purple-500 to-indigo-500' },
               { icon: '🔔', title: 'Alert & Notification', desc: 'Instant warnings for abnormal conditions, system risks, and power outage detection.', color: 'from-amber-500 to-orange-500' },
               { icon: '📊', title: 'Data Logging & Reports', desc: 'Historical data analysis, interactive charts, and exportable CSV reports for long-term management.', color: 'from-emerald-500 to-green-500' },
               { icon: '🛡️', title: 'User Management', desc: 'Role-based access control with Admin, Operator, and Viewer permissions.', color: 'from-red-500 to-pink-500' },
@@ -680,7 +680,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
           <div className="space-y-4">
             {[
               { num: '01', text: 'Develop an IoT-based data collection and monitoring system that gathers real-time aquarium parameters such as temperature, water level, and water purity (TDS level).' },
-              { num: '02', text: 'Design and implement rule-based intelligent automation for feeding, lighting, and filtration using predefined thresholds, conditions, schedules, and bioload-based fish classification.' },
+              { num: '02', text: 'Design and implement rule-based intelligent automation for feeding, lighting, and filtration using predefined thresholds, conditions, schedules, and aquarium-specific profile data.' },
               { num: '03', text: 'Develop a centralized monitoring platform (web and mobile application) for real-time monitoring, remote control, user management, and improved accessibility.' },
               { num: '04', text: 'Integrate an alert and notification system that provides real-time warnings for abnormal conditions, system risks, and power outages.' },
               { num: '05', text: 'Implement data logging, historical analysis, and reporting features to support system evaluation, decision-making, and long-term aquarium management.' },

@@ -1,6 +1,10 @@
 import { Droplets, Pencil, Trash2, Waves, Thermometer } from 'lucide-react';
 import type { Aquarium } from '../../types/aquarium';
 import type { UserRole } from '../../types/user';
+import {
+  formatBiomass,
+  formatEstimatedBioload,
+} from '../../utils/aquariumProfileCalculations';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -22,6 +26,12 @@ export function AquariumCard({
 }: AquariumCardProps) {
   const qualityLabel =
     typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : `${aquarium.quality}%`;
+  const dimensions =
+    typeof aquarium.tankLengthCm === 'number' &&
+    typeof aquarium.tankWidthCm === 'number' &&
+    typeof aquarium.tankHeightCm === 'number'
+      ? `${aquarium.tankLengthCm} × ${aquarium.tankWidthCm} × ${aquarium.tankHeightCm} cm`
+      : 'Profile incomplete';
 
   return (
     <Card>
@@ -34,8 +44,8 @@ export function AquariumCard({
               <p className="mt-1 text-xs text-slate-500">{aquarium.ownerName}</p>
             ) : null}
           </div>
-          <Badge variant={aquarium.level >= aquarium.minLevel ? 'success' : 'warning'}>
-            {aquarium.bioload}
+          <Badge variant="info">
+            {aquarium.tankType || 'Profile incomplete'}
           </Badge>
         </div>
       </CardHeader>
@@ -58,17 +68,56 @@ export function AquariumCard({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <Button size="sm" variant="secondary" onClick={() => onEdit(aquarium)}>
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Button>
-          <Button size="sm" variant="danger" disabled={deleting} onClick={() => onDelete(aquarium.id)}>
-            <Trash2 className="h-4 w-4" />
-            {deleting ? 'Deleting...' : 'Delete'}
-          </Button>
-        </div>
+        <dl className="mt-4 grid gap-3 rounded-lg border border-slate-600/20 bg-slate-950/25 p-4 text-sm sm:grid-cols-2">
+          <ProfileItem label="Tank dimensions" value={dimensions} />
+          <ProfileItem
+            label="Operational water volume"
+            value={
+              typeof aquarium.workingWaterVolumeLiters === 'number'
+                ? `${aquarium.workingWaterVolumeLiters} L`
+                : 'Profile incomplete'
+            }
+          />
+          <ProfileItem
+            label="Filtration system installed"
+            value={
+              aquarium.hasFiltrationSystem === true
+                ? 'Yes'
+                : aquarium.hasFiltrationSystem === false
+                  ? 'No'
+                  : 'Profile incomplete'
+            }
+          />
+          <ProfileItem
+            label="Fish quantity"
+            value={typeof aquarium.fishCount === 'number' ? String(aquarium.fishCount) : 'Profile incomplete'}
+          />
+          <ProfileItem label="Total fish biomass" value={formatBiomass(aquarium.totalFishBiomassG)} />
+          <ProfileItem label="Estimated bioload" value={formatEstimatedBioload(aquarium.estimatedBioloadGL)} />
+        </dl>
+
+        {currentUserRole === 'User' ? (
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => onEdit(aquarium)}>
+              <Pencil className="h-4 w-4" />
+              Edit Profile
+            </Button>
+            <Button size="sm" variant="danger" disabled={deleting} onClick={() => onDelete(aquarium.id)}>
+              <Trash2 className="h-4 w-4" />
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function ProfileItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className="mt-1 text-slate-200">{value}</dd>
+    </div>
   );
 }

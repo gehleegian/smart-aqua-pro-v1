@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { onIdTokenChanged, signOut } from 'firebase/auth';
 import { auth } from '../../firebase';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Dashboard from '../../pages/Dashboard';
 import Monitoring from '../../pages/Monitoring';
-import Automation from '../../pages/Automation';
 import Alerts from '../../pages/Alerts';
 import DataLogs from '../../pages/DataLogs';
 import Aquariums from '../../pages/Aquariums';
@@ -15,23 +14,33 @@ import Settings from '../../pages/Settings';
 import Login from '../../pages/Login';
 import Landing from '../../pages/Landing';
 import Signup from '../../pages/Signup';
+import VerifyEmail from '../../pages/VerifyEmail';
+import Support from '../../pages/Support';
 
-import { getCurrentUserProfile } from '../../services/userService';
+import {
+  getCurrentUserProfile,
+  subscribeToCurrentUserProfile,
+} from '../../services/userService';
 import type { UserData, UserRole } from '../../types/user';
+import {
+  getCurrentEmailAccessState,
+  isVerificationPolicyUnavailableError,
+  VERIFICATION_POLICY_UNAVAILABLE_MESSAGE,
+} from '../../services/emailVerificationPolicyService';
 import { normalizeRole } from '../../utils/roleHelpers';
 
 const pages: Record<string, React.FC> = {
   dashboard: Dashboard,
   monitoring: Monitoring,
-  automation: Automation,
   alerts: Alerts,
   datalogs: DataLogs,
   aquariums: Aquariums,
   users: Users,
   settings: Settings,
+  support: Support,
 };
 
-type AppPage = 'landing' | 'login' | 'signup' | 'app';
+type AppPage = 'landing' | 'login' | 'signup' | 'verify-email' | 'app';
 type ThemeMode = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'smartAquaTheme';
@@ -46,8 +55,8 @@ const getInitialTheme = (): ThemeMode => {
 };
 
 const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'users', 'settings'],
-  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings'],
+  Admin: ['dashboard', 'users', 'support', 'settings'],
+  User: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'aquariums', 'support', 'settings'],
 };
 
 export default function Layout() {
@@ -58,6 +67,7 @@ export default function Layout() {
   const [user, setUser] = useState<UserData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [sessionError, setSessionError] = useState('');
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
 
   useEffect(() => {
@@ -71,7 +81,12 @@ export default function Layout() {
   }, [theme]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeProfile: (() => void) | undefined;
+
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
+      unsubscribeProfile?.();
+      unsubscribeProfile = undefined;
+
       try {
         if (!firebaseUser) {
           setUser(null);
@@ -81,10 +96,26 @@ export default function Layout() {
           return;
         }
 
+        // Do not render the previous account while this account's trusted
+        // verification policy and profile are being resolved.
+        setLoadingAuth(true);
+        setUser(null);
+        setSessionError('');
+
+        if ((await getCurrentEmailAccessState(firebaseUser)) !== 'access-allowed') {
+          setUser(null);
+          setAppPage('verify-email');
+          setLoadingAuth(false);
+          return;
+        }
+
         const userProfile = await getCurrentUserProfile(firebaseUser.uid);
 
         if (!userProfile) {
           setUser(null);
+          setSessionError(
+            'Your credentials were accepted, but your SmartAqua Pro user profile was not found. Please contact the system administrator.'
+          );
           setAppPage('login');
           setLoadingAuth(false);
           return;
@@ -112,16 +143,63 @@ export default function Layout() {
           setCurrentPage('dashboard');
           localStorage.setItem('currentPage', 'dashboard');
         }
+
+        unsubscribeProfile = subscribeToCurrentUserProfile(
+          firebaseUser.uid,
+          (updatedProfile) => {
+            if (!updatedProfile) {
+              void signOut(auth).finally(() => {
+                setUser(null);
+                setAppPage('login');
+                setCurrentPage('dashboard');
+                localStorage.removeItem('currentPage');
+              });
+              return;
+            }
+
+            setUser((currentUser) => ({
+              ...updatedProfile,
+              name: updatedProfile.name,
+              email: updatedProfile.email,
+              role: normalizeRole(updatedProfile.role),
+              status: updatedProfile.status,
+              createdAt: updatedProfile.createdAt,
+              id: updatedProfile.id || currentUser?.id || firebaseUser.uid,
+            }));
+          },
+          () => {
+            setSessionError(
+              'Your profile access was denied. Your account may have been revoked or the deployed security rules may be incompatible.'
+            );
+            void signOut(auth).finally(() => {
+              setUser(null);
+              setAppPage('login');
+              setCurrentPage('dashboard');
+              localStorage.removeItem('currentPage');
+            });
+          },
+          (profileError) => {
+            console.error('User profile subscription failed:', profileError);
+          }
+        );
       } catch (error) {
         console.error('Failed to load user session:', error);
         setUser(null);
+        setSessionError(
+          isVerificationPolicyUnavailableError(error)
+            ? VERIFICATION_POLICY_UNAVAILABLE_MESSAGE
+            : 'Your sign-in succeeded, but SmartAqua Pro could not load your account. Please try again or contact the system administrator.'
+        );
         setAppPage('login');
       } finally {
         setLoadingAuth(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeProfile?.();
+      unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -132,6 +210,7 @@ export default function Layout() {
       setAppPage('landing');
       setCurrentPage('dashboard');
       setSidebarOpen(false);
+      setSessionError('');
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -188,10 +267,29 @@ export default function Layout() {
   if (appPage === 'signup') {
     return (
       <Signup
-        onSignup={() => {
+        onVerificationRequired={() => setAppPage('verify-email')}
+        onGoToLogin={() => {
+          void signOut(auth).finally(() => setAppPage('login'));
+        }}
+      />
+    );
+  }
+
+  if (appPage === 'verify-email' && auth.currentUser) {
+    return (
+      <VerifyEmail
+        email={auth.currentUser.email ?? ''}
+        onVerified={(userData) => {
+          setUser({
+            ...userData,
+            role: normalizeRole(userData.role),
+          });
+          setAppPage('app');
+        }}
+        onSignOut={async () => {
+          await signOut(auth);
           setAppPage('login');
         }}
-        onGoToLogin={() => setAppPage('login')}
       />
     );
   }
@@ -200,14 +298,22 @@ export default function Layout() {
     return (
       <Login
         onLogin={(userData) => {
+          setSessionError('');
           setUser({
             ...userData,
             role: normalizeRole(userData.role),
           });
           setAppPage('app');
         }}
-        onGoToSignup={() => setAppPage('signup')}
-        onGoBack={() => setAppPage('landing')}
+        onGoToSignup={() => {
+          setSessionError('');
+          setAppPage('signup');
+        }}
+        onGoBack={() => {
+          setSessionError('');
+          setAppPage('landing');
+        }}
+        externalError={sessionError}
       />
     );
   }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import {
   createAquarium,
-  deleteAquarium,
+  prepareAquariumDeletion,
   updateAquarium,
 } from '../services/aquariumService';
 import { getAquariumManagementData } from '../services/aquariumManagementService';
@@ -23,6 +23,7 @@ import {
   populateAquariumForm,
   validateAquariumForm,
 } from '../utils/aquariumManagementHelpers';
+import { resizeFishWeights } from '../utils/aquariumProfileCalculations';
 
 export function useAquariumsController() {
   const [aquariums, setAquariums] = useState<Aquarium[]>([]);
@@ -89,7 +90,11 @@ export function useAquariumsController() {
   }, []);
 
   useEffect(() => {
-    void loadAquariums();
+    const loadTimer = window.setTimeout(() => {
+      void loadAquariums();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadAquariums]);
 
   const closeModal = () => {
@@ -120,7 +125,43 @@ export function useAquariumsController() {
     field: Field,
     value: AquariumFormData[Field]
   ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setError('');
+    setFormData((prev) => {
+      if (field !== 'fishCount' || typeof value !== 'string') {
+        return { ...prev, [field]: value };
+      }
+
+      const nextCount = Number(value);
+      if (!Number.isInteger(nextCount) || nextCount <= 0) {
+        return { ...prev, fishCount: value };
+      }
+
+      if (
+        nextCount < prev.fishWeightsG.length &&
+        prev.fishWeightsG.slice(nextCount).some((weight) => weight.trim()) &&
+        !window.confirm(
+          'Reducing the fish quantity will remove the extra saved weight entries. Continue?'
+        )
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        fishCount: value,
+        fishWeightsG: resizeFishWeights(prev.fishWeightsG, nextCount),
+      };
+    });
+  };
+
+  const updateFishWeight = (index: number, value: string) => {
+    setError('');
+    setFormData((prev) => ({
+      ...prev,
+      fishWeightsG: prev.fishWeightsG.map((weight, weightIndex) =>
+        weightIndex === index ? value : weight
+      ),
+    }));
   };
 
   const saveAquarium = async () => {
@@ -168,8 +209,15 @@ export function useAquariumsController() {
       setDeletingId(aquariumId);
       setError('');
       setSuccess('');
-      await deleteAquarium(aquariumId);
-      setSuccess('Aquarium deleted successfully.');
+      const result = await prepareAquariumDeletion(aquariumId);
+
+      if (result.status !== 'prepared') {
+        throw new Error('The secure service did not confirm deletion preparation.');
+      }
+
+      setSuccess(
+        'Aquarium access was revoked and deletion was prepared. Records are retained pending the approved retention process.'
+      );
       await loadAquariums();
     } catch (deleteError) {
       console.error(deleteError);
@@ -201,6 +249,7 @@ export function useAquariumsController() {
       saveAquarium,
       selectOwner: setSelectedOwnerId,
       updateFormField,
+      updateFishWeight,
     },
   };
 }
