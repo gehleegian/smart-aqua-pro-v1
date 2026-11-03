@@ -4,17 +4,17 @@ import { auth } from '../../firebase';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Dashboard from '../../pages/Dashboard';
-import Monitoring from '../../pages/Monitoring';
-import Automation from '../../pages/Automation';
-import Alerts from '../../pages/Alerts';
-import DataLogs from '../../pages/DataLogs';
-import Aquariums from '../../pages/Aquariums';
-import Users from '../../pages/Users';
-import Settings from '../../pages/Settings';
-import Login from '../../pages/Login';
-import Landing from '../../pages/Landing';
-import Signup from '../../pages/Signup';
+import Dashboard from '../../views/Dashboard';
+import Monitoring from '../../views/Monitoring';
+import Automation from '../../views/Automation';
+import Alerts from '../../views/Alerts';
+import DataLogs from '../../views/DataLogs';
+import Aquariums from '../../views/Aquariums';
+import Users from '../../views/Users';
+import Settings from '../../views/Settings';
+import Login from '../../views/Login';
+import Landing from '../../views/Landing';
+import Signup from '../../views/Signup';
 import ConfirmModal from '../ui/ConfirmModal';
 
 import {
@@ -58,6 +58,10 @@ const rolePermissions: Record<UserRole, string[]> = {
 
 export default function Layout() {
   const [currentPage, setCurrentPage] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 'dashboard';
+    }
+
     return localStorage.getItem('currentPage') || 'dashboard';
   });
   const [appPage, setAppPage] = useState<AppPage>('landing');
