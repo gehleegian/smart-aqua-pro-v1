@@ -1,15 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Fish, RefreshCw, Search, Shield, UserRound } from 'lucide-react';
 import Badge from '../components/ui/Badge';
-import Button from '../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
-import EmptyState from '../components/ui/EmptyState';
-import LoadingState from '../components/ui/LoadingState';
 import { getAquariumDirectoryEntries } from '../services/aquariumService';
 import { getAllUsers } from '../services/userService';
 import type { AquariumDirectoryEntry } from '../types/aquarium';
 import type { UserData, UserRole } from '../types/user';
-import StatusMessage from '../components/ui/StatusMessage';
 
 type UserDirectoryItem = UserData & { id: string };
 
@@ -29,49 +25,12 @@ function formatVolume(aquarium: AquariumDirectoryEntry) {
   return typeof volume === 'number' ? `${volume} L` : 'Not recorded';
 }
 
-function OwnerAquariums({ aquariums }: { aquariums: AquariumDirectoryEntry[] }) {
-  return aquariums.length === 0 ? (
-        <p className="text-sm text-slate-400">This account has no registered aquariums.</p>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {aquariums.map((aquarium) => (
-            <div
-              key={aquarium.id}
-              className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4"
-            >
-              <div className="flex items-start gap-3">
-                <Fish className="mt-0.5 h-5 w-5 flex-shrink-0 text-sky-300" />
-                <div className="min-w-0">
-                  <p className="font-medium text-white">{aquarium.name}</p>
-                  <p className="mt-1 text-xs text-slate-400">ID: {aquarium.id}</p>
-                </div>
-              </div>
-              <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <dt className="text-slate-400">Tank type</dt>
-                  <dd className="mt-1 text-slate-300">{aquarium.tankType || 'Not recorded'}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Volume</dt>
-                  <dd className="mt-1 text-slate-300">{formatVolume(aquarium)}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Fish type</dt>
-                  <dd className="mt-1 text-slate-300">{aquarium.species.join(', ') || 'Not recorded'}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Fish count</dt>
-                  <dd className="mt-1 text-slate-300">{aquarium.fishCount ?? 'Not recorded'}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Registered</dt>
-                  <dd className="mt-1 text-slate-300">{formatDate(aquarium.createdAt)}</dd>
-                </div>
-              </dl>
-            </div>
-          ))}
-        </div>
-      );
+function formatDimensions(aquarium: AquariumDirectoryEntry) {
+  return typeof aquarium.tankLengthCm === 'number' &&
+    typeof aquarium.tankWidthCm === 'number' &&
+    typeof aquarium.tankHeightCm === 'number'
+    ? `${aquarium.tankLengthCm} × ${aquarium.tankWidthCm} × ${aquarium.tankHeightCm} cm`
+    : 'Not recorded';
 }
 
 export default function Users() {
@@ -145,9 +104,12 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-slate-300">
-        Read-only account and aquarium ownership information. Sensor readings and aquarium controls are not shown.
-      </p>
+      <div>
+        <h2 className="text-xl font-semibold text-white">User and Aquarium Directory</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Read-only account and aquarium ownership information. Sensor readings and aquarium controls are not shown.
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -182,23 +144,21 @@ export default function Users() {
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h3 className="text-base font-semibold text-white">Registered Accounts</h3>
+            <h3 className="text-lg font-semibold text-white">Registered Accounts</h3>
 
-            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
                   placeholder="Search user or aquarium..."
-                  aria-label="Search user or aquarium"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 py-2 pl-10 pr-4 text-sm text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-300/30 sm:w-64"
+                  className="w-64 rounded-lg border border-slate-600/50 bg-slate-900/35 py-2 pl-10 pr-4 text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
                 />
               </div>
 
               <select
-                aria-label="Filter by role"
                 value={roleFilter}
                 onChange={(event) => setRoleFilter(event.target.value as 'all' | UserRole)}
                 className="rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
@@ -208,62 +168,31 @@ export default function Users() {
                 <option value="User">User/Caretaker</option>
               </select>
 
-              <Button variant="secondary" onClick={() => void loadDirectory()}>
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => void loadDirectory()}
+                className="flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600"
+              >
+                <RefreshCw className="h-4 w-4" />
                 Refresh
-              </Button>
+              </button>
             </div>
           </div>
         </CardHeader>
 
         <CardContent>
           {error && (
-            <StatusMessage variant="error">{error}</StatusMessage>
+            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
+              {error}
+            </div>
           )}
 
           {loading ? (
-            <LoadingState label="Loading directory..." />
+            <div className="py-8 text-center text-slate-400">Loading directory...</div>
           ) : filteredUsers.length === 0 ? (
-            <EmptyState icon={UserRound} message="No matching accounts found." />
+            <div className="py-8 text-center text-slate-400">No matching accounts found.</div>
           ) : (
-            <>
-            <ul className="divide-y divide-slate-600/25 md:hidden">
-              {filteredUsers.map((user) => {
-                const ownerAquariums = aquariumsByOwner.get(user.id) || [];
-                const isExpanded = expandedUserId === user.id;
-
-                return (
-                  <li key={user.id} className="space-y-3 py-4 first:pt-0 last:pb-0">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-white">{user.name || 'Unnamed user'}</p>
-                      <p className="truncate text-xs text-slate-300">{user.email}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={user.role === 'Admin' ? 'danger' : 'info'}>
-                        {user.role === 'User' ? 'User/Caretaker' : 'Admin'}
-                      </Badge>
-                      <Badge variant={user.accountStatus === 'inactive' ? 'default' : 'success'}>
-                        {user.accountStatus === 'inactive' ? 'Inactive' : 'Active'}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-slate-300">
-                      Registered {formatDate(user.createdAt)} · {ownerAquariums.length} aquariums
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      aria-expanded={isExpanded}
-                      onClick={() => setExpandedUserId(isExpanded ? '' : user.id)}
-                    >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      View aquariums
-                    </Button>
-                    {isExpanded && <OwnerAquariums aquariums={ownerAquariums} />}
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="hidden overflow-x-auto md:block">
+            <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700">
@@ -316,7 +245,62 @@ export default function Users() {
                         {isExpanded && (
                           <tr key={`${user.id}-aquariums`} className="border-b border-slate-700/50 bg-slate-950/20">
                             <td colSpan={6} className="px-6 py-4">
-                              <OwnerAquariums aquariums={ownerAquariums} />
+                              {ownerAquariums.length === 0 ? (
+                                <p className="text-sm text-slate-400">This account has no registered aquariums.</p>
+                              ) : (
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                  {ownerAquariums.map((aquarium) => (
+                                    <div
+                                      key={aquarium.id}
+                                      className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4"
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <Fish className="mt-0.5 h-5 w-5 flex-shrink-0 text-sky-300" />
+                                        <div className="min-w-0">
+                                          <p className="font-medium text-white">{aquarium.name}</p>
+                                          <p className="mt-1 text-xs text-slate-400">ID: {aquarium.id}</p>
+                                        </div>
+                                      </div>
+                                      <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                          <dt className="text-slate-500">Tank type</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.tankType || 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Volume</dt>
+                                          <dd className="mt-1 text-slate-300">{formatVolume(aquarium)}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Dimensions</dt>
+                                          <dd className="mt-1 text-slate-300">{formatDimensions(aquarium)}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Fish type</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.species.join(', ') || 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Fish count</dt>
+                                          <dd className="mt-1 text-slate-300">{aquarium.fishCount ?? 'Not recorded'}</dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Filtration system installed</dt>
+                                          <dd className="mt-1 text-slate-300">
+                                            {aquarium.hasFiltrationSystem === true
+                                              ? 'Yes'
+                                              : aquarium.hasFiltrationSystem === false
+                                                ? 'No'
+                                                : 'Not recorded'}
+                                          </dd>
+                                        </div>
+                                        <div>
+                                          <dt className="text-slate-500">Registered</dt>
+                                          <dd className="mt-1 text-slate-300">{formatDate(aquarium.createdAt)}</dd>
+                                        </div>
+                                      </dl>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
@@ -326,7 +310,6 @@ export default function Users() {
                 </tbody>
               </table>
             </div>
-            </>
           )}
         </CardContent>
       </Card>

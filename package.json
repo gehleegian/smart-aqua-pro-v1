@@ -7,7 +7,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build:functions": "npm --prefix functions run build",
+    "lint:functions": "npm --prefix functions run lint",
+    "test:rtdb-rules": "firebase emulators:exec --only database --project demo-smartaqua-rtdb-auth \"node --test tests/rtdb/database.rules.test.mjs\"",
+    "test:auth-sync": "npm run build:functions && firebase emulators:exec --only firestore,database --project demo-smartaqua-auth-sync \"node --test functions/lib/test/authorizationSync.test.js\"",
+    "test:auth-sync-trigger": "npm run build:functions && cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:exec --only firestore,database,functions --project demo-smartaqua-auth-sync \"node --test functions/lib/test/triggerIntegration.test.js\"",
+    "test:trusted-mutations": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-trusted-mutations \"node --test functions/lib/test/trustedMutations.test.js\"",
+    "test:trusted-mutation-callables": "npm run build:functions && cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-trusted-mutations \"node --test functions/lib/test/trustedMutationCallable.test.js\"",
+    "test:client-contracts": "node --experimental-strip-types --test tests/integration/trusted-mutation-contracts.test.mjs",
+    "test:aquarium-profile": "node --experimental-strip-types --test tests/unit/aquarium-profile.test.mjs",
+    "test:monitoring-assessment": "node --experimental-strip-types --test tests/unit/monitoring-assessment.test.mjs",
+    "test:monitoring-parity": "node --experimental-strip-types --test tests/integration/monitoring-assessment-parity.test.mjs",
+    "test:firestore-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-firestore-auth \"node --test tests/firestore/firestore.rules.test.mjs\"",
+    "test:email-verification": "firebase emulators:exec --only auth --project demo-smartaqua-email-verification \"node --experimental-strip-types --test tests/auth/email-verification.test.mjs\"",
+    "dev:plan-legacy-policy": "node functions/scripts/backfillLegacyEmailVerificationPolicy.mjs",
+    "test:security": "npm run test:client-contracts && npm run test:aquarium-profile && npm run test:auth-sync && npm run test:auth-sync-trigger && npm run test:trusted-mutations && npm run test:trusted-mutation-callables && npm run test:email-verification && npm run test:firestore-rules && npm run test:rtdb-rules"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -20,7 +35,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/postcss": "^4.2.2",
+    "cross-env": "^10.1.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -31,5 +48,8 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
   }
 }

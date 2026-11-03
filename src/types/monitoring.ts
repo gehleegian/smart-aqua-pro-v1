@@ -3,9 +3,16 @@ import type { DeviceTelemetryState } from './device';
 import type { UserData, UserRole } from './user';
 
 export type HealthStatus = 'healthy' | 'warning';
+export type {
+  AssessmentSeverity, TelemetrySource, SimulationScenario, MonitoringParameter,
+  ParameterAssessment, AquariumConditionAssessment,
+} from '../utils/monitoringAssessmentCore';
+import type { AquariumConditionAssessment, TelemetrySource } from '../utils/monitoringAssessmentCore';
 
 export type MonitoringAquarium = Aquarium & {
   healthStatus: HealthStatus;
+  assessment: AquariumConditionAssessment;
+  telemetrySource: TelemetrySource;
   hasFreshTelemetry: boolean;
   hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;

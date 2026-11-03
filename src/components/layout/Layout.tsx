@@ -15,6 +15,7 @@ import Settings from '../../views/Settings';
 import Login from '../../views/Login';
 import Landing from '../../views/Landing';
 import Signup from '../../views/Signup';
+import Support from '../../views/Support';
 import ConfirmModal from '../ui/ConfirmModal';
 
 import {
@@ -35,6 +36,7 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   aquariums: Aquariums,
   users: Users,
   settings: Settings,
+  support: Support,
 };
 
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
@@ -52,8 +54,8 @@ const getInitialTheme = (): ThemeMode => {
 };
 
 const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'users', 'settings'],
-  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings'],
+  Admin: ['dashboard', 'users', 'settings', 'support'],
+  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings', 'support'],
 };
 
 export default function Layout() {

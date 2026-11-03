@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { Aquarium, AquariumDirectoryEntry } from './aquarium';
 import type { DeviceTelemetryState } from './device';
 import type { UserData } from './user';
+import type { AquariumConditionAssessment, TelemetrySource } from './monitoring';
 
 export type DashboardStatus = 'healthy' | 'warning';
 
@@ -9,8 +10,11 @@ export type DashboardTrend = 'good' | 'warning';
 
 export type DashboardAquarium = Aquarium & {
   status: DashboardStatus;
+  assessment: AquariumConditionAssessment;
+  telemetrySource: TelemetrySource;
   fishCount: number;
   hasFreshTelemetry: boolean;
+  hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;
   hasFreshPhTelemetry: boolean;
   hasFreshTurbidityTelemetry: boolean;

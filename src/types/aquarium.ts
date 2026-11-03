@@ -15,6 +15,7 @@ export interface TankConfiguration {
   tankWidthCm?: number;
   tankHeightCm?: number;
   workingWaterVolumeLiters?: number;
+  hasFiltrationSystem?: boolean;
   filtrationSetup?: string;
   filterCapacity?: string;
   recommendedCapacity?: string;
@@ -60,7 +61,7 @@ export interface Aquarium {
   id: string;
   name: string;
   species: string[];
-  bioload: BioloadLevel;
+  bioload?: BioloadLevel;
   temp: number;
   level: number;
   tdsPpm?: number;
@@ -73,6 +74,8 @@ export interface Aquarium {
   filter: string;
   minTemp: number;
   maxTemp: number;
+  minPh?: number;
+  maxPh?: number;
   minLevel: number;
   minQuality: number;
   ownerId: string;
@@ -84,9 +87,13 @@ export interface Aquarium {
   tankWidthCm?: number;
   tankHeightCm?: number;
   workingWaterVolumeLiters?: number;
+  hasFiltrationSystem?: boolean;
   filtrationSetup?: string;
   filterCapacity?: string;
   fishCount?: number;
+  fishWeightsG?: number[];
+  totalFishBiomassG?: number;
+  estimatedBioloadGL?: number;
   currentStatus?: AquariumConditionStatus;
   tankConfiguration?: TankConfiguration;
   fishProfiles?: FishSpeciesProfile[];
@@ -103,9 +110,15 @@ export interface AquariumDirectoryEntry {
   ownerId: string;
   ownerName: string;
   species: string[];
+  bioload?: BioloadLevel;
   fishCount?: number;
   tankType?: string;
   tankSizeLiters?: number;
+  tankLengthCm?: number;
+  tankWidthCm?: number;
+  tankHeightCm?: number;
   workingWaterVolumeLiters?: number;
+  hasFiltrationSystem?: boolean;
+  filtrationSetup?: string;
   createdAt?: string;
 }

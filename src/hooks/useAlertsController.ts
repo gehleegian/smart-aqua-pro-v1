@@ -142,7 +142,11 @@ export function useAlertsController() {
   }, []);
 
   useEffect(() => {
-    void loadAlerts();
+    const loadTimer = window.setTimeout(() => {
+      void loadAlerts();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadAlerts]);
 
   const filteredAlerts = useMemo(

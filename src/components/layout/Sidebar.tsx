@@ -12,6 +12,7 @@ import {
   Waves,
   LogOut,
   X,
+  LifeBuoy,
 } from 'lucide-react';
 import type { UserRole } from '../../types/user';
 import { normalizeRole } from '../../utils/roleHelpers';
@@ -54,7 +55,10 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
   },
   {
     label: 'Account',
-    items: [{ id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] }],
+    items: [
+      { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] },
+      { id: 'support', label: 'Support', icon: LifeBuoy, roles: ['Admin', 'User'] },
+    ],
   },
 ];
 

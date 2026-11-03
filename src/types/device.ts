@@ -1,4 +1,5 @@
 import type { Aquarium, AutomationSettings } from './aquarium';
+import { normalizeDevicePowerStatus, getTelemetryFreshness, TELEMETRY_STALE_MS, TELEMETRY_EPOCH_FLOOR } from '../utils/monitoringAssessmentCore.ts';
 import type { SystemMode } from './monitoring';
 
 export type DeviceCommandType =
@@ -79,8 +80,8 @@ export interface DeviceShadow {
 
 export type DeviceTelemetryState = 'live' | 'offline' | 'unavailable';
 
-export const DEVICE_TELEMETRY_STALE_MS = 30_000;
-const DEVICE_TELEMETRY_EPOCH_FLOOR = 946684800000;
+export const DEVICE_TELEMETRY_STALE_MS = TELEMETRY_STALE_MS;
+const DEVICE_TELEMETRY_EPOCH_FLOOR = TELEMETRY_EPOCH_FLOOR;
 let deviceTelemetryClockOffsetMs = 0;
 
 export function setDeviceTelemetryClockOffsetMs(offsetMs: number) {
@@ -91,35 +92,7 @@ export function setDeviceTelemetryClockOffsetMs(offsetMs: number) {
   deviceTelemetryClockOffsetMs = offsetMs;
 }
 
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
-
-export function normalizeDevicePowerStatus(value: unknown): DevicePowerStatus | undefined {
-  if (
-    value === 'Online' ||
-    value === 'Offline' ||
-    value === 'Power Interruption' ||
-    value === 'Unknown'
-  ) {
-    return value;
-  }
-
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  if (normalized === 'online') return 'Online';
-  if (normalized === 'offline') return 'Offline';
-  if (normalized === 'power_interruption' || normalized === 'power interruption') {
-    return 'Power Interruption';
-  }
-  if (normalized === 'unknown') return 'Unknown';
-
-  return undefined;
-}
+export { normalizeDevicePowerStatus } from '../utils/monitoringAssessmentCore.ts';
 
 export function getTelemetryPurityPercent(
   telemetry:
@@ -187,27 +160,7 @@ export function getDeviceTelemetryState(
   telemetry: DeviceTelemetry | null | undefined,
   now = Date.now()
 ): DeviceTelemetryState {
-  if (!telemetry) {
-    return 'unavailable';
-  }
-
-  if (telemetry.online === false) {
-    return 'offline';
-  }
-
-  const updatedAt = getDeviceTelemetryUpdatedAt(telemetry);
-
-  if (!updatedAt) {
-    return 'unavailable';
-  }
-
-  const serverNow = now + deviceTelemetryClockOffsetMs;
-
-  if (updatedAt > serverNow) {
-    return 'live';
-  }
-
-  return serverNow - updatedAt <= DEVICE_TELEMETRY_STALE_MS ? 'live' : 'offline';
+  return getTelemetryFreshness(telemetry, now + deviceTelemetryClockOffsetMs);
 }
 
 export function hasFreshDeviceTelemetry(
@@ -231,7 +184,9 @@ export function getFreshTelemetrySnapshot(
 
   if (
     typeof telemetry.temperatureC !== 'number' ||
-    typeof telemetry.waterLevelPercent !== 'number'
+    !Number.isFinite(telemetry.temperatureC) ||
+    typeof telemetry.waterLevelPercent !== 'number' ||
+    !Number.isFinite(telemetry.waterLevelPercent)
   ) {
     return null;
   }
@@ -241,23 +196,23 @@ export function getFreshTelemetrySnapshot(
   const waterPresent = telemetry.waterPresent !== false;
   const hasFreshTemperatureTelemetry =
     waterPresent && telemetry.temperatureReadingValid !== false;
-  const ph = typeof telemetry.ph === 'number' && Number.isFinite(telemetry.ph)
+  const ph = typeof telemetry.ph === 'number' && Number.isFinite(telemetry.ph) && telemetry.ph >= 0 && telemetry.ph <= 14
     ? telemetry.ph
     : null;
   const turbidity =
-    typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity)
+    typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity) && telemetry.turbidity >= 0
       ? telemetry.turbidity
       : null;
   const powerStatus = normalizeDevicePowerStatus(telemetry.powerStatus);
 
   return {
     temperatureC: telemetry.temperatureC,
-    waterLevelPercent: clampPercent(telemetry.waterLevelPercent),
+    waterLevelPercent: telemetry.waterLevelPercent,
     waterPresent,
     hasFreshTemperatureTelemetry,
     tdsPpm,
-    tdsPercent: purityPercent === null ? null : clampPercent(purityPercent),
-    hasFreshPurityTelemetry: purityPercent !== null,
+    tdsPercent: purityPercent !== null && purityPercent >= 0 && purityPercent <= 100 ? purityPercent : null,
+    hasFreshPurityTelemetry: purityPercent !== null && purityPercent >= 0 && purityPercent <= 100,
     ph,
     hasFreshPhTelemetry: ph !== null,
     turbidity,
@@ -267,6 +222,13 @@ export function getFreshTelemetrySnapshot(
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
+        : undefined,
+    equipmentStatus:
+      telemetry.equipmentStatus === 'Normal' ||
+      telemetry.equipmentStatus === 'Warning' ||
+      telemetry.equipmentStatus === 'Fault' ||
+      telemetry.equipmentStatus === 'Unknown'
+        ? telemetry.equipmentStatus
         : undefined,
   };
 }

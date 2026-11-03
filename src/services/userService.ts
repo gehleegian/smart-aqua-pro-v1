@@ -1,14 +1,22 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { UserAccountStatus, UserData, UserRole } from '../types/user';
 import { normalizeRole } from '../utils/roleHelpers';
+import {
+  revokeUserAccountTrusted,
+  updateUserRoleTrusted,
+} from './trustedMutationService';
+import {
+  createIdempotencyKey,
+  type TrustedMutationResult,
+} from './trustedMutationContracts';
 
 function readString(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value : fallback;
@@ -121,16 +129,44 @@ export async function getAllUsers(): Promise<UserData[]> {
   return snapshot.docs.map((docSnap) => mapUserData(docSnap.id, docSnap.data()));
 }
 
-export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
+export function subscribeToCurrentUserProfile(
+  uid: string,
+  onProfile: (profile: UserData | null) => void,
+  onRevoked: () => void,
+  onError: (error: unknown) => void
+) {
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snapshot) => {
+      onProfile(
+        snapshot.exists()
+          ? mapUserData(snapshot.id, snapshot.data() as Record<string, unknown>)
+          : null
+      );
+    },
+    (error) => {
+      if (error.code === 'permission-denied') {
+        onRevoked();
+        return;
+      }
+
+      onError(error);
+    }
+  );
+}
+
+export async function updateUserRole(
+  userId: string,
+  role: UserRole,
+  idempotencyKey = createIdempotencyKey('user-role', userId)
+): Promise<TrustedMutationResult> {
   const currentProfile = await requireAdminUser();
 
   if (currentProfile.id === userId) {
     throw new Error('You cannot change your own admin role here.');
   }
 
-  await updateDoc(doc(db, 'users', userId), {
-    role,
-  });
+  return updateUserRoleTrusted(userId, role, idempotencyKey);
 }
 
 export async function updateCurrentUserProfile(data: {
@@ -170,12 +206,15 @@ export async function updateCurrentUserProfile(data: {
   };
 }
 
-export async function deleteUserDocument(userId: string): Promise<void> {
+export async function revokeUserAccess(
+  userId: string,
+  idempotencyKey = createIdempotencyKey('user-revocation', userId)
+): Promise<TrustedMutationResult> {
   const currentProfile = await requireAdminUser();
 
   if (currentProfile.id === userId) {
-    throw new Error('You cannot delete your own admin account here.');
+    throw new Error('You cannot revoke your own admin access here.');
   }
 
-  await deleteDoc(doc(db, 'users', userId));
+  return revokeUserAccountTrusted(userId, idempotencyKey);
 }

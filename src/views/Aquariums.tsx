@@ -1,8 +1,5 @@
-import { Fish, Plus } from 'lucide-react';
-import Button from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import EmptyState from '../components/ui/EmptyState';
-import LoadingState from '../components/ui/LoadingState';
+import { Plus } from 'lucide-react';
+import { Card, CardContent } from '../components/ui/Card';
 import { AquariumCard } from '../components/aquariums/AquariumCard';
 import { AquariumFormModal } from '../components/aquariums/AquariumFormModal';
 import { AquariumOwnerSelector } from '../components/aquariums/AquariumOwnerSelector';
@@ -11,7 +8,6 @@ import {
   getAquariumsContextNote,
   getAquariumsEmptyMessage,
 } from '../utils/aquariumManagementHelpers';
-import StatusMessage from '../components/ui/StatusMessage';
 
 export default function Aquariums() {
   const aquariums = useAquariumsController();
@@ -21,10 +17,14 @@ export default function Aquariums() {
       {(aquariums.error || aquariums.success) && (
         <div className="space-y-3">
           {aquariums.error && (
-            <StatusMessage variant="error">{aquariums.error}</StatusMessage>
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
+              {aquariums.error}
+            </div>
           )}
           {aquariums.success && (
-            <StatusMessage variant="success">{aquariums.success}</StatusMessage>
+            <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-green-300">
+              {aquariums.success}
+            </div>
           )}
         </div>
       )}
@@ -32,15 +32,20 @@ export default function Aquariums() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-400">Manage and configure your aquariums</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             {getAquariumsContextNote(aquariums.currentUserRole)}
           </p>
         </div>
 
-        <Button onClick={aquariums.actions.openAddModal}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Add Aquarium
-        </Button>
+        {aquariums.currentUserRole === 'User' ? (
+          <button
+            onClick={aquariums.actions.openAddModal}
+            className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500"
+          >
+            <Plus className="h-4 w-4" />
+            Add Aquarium
+          </button>
+        ) : null}
       </div>
 
       {aquariums.currentUserRole === 'Admin' && (
@@ -59,10 +64,14 @@ export default function Aquariums() {
       )}
 
       {aquariums.loading ? (
-        <LoadingState label="Loading aquariums..." />
+        <div className="text-slate-300">Loading aquariums...</div>
       ) : aquariums.visibleAquariums.length === 0 ? (
         <Card>
-          <EmptyState icon={Fish} message={getAquariumsEmptyMessage(aquariums.currentUserRole)} />
+          <CardContent className="p-6">
+            <p className="text-slate-300">
+              {getAquariumsEmptyMessage(aquariums.currentUserRole)}
+            </p>
+          </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -84,11 +93,13 @@ export default function Aquariums() {
           formData={aquariums.formData}
           formMode={aquariums.formMode}
           saving={aquariums.saving}
+          error={aquariums.error}
           currentUserRole={aquariums.currentUserRole}
           selectedOwnerName={aquariums.selectedOwnerName}
           onClose={aquariums.actions.closeModal}
           onSave={() => void aquariums.actions.saveAquarium()}
           onFieldChange={aquariums.actions.updateFormField}
+          onFishWeightChange={aquariums.actions.updateFishWeight}
         />
       )}
     </div>

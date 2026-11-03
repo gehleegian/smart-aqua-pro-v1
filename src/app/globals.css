@@ -44,6 +44,28 @@ body {
   color: #f2fbfa;
 }
 
+.formal-input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(71, 85, 105, 0.9);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.formal-input::placeholder {
+  color: #64748b;
+}
+
+.formal-input:focus {
+  border-color: rgba(34, 211, 238, 0.72);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+}
+
 .smart-aqua-app {
   color-scheme: dark;
   transition: background-color 180ms ease, color 180ms ease;

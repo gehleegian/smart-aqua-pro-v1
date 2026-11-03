@@ -30,6 +30,13 @@ export function useDashboardController() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [telemetryNow, setTelemetryNow] = useState(() => Date.now());
+  const aquariumSubscriptionKey = useMemo(
+    () =>
+      JSON.stringify(
+        Array.from(new Set(dashboardAquariums.map((aquarium) => aquarium.id))).sort()
+      ),
+    [dashboardAquariums]
+  );
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -97,7 +104,9 @@ export function useDashboardController() {
   }, [userRole]);
 
   useEffect(() => {
-    if (userRole === 'Admin' || dashboardAquariums.length === 0) {
+    const aquariumIds = JSON.parse(aquariumSubscriptionKey) as string[];
+
+    if (userRole === 'Admin' || aquariumIds.length === 0) {
       return;
     }
 
@@ -106,27 +115,27 @@ export function useDashboardController() {
       const errorTimer = window.setTimeout(() => {
         setDeviceShadows({});
         setDeviceSubscriptionErrors(
-          Object.fromEntries(dashboardAquariums.map((aquarium) => [aquarium.id, errorMessage]))
+          Object.fromEntries(aquariumIds.map((aquariumId) => [aquariumId, errorMessage]))
         );
       }, 0);
       return () => window.clearTimeout(errorTimer);
     }
 
-    const unsubscribers = dashboardAquariums.map((aquarium) =>
+    const unsubscribers = aquariumIds.map((aquariumId) =>
       subscribeToDeviceShadow(
-        aquarium.id,
+        aquariumId,
         (shadow) => {
           setDeviceShadows((prev) => ({
             ...prev,
-            [aquarium.id]: shadow,
+            [aquariumId]: shadow,
           }));
           setDeviceSubscriptionErrors((prev) => {
-            if (!prev[aquarium.id]) {
+            if (!prev[aquariumId]) {
               return prev;
             }
 
             const next = { ...prev };
-            delete next[aquarium.id];
+            delete next[aquariumId];
             return next;
           });
         },
@@ -134,9 +143,9 @@ export function useDashboardController() {
           onError: (subscriptionError) => {
             setDeviceSubscriptionErrors((prev) => ({
               ...prev,
-              [aquarium.id]: getErrorMessage(
+              [aquariumId]: getErrorMessage(
                 subscriptionError,
-                `Live device data for ${aquarium.name} is unavailable.`
+                `Live device data for aquarium ${aquariumId} is unavailable.`
               ),
             }));
           },
@@ -149,7 +158,7 @@ export function useDashboardController() {
         unsubscribe();
       }
     };
-  }, [dashboardAquariums, userRole]);
+  }, [aquariumSubscriptionKey, userRole]);
 
   const liveAquariums = useMemo(
     () => mergeDashboardAquariums(dashboardAquariums, deviceShadows, telemetryNow),
