@@ -1,38 +1,40 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
-import { loginUser } from '../services/authService';
-import type { UserData } from '../types/user';
 import {
-  formatAuthRateLimitDuration,
-  getAuthRateLimitStatus,
-  isAuthRateLimitError,
-} from '../utils/authRateLimit';
+  EmailVerificationRequiredError,
+  loginUser,
+  requestPasswordReset,
+  resendVerificationEmail,
+} from '../services/authService';
+import type { UserData } from '../types/user';
+import { getAuthErrorMessage } from '../utils/authErrors';
+import { formatAuthRateLimitDuration, getAuthRateLimitStatus } from '../utils/authRateLimit';
 
-function getFirebaseAuthErrorCode(error: unknown): string {
-  if (!error || typeof error !== 'object' || !('code' in error)) {
-    return '';
-  }
-
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : '';
-}
+const RESEND_COOLDOWN_MS = 60_000;
 
 export default function Login({
   onLogin,
   onGoToSignup,
   onGoBack,
   infoMessage = '',
+  verificationRequired = false,
 }: {
   onLogin: (user: UserData) => void;
   onGoToSignup: () => void;
   onGoBack: () => void;
   infoMessage?: string;
+  verificationRequired?: boolean;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(verificationRequired);
+  const [resending, setResending] = useState(false);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [sendingReset, setSendingReset] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -49,6 +51,8 @@ export default function Login({
         rateLimitStatus.retryAfterMs
       )}.`
     : '';
+  const resendCooldownSeconds = Math.ceil(Math.max(0, resendAvailableAt - now) / 1000);
+  const resendDisabled = resending || resendCooldownSeconds > 0 || rateLimitStatus.blocked;
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
@@ -84,31 +88,70 @@ export default function Login({
     try {
       setLoading(true);
       setError('');
+      setNotice('');
+      setNeedsVerification(false);
 
-      const userProfile = await loginUser(email, password);
-
-      if (!userProfile) {
-        setError('User profile not found.');
-        return;
-      }
-
-      onLogin(userProfile);
+      onLogin(await loginUser(email, password));
     } catch (err: unknown) {
-      if (isAuthRateLimitError(err)) {
-        setError(err.message);
-      } else if (getFirebaseAuthErrorCode(err) === 'auth/invalid-credential') {
-        setError('Invalid email or password.');
-      } else if (getFirebaseAuthErrorCode(err) === 'auth/user-not-found') {
-        setError('User not found.');
-      } else if (getFirebaseAuthErrorCode(err) === 'auth/wrong-password') {
-        setError('Wrong password.');
-      } else if (getFirebaseAuthErrorCode(err) === 'auth/invalid-email') {
-        setError('Invalid email address.');
+      console.error('Login failed:', err);
+
+      if (err instanceof EmailVerificationRequiredError) {
+        setNeedsVerification(true);
       } else {
-        setError('Login failed.');
+        setError(getAuthErrorMessage(err, 'Login failed.'));
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email || !password) {
+      setError('Enter your email and password to resend the verification email.');
+      return;
+    }
+
+    try {
+      setResending(true);
+      setError('');
+      setNotice('');
+
+      const result = await resendVerificationEmail(email, password);
+
+      if (result === 'already-verified') {
+        setNeedsVerification(false);
+        setNotice('Your email is already verified. You can sign in now.');
+      } else {
+        setResendAvailableAt(Date.now() + RESEND_COOLDOWN_MS);
+        setNotice('Verification email sent. Check your inbox.');
+      }
+    } catch (err: unknown) {
+      console.error('Failed to resend verification email:', err);
+      setError(getAuthErrorMessage(err, 'Could not resend the verification email.'));
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Enter your email address first.');
+      return;
+    }
+
+    try {
+      setSendingReset(true);
+      setError('');
+      setNotice('');
+
+      await requestPasswordReset(email);
+
+      setNotice('If an account exists for that email, a password reset link has been sent.');
+    } catch (err: unknown) {
+      console.error('Failed to request password reset:', err);
+      setError(getAuthErrorMessage(err, 'Could not request a password reset.'));
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -229,7 +272,7 @@ export default function Login({
             </div>
           )}
 
-          {!error && infoMessage && (
+          {!error && (notice || infoMessage) && (
             <div
               style={{
                 marginBottom: '18px',
@@ -241,7 +284,45 @@ export default function Login({
                 color: '#93c5fd',
               }}
             >
-              {infoMessage}
+              {notice || infoMessage}
+            </div>
+          )}
+
+          {needsVerification && (
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '13px 14px',
+                backgroundColor: 'rgba(245,158,11,0.14)',
+                border: '1px solid rgba(245,158,11,0.28)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                color: '#fcd34d',
+              }}
+            >
+              <div style={{ marginBottom: '10px' }}>Please verify your email first.</div>
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendDisabled}
+                style={{
+                  background: 'none',
+                  border: '1px solid rgba(245,158,11,0.45)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  color: '#fcd34d',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: resendDisabled ? 'not-allowed' : 'pointer',
+                  opacity: resendDisabled ? 0.65 : 1,
+                }}
+              >
+                {resending
+                  ? 'Sending...'
+                  : resendCooldownSeconds > 0
+                    ? `Resend available in ${resendCooldownSeconds}s`
+                    : 'Resend verification email'}
+              </button>
             </div>
           )}
 
@@ -272,7 +353,7 @@ export default function Login({
             />
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '8px' }}>
             <label style={labelStyle}>Password</label>
             <div style={{ position: 'relative' }}>
               <input
@@ -299,6 +380,25 @@ export default function Login({
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+          </div>
+
+          <div style={{ textAlign: 'right', marginBottom: '20px' }}>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={sendingReset}
+              style={{
+                color: '#38bdf8',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: sendingReset ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+            >
+              {sendingReset ? 'Sending...' : 'Forgot password?'}
+            </button>
           </div>
 
           <button

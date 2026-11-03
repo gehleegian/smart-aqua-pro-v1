@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { registerUser } from '../services/authService';
-import {
-  formatAuthRateLimitDuration,
-  getAuthRateLimitStatus,
-  isAuthRateLimitError,
-} from '../utils/authRateLimit';
+import { getAuthErrorMessage } from '../utils/authErrors';
+import { formatAuthRateLimitDuration, getAuthRateLimitStatus } from '../utils/authRateLimit';
 
 export default function Signup({
   onSignup,
   onGoToLogin,
 }: {
-  onSignup: () => void;
+  onSignup: (message: string) => void;
   onGoToLogin: () => void;
 }) {
   const [name, setName] = useState('');
@@ -85,25 +82,19 @@ export default function Signup({
       setError('');
       setSuccess('');
 
-      await registerUser(name, email, password);
+      const verificationEmailSent = await registerUser(name, email, password);
+      const message = verificationEmailSent
+        ? 'Account created. Check your inbox to verify your email, then sign in.'
+        : 'Account created, but the verification email could not be sent. Sign in to request a new one.';
 
-      setSuccess('Account created successfully. Please sign in now.');
+      setSuccess(message);
 
       setTimeout(() => {
-        onSignup();
+        onSignup(message);
       }, 1500);
-    } catch (err: any) {
-      if (isAuthRateLimitError(err)) {
-        setError(err.message);
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError('Email is already in use.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Invalid email address.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password is too weak.');
-      } else {
-        setError('Signup failed.');
-      }
+    } catch (err: unknown) {
+      console.error('Signup failed:', err);
+      setError(getAuthErrorMessage(err, 'Signup failed.'));
     } finally {
       setLoading(false);
     }

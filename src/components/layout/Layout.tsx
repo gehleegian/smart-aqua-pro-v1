@@ -16,7 +16,12 @@ import Login from '../../pages/Login';
 import Landing from '../../pages/Landing';
 import Signup from '../../pages/Signup';
 
-import { getCurrentUserProfile } from '../../services/userService';
+import {
+  EmailVerificationRequiredError,
+  endUnverifiedSession,
+  isAuthFlowActive,
+  resolveSessionProfile,
+} from '../../services/authService';
 import type { UserData, UserRole } from '../../types/user';
 import { normalizeRole } from '../../utils/roleHelpers';
 
@@ -59,6 +64,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [loginNotice, setLoginNotice] = useState('');
+  const [verificationRequired, setVerificationRequired] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('currentPage', currentPage);
@@ -71,8 +78,20 @@ export default function Layout() {
   }, [theme]);
 
   useEffect(() => {
+    let latestRun = 0;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      latestRun += 1;
+      const run = latestRun;
+      const isOutdated = () => run !== latestRun || isAuthFlowActive();
+
       try {
+        // Signup, login, and resend finish on their own page; acting on their
+        // temporary sign-ins here would unmount that page and hide its messages.
+        if (isOutdated()) {
+          return;
+        }
+
         if (!firebaseUser) {
           setUser(null);
           setAppPage('landing');
@@ -81,12 +100,9 @@ export default function Layout() {
           return;
         }
 
-        const userProfile = await getCurrentUserProfile(firebaseUser.uid);
+        const userProfile = await resolveSessionProfile(firebaseUser);
 
-        if (!userProfile) {
-          setUser(null);
-          setAppPage('login');
-          setLoadingAuth(false);
+        if (isOutdated()) {
           return;
         }
 
@@ -114,6 +130,16 @@ export default function Layout() {
         }
       } catch (error) {
         console.error('Failed to load user session:', error);
+
+        if (isOutdated()) {
+          return;
+        }
+
+        if (error instanceof EmailVerificationRequiredError) {
+          await endUnverifiedSession();
+          setVerificationRequired(true);
+        }
+
         setUser(null);
         setAppPage('login');
       } finally {
@@ -188,7 +214,8 @@ export default function Layout() {
   if (appPage === 'signup') {
     return (
       <Signup
-        onSignup={() => {
+        onSignup={(message) => {
+          setLoginNotice(message);
           setAppPage('login');
         }}
         onGoToLogin={() => setAppPage('login')}
@@ -199,15 +226,27 @@ export default function Layout() {
   if (appPage === 'login' || !user) {
     return (
       <Login
+        infoMessage={loginNotice}
+        verificationRequired={verificationRequired}
         onLogin={(userData) => {
+          setLoginNotice('');
+          setVerificationRequired(false);
           setUser({
             ...userData,
             role: normalizeRole(userData.role),
           });
           setAppPage('app');
         }}
-        onGoToSignup={() => setAppPage('signup')}
-        onGoBack={() => setAppPage('landing')}
+        onGoToSignup={() => {
+          setLoginNotice('');
+          setVerificationRequired(false);
+          setAppPage('signup');
+        }}
+        onGoBack={() => {
+          setLoginNotice('');
+          setVerificationRequired(false);
+          setAppPage('landing');
+        }}
       />
     );
   }

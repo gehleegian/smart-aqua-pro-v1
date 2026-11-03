@@ -157,11 +157,6 @@ export async function updateCurrentUserProfile(data: {
     contact_number: data.contactNumber.trim(),
     updated_at: now,
     updatedAt: now,
-    account_status: currentProfile.accountStatus || 'active',
-    created_at: currentProfile.createdAt || now,
-    createdAt: currentProfile.createdAt || now,
-    email: currentProfile.email,
-    role: currentProfile.role,
   };
 
   await updateDoc(userRef, payload);
