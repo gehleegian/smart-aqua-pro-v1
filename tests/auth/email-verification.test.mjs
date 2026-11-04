@@ -17,6 +17,7 @@ import {
 
 import {
   getEmailAccessState,
+  isEmailPolicyReadDenied,
   resolveEmailAccessState,
 } from '../../src/utils/emailVerification.ts';
 
@@ -138,6 +139,13 @@ test('explicit legacy policy exempts an unverified account without altering Fire
 test('new or unknown unverified accounts fail closed when policy is required or missing', async () => {
   const user = { emailVerified: false };
   assert.equal(getEmailAccessState(user, true), 'verification-required');
+});
+
+test('a denied policy read can only fall back to the secure verification-required default', () => {
+  assert.equal(isEmailPolicyReadDenied({ code: 'permission-denied' }), true);
+  assert.equal(isEmailPolicyReadDenied({ code: 'firestore/permission-denied' }), true);
+  assert.equal(isEmailPolicyReadDenied({ code: 'unavailable' }), false);
+  assert.equal(isEmailPolicyReadDenied(new Error('network error')), false);
 });
 
 test('verification is sufficient even when the account policy requires it', () => {
