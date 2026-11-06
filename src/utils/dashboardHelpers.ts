@@ -30,7 +30,7 @@ import type {
   DashboardTankStat,
   OwnerGroup,
 } from '../types/dashboard';
-import { assessAquarium, getEffectiveThresholds } from './conditionAssessment';
+import { assessAquarium, getCustomThresholdKeys, getEffectiveThresholds } from './conditionAssessment';
 import type { AquariumEngineState, RuleConfigSnapshot } from '../services/ruleConfigService';
 
 export function getErrorMessage(error: unknown, fallback: string) {
@@ -129,6 +129,11 @@ export function mergeDashboardAquariums(
       sensorValidity: snapshot?.validity ?? null,
       commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], now),
       thresholds: getEffectiveThresholds(nextAquarium as unknown as Record<string, unknown>, ruleConfig),
+      customThresholds: getCustomThresholdKeys(
+        getEffectiveThresholds(nextAquarium as unknown as Record<string, unknown>, ruleConfig),
+        nextAquarium as unknown as Record<string, unknown>,
+        ruleConfig
+      ),
       engineState: engineStates[aquarium.id] ?? null,
     };
   });

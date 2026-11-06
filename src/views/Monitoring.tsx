@@ -6,9 +6,11 @@ import { UserAquariumList } from '../components/monitoring/UserAquariumList';
 import { useMonitoringController } from '../hooks/useMonitoringController';
 import type { SimulationScenario } from '../types/monitoring';
 import Button from '../components/ui/Button';
+import { useOrg } from '../hooks/useOrg';
 
 export default function Monitoring() {
   const monitoring = useMonitoringController();
+  const { isOwner } = useOrg();
   const { actions } = monitoring;
   const simulationPanel = process.env.NODE_ENV !== 'production' ? (
     <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3">
@@ -121,6 +123,7 @@ export default function Monitoring() {
         systemError={monitoring.systemError}
         systemMode={monitoring.systemMode}
         controlsDisabled={monitoring.simulationEnabled}
+        canManage={isOwner}
         onAutomationToggle={() => void actions.handleAutomationEnabledToggle()}
         onBack={actions.backToAquariums}
         onManualAction={(field) => void actions.handleManualAction(field)}

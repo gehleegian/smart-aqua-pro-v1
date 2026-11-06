@@ -99,6 +99,11 @@ export interface Aquarium {
   fishProfiles?: FishSpeciesProfile[];
   automationSettings?: AutomationSettings;
   manualStatus?: ManualSystemStatus;
+  /** Sprint 3: Firestore `status`; 'setup' after a claim until the wizard finishes. */
+  setupStatus?: 'setup' | 'active';
+  orgId?: string;
+  caretakerIds?: string[];
+  deviceId?: string;
   createdAt?: string;
   updatedAt?: string;
   directorySchemaVersion?: number;

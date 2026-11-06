@@ -41,6 +41,8 @@ interface AquariumDetailsViewProps {
   onManualAction: (field: SystemField) => void;
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
+  /** Sprint 3: false for a caretaker (commands only; schedules are owner-only). */
+  canManage?: boolean;
   onRefresh: () => void;
   onSystemToggle: (field: SystemField) => void;
 }
@@ -62,6 +64,7 @@ export function AquariumDetailsView({
   onManualAction,
   onModeChange,
   onOpenAutomationEditor,
+  canManage = true,
   onRefresh,
   onSystemToggle,
 }: AquariumDetailsViewProps) {
@@ -256,7 +259,8 @@ export function AquariumDetailsView({
                 <button
                   key={mode}
                   type="button"
-                  disabled={savingMode || controlsDisabled}
+                  disabled={savingMode || controlsDisabled || !canManage}
+                  title={canManage ? undefined : 'Only the owner changes the mode'}
                   onClick={() => onModeChange(mode)}
                   className={`flex-1 rounded-md px-3 py-2 text-sm ${
                     systemMode === mode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
@@ -292,7 +296,7 @@ export function AquariumDetailsView({
                     size="sm"
                     variant="secondary"
                     disabled={controlsDisabled || manualActions[field].disabled || Boolean(savingSystemKey)}
-                    onClick={() => (systemMode === 'manual' ? onManualAction(field) : onSystemToggle(field))}
+                    onClick={() => (systemMode === 'manual' || !canManage ? onManualAction(field) : onSystemToggle(field))}
                   >
                     {manualActions[field].buttonLabel}
                   </Button>
@@ -306,10 +310,14 @@ export function AquariumDetailsView({
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-white">Automation</h3>
-              <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={onOpenAutomationEditor}>
-                <Settings className="h-4 w-4" />
-                Edit
-              </Button>
+              {canManage ? (
+                <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={onOpenAutomationEditor}>
+                  <Settings className="h-4 w-4" />
+                  Edit
+                </Button>
+              ) : (
+                <span className="text-xs text-slate-400">Owner only</span>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -320,9 +328,11 @@ export function AquariumDetailsView({
               <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
               <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
             </div>
-            <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
-              {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
-            </Button>
+            {canManage && (
+              <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
+                {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>

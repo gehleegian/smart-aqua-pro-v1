@@ -1,3 +1,4 @@
+import { getActiveMembership } from './orgContext';
 import {
   child,
   get,
@@ -50,7 +51,7 @@ type DeviceCommandRequest = Omit<DeviceCommand, 'requestedBy'>;
 
 async function assertRealtimeDeviceAccess(
   aquariumId: string,
-  action: 'read' | 'write'
+  action: 'read' | 'write' | 'control'
 ) {
   const currentUser = auth.currentUser;
 
@@ -76,10 +77,20 @@ async function assertRealtimeDeviceAccess(
   const aquariumData = aquariumSnap.data() as Record<string, unknown>;
   const ownerId =
     typeof aquariumData.ownerId === 'string' ? aquariumData.ownerId.trim() : '';
+  const orgId = typeof aquariumData.orgId === 'string' ? aquariumData.orgId : '';
+  const membership = getActiveMembership();
+  const caretakerIds = Array.isArray(aquariumData.caretakerIds) ? aquariumData.caretakerIds : [];
+  // Sprint 3: owners and assigned caretakers read telemetry and send
+  // commands; control/schedules are owner-only (scope 'control').
+  const allowed = orgId
+    ? membership?.orgId === orgId &&
+      membership.org.status === 'active' &&
+      (membership.role === 'owner' || (action !== 'control' && caretakerIds.includes(currentProfile.id)))
+    : Boolean(ownerId) && ownerId === currentProfile.id;
 
-  if (!ownerId || ownerId !== currentProfile.id) {
+  if (!allowed) {
     throw new Error(
-      `You are not allowed to ${action} device data for this aquarium.`
+      `You are not allowed to ${action === 'control' ? 'change schedules' : action} device data for this aquarium.`
     );
   }
 
@@ -159,7 +170,11 @@ export async function syncDeviceControlProfile(
     return;
   }
 
-  await assertRealtimeDeviceAccess(aquariumId, 'write');
+  // Caretakers send commands only; the control profile is owner-written.
+  if (getActiveMembership()?.role === 'caretaker') {
+    return;
+  }
+  await assertRealtimeDeviceAccess(aquariumId, 'control');
   await set(child(deviceRootRef, 'control'), profile);
 }
 

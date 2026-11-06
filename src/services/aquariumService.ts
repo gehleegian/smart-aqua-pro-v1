@@ -1,3 +1,4 @@
+import { getActiveMembership } from './orgContext';
 import { collection, doc, getDoc, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type {
@@ -50,9 +51,13 @@ type AquariumTankProfileUpdateField =
 
 type AquariumUpdateField = AquariumProfileUpdateField | AquariumTankProfileUpdateField;
 
-export type AquariumUpdateData = Partial<Pick<Aquarium, AquariumUpdateField>>;
+export type AquariumUpdateData = Partial<Pick<Aquarium, AquariumUpdateField>> & {
+  /** Sprint 3 setup wizard: Finish sets the Firestore `status` to 'active'. */
+  status?: 'active';
+};
 
-const AQUARIUM_UPDATE_FIELDS = new Set<AquariumUpdateField>([
+const AQUARIUM_UPDATE_FIELDS = new Set<AquariumUpdateField | 'status'>([
+  'status',
   'name',
   'species',
   'minTemp',
@@ -224,6 +229,12 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     minQuality: readNumber(data.minQuality, 80),
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
+    setupStatus: data.status === 'setup' ? 'setup' : 'active',
+    orgId: typeof data.orgId === 'string' ? data.orgId : undefined,
+    caretakerIds: Array.isArray(data.caretakerIds)
+      ? data.caretakerIds.filter((id): id is string => typeof id === 'string')
+      : [],
+    deviceId: typeof data.deviceId === 'string' ? data.deviceId : undefined,
     tankType: typeof data.tankType === 'string' ? data.tankType : undefined,
     tankSizeLiters: readOptionalNumber(data.tankSizeLiters),
     tankSizeCategory:
@@ -368,9 +379,18 @@ async function requireAquariumAccess(
 
   const aquariumData = aquariumSnap.data() as Record<string, unknown>;
   const ownerId = readString(aquariumData.ownerId, '');
-  const isOwner = currentProfile.id === ownerId;
+  const membership = getActiveMembership();
+  const orgId = readString(aquariumData.orgId, '');
+  const inActiveOrg = Boolean(orgId) && membership?.orgId === orgId && membership.org.status === 'active';
+  // Owners manage; assigned caretakers may only view. Rules enforce the same.
+  const isOwner = orgId ? inActiveOrg && membership?.role === 'owner' : currentProfile.id === ownerId;
+  const isAssignedCaretaker =
+    inActiveOrg &&
+    membership?.role === 'caretaker' &&
+    Array.isArray(aquariumData.caretakerIds) &&
+    aquariumData.caretakerIds.includes(currentProfile.id);
 
-  if (!isOwner) {
+  if (!isOwner && !(action === 'view' && isAssignedCaretaker)) {
     throw new Error(`You are not allowed to ${action} this aquarium.`);
   }
 
@@ -396,6 +416,11 @@ export async function getAquariumDirectoryEntries(): Promise<AquariumDirectoryEn
   );
 }
 
+/**
+ * Aquariums visible in the active organization (Sprint 3): every tank for an
+ * owner, only assigned tanks for a caretaker, nothing without an org. The name
+ * is kept so existing callers did not change; `ownerId` must be the caller.
+ */
 export async function getAquariumsByOwner(ownerId: string): Promise<Aquarium[]> {
   const currentProfile = await requireAuthenticatedProfile();
 
@@ -403,14 +428,24 @@ export async function getAquariumsByOwner(ownerId: string): Promise<Aquarium[]> 
     throw new Error('You are not allowed to view aquariums for another user.');
   }
 
-  const aquariumsQuery = query(
-    collection(db, 'aquariums'),
-    where('ownerId', '==', ownerId)
-  );
+  const membership = getActiveMembership();
+  if (!membership || membership.org.status !== 'active') {
+    return [];
+  }
+
+  const aquariumsQuery =
+    membership.role === 'owner'
+      ? query(collection(db, 'aquariums'), where('orgId', '==', membership.orgId))
+      : query(
+          collection(db, 'aquariums'),
+          where('orgId', '==', membership.orgId),
+          where('caretakerIds', 'array-contains', currentProfile.id)
+        );
 
   const snapshot = await getDocs(aquariumsQuery);
 
-  const legacyAquariums = snapshot.docs.filter(
+  // Directory schema backfill writes the profile: owners only.
+  const legacyAquariums = membership.role !== 'owner' ? [] : snapshot.docs.filter(
     (docSnap) =>
       readNumber(docSnap.data().directorySchemaVersion, 0) !==
       AQUARIUM_DIRECTORY_SCHEMA_VERSION
@@ -456,6 +491,7 @@ export async function getAquariumById(aquariumId: string) {
   }
 }
 
+/** @deprecated Sprint 3: aquariums are created by claiming a device (orgService.claimDevice). Rules deny this write. */
 export async function createAquarium(data: Omit<Aquarium, 'id'>): Promise<void> {
   const currentProfile = await requireAuthenticatedProfile();
 
@@ -535,6 +571,11 @@ export async function updateAquariumManualStatus(
   aquariumId: string,
   data: Partial<ManualSystemStatus>
 ): Promise<void> {
+  // A caretaker's device command is the record; the profile's manualStatus
+  // is owner-written (Sprint 3 rules), so there is nothing to save here.
+  if (getActiveMembership()?.role === 'caretaker') {
+    return;
+  }
   const { aquariumRef, aquariumData } = await requireAquariumAccess(aquariumId, 'update');
   const submittedFields = Object.keys(data);
   const prohibitedFields = submittedFields.filter(

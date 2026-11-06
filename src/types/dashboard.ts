@@ -27,6 +27,8 @@ export type DashboardAquarium = Aquarium & {
   commandStatus: CommandStatus;
   /** Effective thresholds (species defaults + per-aquarium overrides) from Firestore. */
   thresholds: EffectiveThresholds | null;
+  /** Parameters whose range differs from the species default ("Custom"). */
+  customThresholds?: string[];
   /** Server condition / cleaning summaries from the aquarium doc. */
   engineState: AquariumEngineState | null;
 };

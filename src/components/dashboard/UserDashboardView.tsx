@@ -6,6 +6,7 @@ import type {
   DashboardTankStat,
 } from '../../types/dashboard';
 import { getManualSystemStatus } from '../../utils/monitoringHelpers';
+import Badge from '../ui/Badge';
 import { Card, CardHeader } from '../ui/Card';
 import { SummaryGrid } from './SummaryGrid';
 import { ConditionPanel } from '../condition/ConditionPanel';
@@ -51,15 +52,23 @@ function formatUpdatedAgo(updatedAt: number, now: number) {
 
 // Ranges come from the effective thresholds in Firestore (species defaults +
 // per-aquarium overrides); nothing is hard-coded here.
+const READING_PARAMETER: Record<string, 'temperatureC' | 'waterLevelPercent' | 'tdsPpm' | 'ph' | 'turbidity'> = {
+  Temperature: 'temperatureC',
+  'Water Level': 'waterLevelPercent',
+  'Water Purity (TDS)': 'tdsPpm',
+  'pH Level': 'ph',
+  Turbidity: 'turbidity',
+};
+
+/** The owner changed this range away from the species default. */
+function isCustomRange(title: string, tank: DashboardAquarium) {
+  const key = READING_PARAMETER[title];
+  return Boolean(key && tank.customThresholds?.includes(key));
+}
+
 function getReadingRange(title: string, tank: DashboardAquarium) {
   const values = tank.thresholds?.values;
-  const key = {
-    Temperature: 'temperatureC',
-    'Water Level': 'waterLevelPercent',
-    'Water Purity (TDS)': 'tdsPpm',
-    'pH Level': 'ph',
-    Turbidity: 'turbidity',
-  }[title] as keyof NonNullable<typeof values> | undefined;
+  const key = READING_PARAMETER[title];
   const range = key ? values?.[key] : undefined;
   if (!range) return '';
   const unit = { temperatureC: '°C', waterLevelPercent: '%', tdsPpm: ' ppm', ph: '', turbidity: ' NTU' }[key!];
@@ -142,7 +151,10 @@ function ReadingCard({ stat, tank }: { stat: DashboardTankStat; tank: DashboardA
         </p>
       )}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-3 text-xs">
-        <span className="text-slate-300">{range}</span>
+        <span className="inline-flex items-center gap-2 text-slate-300">
+          {range}
+          {range && isCustomRange(stat.title, tank) && <Badge variant="info">Custom</Badge>}
+        </span>
         {hasValue && (
           <span
             className={`inline-flex items-center gap-1.5 ${

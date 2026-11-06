@@ -28,6 +28,20 @@ export function getEffectiveThresholds(aquarium: AquariumLike, ruleConfig: RuleC
   return resolveThresholds(species, readAquariumOverrides(aquarium));
 }
 
+/**
+ * Parameters whose effective range differs from the species default (the
+ * owner changed it). The UI marks these "Custom"; only an owner can edit them.
+ */
+export function getCustomThresholdKeys(thresholds: EffectiveThresholds | null, aquarium: AquariumLike, ruleConfig: RuleConfigSnapshot | null): string[] {
+  if (!thresholds || !ruleConfig?.loaded) return [];
+  const defaults = resolveThresholds(selectSpeciesConfig(aquarium, ruleConfig.speciesById)).values;
+  return thresholds.overridden.filter((key) => {
+    const base = defaults[key];
+    const value = thresholds.values[key];
+    return base?.min !== value?.min || base?.max !== value?.max;
+  });
+}
+
 /** Browser-side evaluation with the same engine and the Firestore rules (fallback, simulator, history rows). */
 export function evaluateAquariumReading(
   aquarium: AquariumLike,

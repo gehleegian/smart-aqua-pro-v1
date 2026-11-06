@@ -1,6 +1,8 @@
 import { Search, Bell, Wifi, LogOut, Menu, X, AlertCircle, AlertTriangle, Info, Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
 import Badge from '../ui/Badge';
+import OrgSwitcher from '../org/OrgSwitcher';
+import RoleBadge from '../org/RoleBadge';
 
 interface HeaderProps {
   currentPage: string;
@@ -20,6 +22,11 @@ const pageNames: Record<string, string> = {
   users: 'User & Aquarium Directory',
   support: 'Support Messages',
   settings: 'Settings & Configuration',
+  'add-device': 'Add Device',
+  setup: 'Aquarium Setup',
+  team: 'Team',
+  organizations: 'Organizations',
+  invite: 'Accept Invite',
 };
 
 const notifications = [
@@ -83,6 +90,8 @@ export default function Header({
             Online
           </div>}
 
+          {!isAdmin && <OrgSwitcher />}
+
           <button
             type="button"
             onClick={onThemeToggle}
@@ -115,7 +124,7 @@ export default function Header({
             </div>
             <div className="text-left">
               <p className="text-sm text-white font-medium">{user.name}</p>
-              <p className="text-xs text-slate-300">{user.role}</p>
+              <RoleBadge platformRole={user.role} />
             </div>
           </div>
 

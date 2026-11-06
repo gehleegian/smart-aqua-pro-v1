@@ -1,8 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectDatabaseEmulator, getDatabase } from 'firebase/database';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -38,3 +38,16 @@ export const functions = getFunctions(
   app,
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1'
 );
+
+// Local development only: NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true points the
+// app at the Emulator Suite (ports from firebase.json). Never set it in a
+// deployed build.
+const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
+const emulatorFlag = '__smartAquaEmulatorsConnected';
+if (useEmulators && typeof window !== 'undefined' && !(globalThis as Record<string, unknown>)[emulatorFlag]) {
+  (globalThis as Record<string, unknown>)[emulatorFlag] = true;
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}

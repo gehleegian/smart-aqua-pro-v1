@@ -16,7 +16,17 @@ import Login from '../../views/Login';
 import Landing from '../../views/Landing';
 import Signup from '../../views/Signup';
 import Support from '../../views/Support';
+import AddDevice from '../../views/AddDevice';
+import SetupWizard from '../../views/SetupWizard';
+import Team from '../../views/Team';
+import Organizations from '../../views/Organizations';
+import AcceptInvite from '../../views/AcceptInvite';
 import ConfirmModal from '../ui/ConfirmModal';
+import NoOrgState, { SuspendedOrgState } from '../org/NoOrgState';
+import type { NavRole } from './Sidebar';
+import { useOrg } from '../../hooks/useOrg';
+import { refreshOrgContext } from '../../services/orgService';
+import { clearOrgContext, readPendingInvite } from '../../services/orgContext';
 
 import {
   EmailVerificationRequiredError,
@@ -37,6 +47,11 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   users: Users,
   settings: Settings,
   support: Support,
+  'add-device': AddDevice,
+  setup: SetupWizard,
+  team: Team,
+  organizations: Organizations,
+  invite: AcceptInvite,
 };
 
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
@@ -53,10 +68,21 @@ const getInitialTheme = (): ThemeMode => {
   return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
 };
 
-const rolePermissions: Record<UserRole, string[]> = {
-  Admin: ['dashboard', 'users', 'settings', 'support'],
-  User: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'settings', 'support'],
+// Sprint 3: pages follow the access role (docs/access-model.md). The rules
+// enforce the same boundaries; this only decides what is shown.
+const rolePermissions: Record<NavRole, string[]> = {
+  Admin: ['dashboard', 'organizations', 'users', 'settings', 'support'],
+  owner: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'add-device', 'setup', 'team', 'settings', 'support', 'invite'],
+  caretaker: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'settings', 'support', 'invite'],
+  none: ['dashboard', 'add-device', 'setup', 'settings', 'support', 'invite'],
 };
+// Pages that need an active (not suspended) organization's data.
+const orgDataPages = new Set(['monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'team', 'setup']);
+
+function navRoleFor(platformRole: UserRole | undefined, orgRole: 'owner' | 'caretaker' | null): NavRole {
+  if (platformRole === 'Admin') return 'Admin';
+  return orgRole ?? 'none';
+}
 
 export default function Layout() {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -75,6 +101,38 @@ export default function Layout() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [loginNotice, setLoginNotice] = useState('');
   const [verificationRequired, setVerificationRequired] = useState(false);
+  const [orgReadyFor, setOrgReadyFor] = useState<string | null>(null);
+  const org = useOrg();
+  const navRole = navRoleFor(user?.role, org.role);
+
+  // Memberships load before any page renders, so every query is org-scoped.
+  useEffect(() => {
+    const uid = user?.id;
+    if (!user || !uid) {
+      clearOrgContext();
+      return;
+    }
+    if (user.role === 'Admin') {
+      // Platform admins have no org membership (orgReady below).
+      clearOrgContext();
+      return;
+    }
+    let cancelled = false;
+    refreshOrgContext(uid)
+      .catch((error) => {
+        console.error('Failed to load organizations:', error);
+        clearOrgContext();
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOrgReadyFor(uid);
+          if (readPendingInvite()) setCurrentPage('invite');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('currentPage', currentPage);
@@ -128,15 +186,7 @@ export default function Layout() {
 
         setAppPage('app');
 
-        const savedPage = localStorage.getItem('currentPage') || 'dashboard';
-        const allowed = rolePermissions[normalizedRole] ?? rolePermissions.User;
-
-        if (allowed.includes(savedPage)) {
-          setCurrentPage(savedPage);
-        } else {
-          setCurrentPage('dashboard');
-          localStorage.setItem('currentPage', 'dashboard');
-        }
+        setCurrentPage(localStorage.getItem('currentPage') || 'dashboard');
       } catch (error) {
         if (error instanceof EmailVerificationRequiredError) {
           console.warn('Email verification is required before accessing SmartAqua Pro.');
@@ -166,6 +216,8 @@ export default function Layout() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      clearOrgContext();
+      setOrgReadyFor(null);
       localStorage.removeItem('currentPage');
       setUser(null);
       setAppPage('landing');
@@ -185,10 +237,11 @@ export default function Layout() {
     setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
   };
 
+  const orgReady = Boolean(user?.id) && (user?.role === 'Admin' || orgReadyFor === user?.id);
   const allowedPages = useMemo(() => {
-    if (!user) return [];
-    return rolePermissions[user.role] ?? rolePermissions.User;
-  }, [user]);
+    if (!user || !orgReady) return [];
+    return rolePermissions[navRole];
+  }, [user, orgReady, navRole]);
 
   const handleNavigate = (page: string) => {
     if (!allowedPages.includes(page)) {
@@ -204,7 +257,7 @@ export default function Layout() {
   };
 
   useEffect(() => {
-    if (user && !allowedPages.includes(currentPage)) {
+    if (user && orgReady && !allowedPages.includes(currentPage)) {
       const redirectTimer = window.setTimeout(() => {
         setCurrentPage('dashboard');
         localStorage.setItem('currentPage', 'dashboard');
@@ -212,9 +265,9 @@ export default function Layout() {
 
       return () => window.clearTimeout(redirectTimer);
     }
-  }, [user, currentPage, allowedPages]);
+  }, [user, orgReady, currentPage, allowedPages]);
 
-  if (loadingAuth) {
+  if (loadingAuth || (user && appPage === 'app' && !orgReady)) {
     return (
       <div
         className="smart-aqua-app flex min-h-screen items-center justify-center bg-slate-950 text-lg text-slate-200"
@@ -273,13 +326,23 @@ export default function Layout() {
     allowedPages.includes(currentPage) && pages[currentPage]
       ? pages[currentPage]
       : Dashboard;
+  const suspended = org.active?.org.status === 'suspended' && navRole !== 'Admin';
+  const pageId = allowedPages.includes(currentPage) ? currentPage : 'dashboard';
+  const pageContent =
+    suspended && (orgDataPages.has(pageId) || pageId === 'dashboard') ? (
+      <SuspendedOrgState orgName={org.active?.org.name ?? 'This organization'} />
+    ) : navRole === 'none' && pageId === 'dashboard' ? (
+      <NoOrgState onNavigate={handleNavigate} />
+    ) : (
+      <PageComponent onNavigate={handleNavigate} />
+    );
 
   return (
     <div className="smart-aqua-app min-h-screen bg-slate-950 text-slate-100" data-theme={theme}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={handleNavigate}
-        userRole={user.role}
+        navRole={navRole}
         onLogout={() => setLogoutConfirmOpen(true)}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -304,7 +367,7 @@ export default function Layout() {
           onThemeToggle={handleThemeToggle}
         />
         <main className="p-4 md:p-6">
-          <PageComponent onNavigate={handleNavigate} />
+          {pageContent}
         </main>
       </div>
 
