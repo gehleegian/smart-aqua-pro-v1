@@ -677,6 +677,41 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // Rules engine configuration (Sprint 2). Readable by any signed-in user
+    // with protected access; written only by the seed script / Admin SDK.
+    match /species/{speciesId} {
+      allow read: if hasProtectedAccess();
+      allow write: if false;
+    }
+
+    match /rules/{ruleId} {
+      allow read: if hasProtectedAccess();
+      allow write: if false;
+    }
+
+    // Created only by the Cloud Functions rules engine. The owner may move a
+    // pending recommendation to applied or dismissed, stamping who and when;
+    // nothing else can change.
+    match /recommendations/{recommendationId} {
+      allow read: if ownsAquarium(resource.data.aquariumId);
+      allow update: if ownsAquarium(resource.data.aquariumId)
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvedAt', 'resolvedBy'])
+        && request.resource.data.status in ['applied', 'dismissed']
+        && request.resource.data.resolvedBy == request.auth.uid
+        && request.resource.data.resolvedAt is int
+        && request.resource.data.resolvedAt > request.time.toMillis() - 300000
+        && request.resource.data.resolvedAt < request.time.toMillis() + 300000;
+      allow create, delete: if false;
+    }
+
+    // Maintenance log (Sprint 4 adds the logging UI). Read-only for owners for now.
+    match /maintenance_actions/{actionId} {
+      allow read: if ownsAquarium(resource.data.aquariumId);
+      allow write: if false;
+    }
+
     match /monitoring_reports/{reportId} {
       allow read: if ownsAquarium(resource.data.aquarium_id);
       allow write: if false;

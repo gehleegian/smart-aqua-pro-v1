@@ -687,6 +687,15 @@ test('CONTRACT-03 validity flags must be booleans, and other devices cannot writ
   await assertFails(set(ref(deviceDatabase('device-b'), `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, phReadingValid: true }));
 });
 
+test('CONTRACT-04 telemetry accepts the optional mainsPresent boolean (new, additive) and nothing else for it', async () => {
+  const database = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: false }));
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: true, powerStatus: 'Online' }));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: 'no' }));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: 0 }));
+  await assertFails(set(ref(deviceDatabase('device-b'), `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: false }));
+});
+
 test('ACK-01 the bound device acknowledges the current command with a server timestamp', async () => {
   const database = deviceDatabase('device-a');
   await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));

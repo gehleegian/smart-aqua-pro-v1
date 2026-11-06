@@ -54,6 +54,9 @@
           "powerStatus": {
             ".validate": "newData.isString() && (newData.val() == 'Online' || newData.val() == 'Offline' || newData.val() == 'Power Interruption' || newData.val() == 'Unknown')"
           },
+          "mainsPresent": {
+            ".validate": "newData.isBoolean()"
+          },
           "ph": {
             ".validate": "newData.isNumber()"
           },
