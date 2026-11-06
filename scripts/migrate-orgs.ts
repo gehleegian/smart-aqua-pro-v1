@@ -79,7 +79,7 @@ async function connect() {
     process.env.FIREBASE_DATABASE_EMULATOR_HOST ||= '127.0.0.1:9000';
     process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
     projectId = process.env.GCLOUD_PROJECT || DEFAULT_EMULATOR_PROJECT;
-    databaseURL = `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}?ns=${projectId}-default-rtdb`;
+    databaseURL = databaseUrlFlag ?? `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}?ns=${projectId}-default-rtdb`;
     console.log(`Emulators, project "${projectId}".`);
   }
   const app = initializeApp({ projectId, databaseURL }, 'migrate-orgs');

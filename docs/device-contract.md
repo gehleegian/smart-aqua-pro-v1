@@ -21,22 +21,23 @@ This file is the single source of truth for the data the ESP32, the web and mobi
 /
 ├── authorization/                         server-maintained access index (no client read/write)
 │   ├── users/{uid}                        role, emailVerificationRequired
-│   └── aquariums/{aquariumId}             ownerUid, state, deviceUids/{deviceUid}: true, claimOperationId
-├── deviceBindings/{deviceUid}: aquariumId new: readable only by that device; written by provisioning only
+│   └── aquariums/{aquariumId}             ownerUid, orgId, caretakerUids/{uid}: true, state, deviceUids/{deviceUid}: true, claimOperationId (live only)
+├── deviceBindings/{deviceUid}: aquariumId readable only by that device; written by claimDevice / migrate-orgs
 └── devices/{aquariumId}                   keyed by the Firestore aquarium ID (not by device)
-    ├── telemetry                          device writes · owner reads
-    ├── control                            owner writes · owner + device read
-    ├── commands/latest                    owner writes · owner + device read (single slot, overwritten)
-    ├── commandAck/latest                  new: device writes · owner + device read
+    ├── telemetry                          device writes · owner + assigned caretakers read
+    ├── control                            owner writes · owner + caretakers + device read
+    ├── commands/latest                    owner + assigned caretakers write · they + device read (single slot, overwritten)
+    ├── commandAck/latest                  device writes · owner + caretakers + device read
     └── history/{YYYY-MM-DD}/{HH-mm-ss}    legacy, read-only (nothing writes here under current rules)
 ```
 
 **Decision 1: RTDB stays keyed by aquarium.** Data lives under `devices/{aquariumId}/…`, and the device is bound to an aquarium through `authorization/aquariums/{id}/deviceUids/{deviceUid} = true`.
 
 **Device identity:**
-- A device signs in with a Firebase custom token whose UID is the device UID (e.g. `esp32-SAQ-…`) and whose custom claim is `principalType: "device"`.
+- A device's Firebase Auth UID is `esp32-<deviceId>` (e.g. `esp32-SAQ-7K3M-9R2X`) with the custom claims `principalType: "device"` and (Sprint 3 provisioning) `deviceId`.
+- New devices are created by `scripts/provision-device.ts` with an email/password login. The firmware signs in and refreshes its token; see `docs/firmware-changes.md` §10. How the live device signs in today is unconfirmed (see §8).
 - At boot the firmware reads `deviceBindings/{its uid}` to learn its `aquariumId`, so it doesn't have to be re-flashed per aquarium.
-- How the token is minted and stored is still undocumented (see §8).
+- **Sprint 3:** a device joins an aquarium when an Owner claims it with the QR label (`smartaqua://claim?d=<deviceId>&c=<code>`); see `docs/access-model.md`. Platform admins and caretakers may read device data (caretakers: assigned tanks only). The device rules themselves are unchanged.
 
 ---
 
@@ -130,7 +131,7 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 
 ## 4. Commands and acknowledgement (decision 5)
 
-### 4.1 `devices/{aquariumId}/commands/latest`: web writes (owner only)
+### 4.1 `devices/{aquariumId}/commands/latest`: web writes (owner or assigned caretaker)
 
 | Field | Type | Notes | Status |
 |---|---|---|---|
@@ -248,6 +249,6 @@ The UI and the ingest function already treat these values as sensor faults (zero
 ## 8. Open items
 
 - **Device token:** how the custom token for `esp32-SAQ-…` is minted, and where it is stored on the device. Ask Gian. It must never be committed.
-- **Provisioning:** the provisioning script that writes `deviceUids`, `claimOperationId` and now `deviceBindings` is not in the repo.
+- **Provisioning:** done for new devices in Sprint 3 (`scripts/provision-device.ts` plus the `claimDevice` callable, which write `deviceUids` and `deviceBindings`). The script that originally wrote `claimOperationId` for the live device is still not in the repo; `scripts/migrate-orgs.ts` registers that device as already claimed.
 - **TDS:** Aquarium 1 sends `tdsReadingValid: false` and no `tdsPpm`, so TDS is never assessed.
 - **Not sent yet:** turbidity, `mainsPresent`, plus real `powerStatus` and `equipmentStatus` values. Until then the app shows power and equipment as "Not monitored" (they no longer block a NORMAL condition).

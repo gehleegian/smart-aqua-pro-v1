@@ -138,6 +138,66 @@ From then on, a missing `<sensor>ReadingValid` flag counts as a sensor fault (de
 
 **Rollback:** set it back to `false` and redeploy both.
 
+## 7. Organizations, QR claiming and caretakers (Sprint 3, at go-live)
+
+**Status:** plan only, emulator-tested (`npm run test:migrate-orgs`, `npm run test:sprint3-e2e`). Scheduled for go-live (Sprint 6), not before. See `docs/access-model.md`.
+
+**Order matters:** the Sprint 3 Firestore rules list aquariums by `orgId`, so the data must be migrated **before** those rules are deployed. RTDB rules are backward compatible either way: caretaker access is additive, and device rules are unchanged.
+
+### 7a. Prerequisites
+- [ ] Steps 1–4 are done and stable.
+- [ ] Back up again (reads only): `firebase database:get /authorization --project practice-smartaqua > backup-authorization-$(date +%F).json` (keep it out of git). Export `aquariums`, `users` and `aquarium_directory` from Firestore.
+- [ ] Generate and set the claim-code pepper. **Never print it into a shared terminal log, and never commit it.**
+  `firebase functions:secrets:set CLAIM_CODE_PEPPER --project practice-smartaqua`
+- [ ] Decide whether to deploy the authorization-sync functions (`syncAquariumAuthorizationMirror`, `syncUserAuthorizationMirror`, `reconcileAuthorizationMirror`, …). They were never deployed (step 2), and the Sprint 3 callables rely on the same mirror sync. **This needs your decision.**
+
+### 7b. Deploy the Sprint 3 functions
+```bash
+npm run build:functions
+firebase deploy --only functions:claimDevice,functions:createInvite,functions:acceptInvite,functions:revokeInvite,functions:removeMember,functions:updateCaretakerAssignments,functions:setOrganizationStatus,functions:syncOrganizationAuthorizationMirror,functions:syncMemberAuthorizationMirror --project practice-smartaqua
+```
+Nothing calls them until the app is deployed (7e).
+
+### 7c. Run the data migration
+```bash
+npm run build:functions        # the script reuses functions/lib/src/authorizationSync.js
+node --experimental-strip-types scripts/migrate-orgs.ts --project practice-smartaqua --database-url <RTDB URL> --dry-run
+node --experimental-strip-types scripts/migrate-orgs.ts --project practice-smartaqua --database-url <RTDB URL>
+```
+It asks you to type the project ID. It needs Admin credentials (Application Default Credentials); never commit a service-account key.
+
+**What it does:**
+- Each aquarium owner gets a personal org `org-<uid>` with themselves as owner.
+- Each of their aquariums gets `orgId` and empty `caretakerIds`. `ownerId` and the profile are untouched.
+- `esp32-SAQ-7K3M-9R2X` is registered in `device_registry/SAQ-7K3M-9R2X` as **claimed**, with no claim code, `migratedFrom: device-claim-SAQ-7K3M-9R2X`.
+- `deviceBindings/esp32-SAQ-7K3M-9R2X` is added if step 1b didn't already add it.
+- Admins get the `platformAdmin` claim.
+- The RTDB mirror gets `orgId`. `ownerUid`, `state`, `deviceUids` and `claimOperationId` are kept.
+
+Re-running it is a no-op.
+
+**Check:**
+- Aquarium 1 keeps receiving telemetry: `updatedAt` advances.
+- `authorization/aquariums/<Aquarium 1>` still has `state: active` and its `deviceUids`, now with `orgId`.
+- A second `--dry-run` shows `0 step(s)`.
+
+### 7d. Deploy the Sprint 3 rules and indexes
+```bash
+firebase deploy --only firestore:rules,firestore:indexes,database --project practice-smartaqua
+```
+**Check:** the owner of Aquarium 1 still sees it, and its live readings, in the **new** app (7e). The old app's `ownerId` list query is denied from this point, so do 7d and 7e back to back.
+
+### 7e. Deploy the web app
+Users with no org now see "Add your first device / Waiting for an invite". Existing owners land in their personal org.
+
+### Rollback (reverse order)
+1. Redeploy the previous rules: `git show <previous commit>:firestore.rules` and `database.rules.json`, then `firebase deploy --only firestore:rules,database`.
+2. Redeploy the previous web build.
+3. Run `node --experimental-strip-types scripts/migrate-orgs.ts --project practice-smartaqua --database-url <RTDB URL> --rollback`. It removes exactly what the migration created (docs marked `migratedAt`), clears the `platformAdmin` claims and re-syncs the mirror. Caretakers added after the migration lose access; the script warns about each one.
+4. Optionally delete the Sprint 3 functions: `firebase functions:delete claimDevice createInvite acceptInvite revokeInvite removeMember updateCaretakerAssignments setOrganizationStatus syncOrganizationAuthorizationMirror syncMemberAuthorizationMirror`.
+
+The live device is never touched by either direction. Its `deviceUids` binding stays as it is.
+
 ## 6. Afterwards
 
 - [ ] Update `AUDIT.md` §4 with the date of each step.

@@ -227,6 +227,42 @@ json.set("turbidityReadingValid", turbidityCalibrated && isfinite(ntu) && ntu >=
 - [ ] Turbidity is sent with `turbidityReadingValid: false` until it's calibrated.
 - [ ] **Needs Gian's hardware:** calibration constants, and checking accuracy against reference instruments.
 
+## 10. Sign in and refresh the token (new devices, Sprint 3)
+
+`scripts/provision-device.ts` creates one Firebase Auth account per device:
+- UID `esp32-<deviceId>`
+- custom claims `principalType: "device"` and `deviceId`
+- an email/password login
+
+It writes the credentials to `firmware/secrets/<deviceId>.h`. That file is **gitignored and must never be committed or pasted anywhere**:
+
+```cpp
+#include "secrets/SAQ-XXXX-XXXX.h"   // SMARTAQUA_DEVICE_ID, _UID, _EMAIL, _PASSWORD
+```
+
+**At boot (and when the refresh token is rejected):**
+```
+POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<Web API key>
+{ "email": SMARTAQUA_DEVICE_EMAIL, "password": SMARTAQUA_DEVICE_PASSWORD, "returnSecureToken": true }
+→ idToken (1 h; its claims include principalType and deviceId), refreshToken
+```
+
+**About 5 minutes before `expiresIn` runs out:**
+```
+POST https://securetoken.googleapis.com/v1/token?key=<Web API key>
+grant_type=refresh_token&refresh_token=<refreshToken>
+→ id_token, refresh_token
+```
+
+**Then use the token:**
+- RTDB REST calls use `?auth=<idToken>`.
+- Firebase-ESP-Client does both of the steps above for you when you set `auth.user.email` and `auth.user.password`.
+- Store the refresh token in NVS so a reboot does not need the password over the network every time.
+
+- [ ] **Gian: confirm how the live `esp32-SAQ-7K3M-9R2X` signs in today.** AUDIT.md recorded a custom-token UID with the `principalType` claim, but how the token is minted and refreshed is unknown. If it uses a custom token minted elsewhere, tell us; the new devices use the email/password flow above instead, and the RTDB rules accept both (they check only the uid and the claim).
+- [ ] The claim label (QR + code) is printed by the provisioning script. The code is needed only once, by the Owner, in the app. The firmware never needs it.
+- [ ] Wi-Fi setup stays the WiFiManager hotspot (§5). The app's Add-device screen tells the owner to join `SmartAqua-XXXX` first, so please use that SSID pattern (`SmartAqua-` + the last 4 characters of the device ID).
+
 ## 9. Also please check
 
 - [ ] **Readings outside the profile limits:** Aquarium 1 reads 26.5 °C, pH 8.1 and a water level around 16 %. Are these real, or does the probe need calibrating?
