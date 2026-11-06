@@ -143,6 +143,16 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 - Cloud Function `ingestDeviceTelemetry`: validated, sampled history in Firestore `sensor_readings` (emulator-tested only).
 - App: 60 s stale window, "Sensor error" display, command status, Data Logs on the shared assessment.
 
+### 4.4 Sprint 3: organizations, QR claiming, caretakers (same branch; nothing deployed)
+
+- **Access model:** `docs/access-model.md`. Platform Admin (Admin role → `platformAdmin` claim, read-only plus suspend), Org Owner (first device claim creates the org), Caretaker (invite only, assigned tanks). This replaces the manuscript's Admin/User model, and FR2 ("Admin assigns aquariums") no longer applies: owners claim devices and assign caretakers.
+- **Functions** (`functions/src/orgAccess.ts`): `claimDevice`, `createInvite`, `acceptInvite`, `revokeInvite`, `removeMember`, `updateCaretakerAssignments`, `setOrganizationStatus`. The existing RTDB mirror sync is extended with `orgId`, `caretakerUids` and a `suspended` state, and the existing `updateUserRoleTrusted` now also sets the `platformAdmin` claim.
+- **Rules:**
+  - Firestore is org-scoped: Owner reads every tank in the org, Caretaker only tanks in `caretakerIds`, the admin reads everything. Owner-only profile and threshold edits; client aquarium creation is removed.
+  - RTDB: `caretakerUids` grant telemetry, command and history access; `control` stays owner-only; device rules are unchanged.
+- **Device provisioning** (resolves §6 gap 2): `scripts/provision-device.ts` (device account, HMAC-hashed claim code, QR label, gitignored credentials header). Migration: `scripts/migrate-orgs.ts` (`docs/migration-live.md` step 7).
+- **Verified on the emulator only:** `test:org-access`, `test:firestore-org-rules`, `test:rtdb-org-rules`, `test:migrate-orgs`, `test:sprint3-e2e`. ESP32 sign-in with the provisioned credentials needs hardware verification (Gian).
+
 ### Mocks and simulators found
 
 | Location | What it is | Reaches prod? |
@@ -225,7 +235,7 @@ The rows of §5 below are the original audit snapshot. Status after Sprint 2 (so
 
 **Docs:** `docs/rule-engine.md`, `docs/rule-matrix.md` (generated from the seed), `docs/bioload.md`; `mainsPresent` added to `docs/device-contract.md` and `docs/firmware-changes.md`; migration steps 1c/1d/2 updated.
 
-**Overlap to resolve:** `docs/threshold-approval-matrix.csv` and `docs/recommendation-approval-matrix.csv` predate this sprint. `docs/rule-matrix.md` is now the list that matches the engine; the team should pick one for sign-off.
+**Overlap resolved (Sprint 3):** `docs/rule-matrix.md` is the sign-off document. `docs/threshold-approval-matrix.csv` and `docs/recommendation-approval-matrix.csv` are marked superseded (kept, not deleted).
 
 ## 5. Feature status matrix
 
