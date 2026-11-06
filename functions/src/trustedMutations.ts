@@ -21,6 +21,7 @@ export type MutationErrorCode =
   | 'invalid-argument'
   | 'not-found'
   | 'permission-denied'
+  | 'resource-exhausted'
   | 'unauthenticated'
   | 'unavailable';
 
@@ -220,7 +221,16 @@ function assertNoForeignBlock(
   }
 }
 
-async function assertVerificationEligible(
+/** Sets or clears `platformAdmin: true`, keeping every other custom claim. */
+export async function syncPlatformAdminClaim(auth: Auth, uid: string, platformAdmin: boolean) {
+  const user = await auth.getUser(uid);
+  const claims = { ...(user.customClaims ?? {}) };
+  if (platformAdmin) claims.platformAdmin = true;
+  else delete claims.platformAdmin;
+  await auth.setCustomUserClaims(uid, claims);
+}
+
+export async function assertVerificationEligible(
   dependencies: TrustedMutationDependencies,
   actor: MutationActor
 ) {
@@ -1336,6 +1346,8 @@ export async function updateUserRoleTrusted(
       identity.operationId,
       input.targetUid
     );
+    // Sprint 3 access model: the Admin role maps to the platformAdmin claim.
+    await syncPlatformAdminClaim(dependencies.auth, input.targetUid, input.role === 'Admin');
     await dependencies.auth.revokeRefreshTokens(input.targetUid);
     await runStep(
       dependencies,

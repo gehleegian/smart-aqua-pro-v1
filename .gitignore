@@ -34,3 +34,10 @@ next-env.d.ts
 backups/
 tmp-docx-schema/
 tmp-manuscript-analysis/
+
+# Sprint 3: device credentials, claim labels, claim-code pepper (never commit)
+firmware/secrets/
+provisioning-output/
+functions/.secret.local
+functions/.env*
+.secret.local

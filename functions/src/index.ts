@@ -7,7 +7,7 @@ import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onValueWritten } from 'firebase-functions/v2/database';
-import { defineString } from 'firebase-functions/params';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import {
   reconcileAuthorization,
   ensureUserVerificationPolicy,
@@ -25,6 +25,17 @@ import {
   type TrustedMutationDependencies,
 } from './trustedMutations.js';
 import { ingestTelemetry } from './telemetryIngest.js';
+import {
+  acceptInvite as acceptInviteCore,
+  claimDevice as claimDeviceCore,
+  createInvite as createInviteCore,
+  removeMember as removeMemberCore,
+  revokeInvite as revokeInviteCore,
+  setOrganizationStatus as setOrganizationStatusCore,
+  updateCaretakerAssignments as updateCaretakerAssignmentsCore,
+  type OrgActor,
+  type OrgDependencies,
+} from './orgAccess.js';
 import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
 
 if (getApps().length === 0) {
@@ -190,6 +201,116 @@ export const revokeUserAccount = onCall<CallableData>(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Sprint 3: organizations, device claiming, caretaker invites (orgAccess.ts)
+// ---------------------------------------------------------------------------
+
+// HMAC pepper for device claim codes. Set with
+// `firebase functions:secrets:set CLAIM_CODE_PEPPER`; the emulator reads
+// functions/.secret.local (gitignored). Never commit it.
+const claimCodePepper = defineSecret('CLAIM_CODE_PEPPER');
+
+function requireOrgActor(request: CallableRequest<CallableData>): OrgActor {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication is required.');
+  }
+  const token = request.auth.token;
+  if (token.principalType === 'device') {
+    throw new HttpsError('permission-denied', 'Devices cannot call this operation.');
+  }
+  return {
+    uid: request.auth.uid,
+    email: typeof token.email === 'string' ? token.email : null,
+    emailVerified: token.email_verified === true,
+    platformAdmin: token.platformAdmin === true,
+  };
+}
+
+function orgDependencies(): OrgDependencies {
+  return { ...trustedMutationDependencies, claimCodePepper: claimCodePepper.value() };
+}
+
+function orgCallable<T>(
+  name: string,
+  handler: (dependencies: OrgDependencies, actor: OrgActor, data: CallableData) => Promise<T>
+) {
+  return onCall<CallableData>({ ...callableOptions, secrets: [claimCodePepper] }, async (request) => {
+    const actor = requireOrgActor(request);
+    try {
+      const result = await handler(orgDependencies(), actor, request.data ?? {});
+      logger.info(`${name} completed.`, { actorUid: actor.uid });
+      return result;
+    } catch (error) {
+      return callableFailure(error);
+    }
+  });
+}
+
+export const claimDevice = orgCallable('claimDevice', (deps, actor, data) =>
+  claimDeviceCore(deps, actor, {
+    deviceId: data.deviceId,
+    claimCode: data.claimCode,
+    aquariumName: data.aquariumName,
+    orgName: data.orgName,
+    orgId: data.orgId,
+  })
+);
+
+export const createInvite = orgCallable('createInvite', (deps, actor, data) =>
+  createInviteCore(deps, actor, { orgId: data.orgId, email: data.email, aquariumIds: data.aquariumIds })
+);
+
+export const acceptInvite = orgCallable('acceptInvite', (deps, actor, data) =>
+  acceptInviteCore(deps, actor, { token: data.token })
+);
+
+export const revokeInvite = orgCallable('revokeInvite', (deps, actor, data) =>
+  revokeInviteCore(deps, actor, { inviteId: data.inviteId })
+);
+
+export const removeMember = orgCallable('removeMember', (deps, actor, data) =>
+  removeMemberCore(deps, actor, { orgId: data.orgId, uid: data.uid })
+);
+
+export const updateCaretakerAssignments = orgCallable('updateCaretakerAssignments', (deps, actor, data) =>
+  updateCaretakerAssignmentsCore(deps, actor, { orgId: data.orgId, uid: data.uid, aquariumIds: data.aquariumIds })
+);
+
+export const setOrganizationStatus = orgCallable('setOrganizationStatus', (deps, actor, data) =>
+  setOrganizationStatusCore(deps, actor, { orgId: data.orgId, status: data.status, reason: data.reason })
+);
+
+// Backup path for the RTDB access mirror: the callables above already sync
+// it before returning; these catch any write made another way.
+export const syncOrganizationAuthorizationMirror = onDocumentWritten(
+  { document: 'organizations/{orgId}', retry: true },
+  async (event) => {
+    if (event.data?.before.get('status') === event.data?.after.get('status')) return;
+    const aquariums = await dependencies.firestore
+      .collection('aquariums')
+      .where('orgId', '==', event.params.orgId)
+      .get();
+    for (const aquarium of aquariums.docs) {
+      await syncAquariumAuthorization(dependencies, aquarium.id);
+    }
+  }
+);
+
+export const syncMemberAuthorizationMirror = onDocumentWritten(
+  { document: 'organizations/{orgId}/members/{uid}', retry: true },
+  async (event) => {
+    if (event.data?.before.get('role') === event.data?.after.get('role')) return;
+    const aquariums = await dependencies.firestore
+      .collection('aquariums')
+      .where('orgId', '==', event.params.orgId)
+      .where('caretakerIds', 'array-contains', event.params.uid)
+      .get();
+    for (const aquarium of aquariums.docs) {
+      await syncAquariumAuthorization(dependencies, aquarium.id);
+    }
+  }
+);
+
 export const queueSupportMessageEmail = onDocumentCreated(
   {
     document: 'support_threads/{threadId}/messages/{messageId}',
@@ -323,20 +444,29 @@ export const syncAquariumAuthorizationMirror = onDocumentWritten(
   async (event) => {
     const beforeOwner = readString(event.data?.before.get('ownerId'));
     const afterOwner = readString(event.data?.after.get('ownerId'));
+    const accessKey = (snapshot: { get(field: string): unknown } | undefined) =>
+      JSON.stringify([
+        readString(snapshot?.get('orgId')),
+        [...((snapshot?.get('caretakerIds') as string[] | undefined) ?? [])].sort(),
+      ]);
+    const ownerChanged = beforeOwner !== afterOwner;
 
     if (
       event.data?.before.exists &&
       event.data.after.exists &&
-      beforeOwner === afterOwner
+      !ownerChanged &&
+      accessKey(event.data.before) === accessKey(event.data.after)
     ) {
       return;
     }
 
     try {
+      // A caretaker/org change only narrows or widens one list; only an owner
+      // change needs the transitioning step.
       const result = await syncAquariumAuthorization(
         dependencies,
         event.params.aquariumId,
-        { transitionBeforeActivation: true }
+        { transitionBeforeActivation: ownerChanged }
       );
       logger.info('Aquarium authorization mirror synchronized.', {
         eventId: event.id,
