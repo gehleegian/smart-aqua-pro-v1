@@ -3,7 +3,7 @@ import {
   COMMAND_ACK_TIMEOUT_MS,
   evaluateTelemetryValidity,
   getCommandStatus,
-  normalizeDevicePowerStatus,
+  derivePowerStatus,
   getTelemetryFreshness,
   TELEMETRY_STALE_MS,
   TELEMETRY_EPOCH_FLOOR,
@@ -39,6 +39,8 @@ export interface DeviceTelemetry {
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
+  /** New (additive): mains adapter sensed on a GPIO. false while online = Power Interruption. */
+  mainsPresent?: boolean;
   ph?: number;
   /** New (additive). */
   phReadingValid?: boolean;
@@ -60,6 +62,7 @@ export interface DeviceTelemetryLogEntry {
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
+  mainsPresent?: boolean;
   ph?: number;
   phReadingValid?: boolean;
   turbidityReadingValid?: boolean;
@@ -248,7 +251,7 @@ export function getFreshTelemetrySnapshot(
   const waterPresent = telemetry.waterPresent !== false;
   const phValid = validity.ph.status === 'valid';
   const turbidityValid = validity.turbidity.status === 'valid';
-  const powerStatus = normalizeDevicePowerStatus(telemetry.powerStatus);
+  const powerStatus = derivePowerStatus(telemetry as unknown as Record<string, unknown>);
 
   return {
     temperatureC: telemetry.temperatureC,

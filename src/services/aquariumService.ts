@@ -250,6 +250,10 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     createdAt: readTimestampLike(data.created_at || data.createdAt) || undefined,
     updatedAt: readTimestampLike(data.updated_at || data.updatedAt) || undefined,
     directorySchemaVersion: readNumber(data.directorySchemaVersion, 0),
+    ...(typeof data.speciesId === 'string' ? { speciesId: data.speciesId } : {}),
+    ...(data.thresholdOverrides && typeof data.thresholdOverrides === 'object' && !Array.isArray(data.thresholdOverrides)
+      ? { thresholdOverrides: data.thresholdOverrides as Aquarium['thresholdOverrides'] }
+      : {}),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Aquarium } from '../../types/aquarium';
 import type { DeviceTelemetryLogEntry } from '../../types/device';
 import { formatHistoryValue, getRowStatus, toFixedValue } from '../../utils/dataLogsHelpers';
+import { useRuleConfig } from '../../hooks/useRuleConfig';
 import Badge from '../ui/Badge';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -17,6 +18,8 @@ export function HistoricalDataTable({
   historyLoading,
   emptyMessage,
 }: HistoricalDataTableProps) {
+  // Row status uses the same Firestore thresholds/rules as the live engine.
+  const ruleConfig = useRuleConfig();
   return (
     <Card>
       <CardHeader>
@@ -44,7 +47,7 @@ export function HistoricalDataTable({
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {entries.map((entry) => {
-                  const status = getRowStatus(entry, aquarium);
+                  const status = getRowStatus(entry, aquarium, ruleConfig);
 
                   return (
                     <tr key={`${entry.recordedAtEpoch}-${entry.sampleCount || 1}`} className="text-slate-300">

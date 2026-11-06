@@ -8,6 +8,10 @@ import type {
 import { getManualSystemStatus } from '../../utils/monitoringHelpers';
 import { Card, CardHeader } from '../ui/Card';
 import { SummaryGrid } from './SummaryGrid';
+import { ConditionPanel } from '../condition/ConditionPanel';
+import { DraftThresholdsBadge, OverallConditionBadge } from '../condition/ConditionBadges';
+import { NextCleaningCard } from '../condition/NextCleaningCard';
+import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 
 interface UserDashboardViewProps {
   liveDataWarning: ReactNode;
@@ -45,20 +49,23 @@ function formatUpdatedAgo(updatedAt: number, now: number) {
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 }
 
+// Ranges come from the effective thresholds in Firestore (species defaults +
+// per-aquarium overrides); nothing is hard-coded here.
 function getReadingRange(title: string, tank: DashboardAquarium) {
-  if (title === 'Temperature') {
-    return `Range ${tank.minTemp}–${tank.maxTemp}°C`;
-  }
-
-  if (title === 'Water Level') {
-    return `Min ${tank.minLevel}%`;
-  }
-
-  if (title === 'Water Purity (TDS)' && typeof tank.tdsPpm !== 'number') {
-    return `Min ${tank.minQuality}%`;
-  }
-
-  return '';
+  const values = tank.thresholds?.values;
+  const key = {
+    Temperature: 'temperatureC',
+    'Water Level': 'waterLevelPercent',
+    'Water Purity (TDS)': 'tdsPpm',
+    'pH Level': 'ph',
+    Turbidity: 'turbidity',
+  }[title] as keyof NonNullable<typeof values> | undefined;
+  const range = key ? values?.[key] : undefined;
+  if (!range) return '';
+  const unit = { temperatureC: '°C', waterLevelPercent: '%', tdsPpm: ' ppm', ph: '', turbidity: ' NTU' }[key!];
+  if (range.min !== undefined && range.max !== undefined) return `Range ${range.min}–${range.max}${unit}`;
+  if (range.min !== undefined) return `Min ${range.min}${unit}`;
+  return `Max ${range.max}${unit}`;
 }
 
 function DevicePill({ tank, now }: { tank: DashboardAquarium; now: number }) {
@@ -218,7 +225,11 @@ export function UserDashboardView({
             <h3 className="truncate text-base font-semibold text-white">{selectedTank.name}</h3>
           )}
         </div>
-        <DevicePill tank={selectedTank} now={telemetryNow} />
+        <div className="flex flex-wrap items-center gap-2">
+          <DraftThresholdsBadge draft={selectedTank.assessment.draft || Boolean(selectedTank.thresholds && selectedTank.thresholds.status === 'draft')} />
+          {selectedTank.telemetryState === 'live' ? <OverallConditionBadge severity={selectedTank.assessment.overallSeverity} /> : null}
+          <DevicePill tank={selectedTank} now={telemetryNow} />
+        </div>
       </div>
 
       {liveDataWarning}
@@ -230,6 +241,13 @@ export function UserDashboardView({
           <ReadingCard key={stat.title} stat={stat} tank={selectedTank} />
         ))}
       </section>
+
+      <ConditionPanel assessment={selectedTank.assessment} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RecommendationsPanel aquariumId={selectedTank.id} />
+        <NextCleaningCard cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow} />
+      </div>
 
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
-import { assessAquariumCondition } from '../../src/utils/monitoringAssessment.ts';
+import { evaluateAquarium, readAquariumOverrides, resolveThresholds, toConditionAssessment } from '../../src/utils/monitoringAssessmentCore.ts';
+import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 import { getFreshTelemetrySnapshot, getDeviceTelemetryState, setDeviceTelemetryClockOffsetMs } from '../../src/types/device.ts';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
 import { formatWaterLevel } from '../../src/utils/monitoringAssessmentCore.ts';
@@ -57,19 +58,18 @@ function deviceFrom(patch = {}) {
     powerStatus: 'Online', online: true, updatedAt: now, ...patch,
   };
 }
+// Web side of the parity check: the Sprint 2 rule engine with the seeded draft
+// rules. The mobile copy must port the same engine (mobile sync is pending).
+const ruleConfig = seedRuleConfig();
 function webFrom(device) {
   const snapshot = getFreshTelemetrySnapshot(device, now);
-  return assessAquariumCondition({
-    profile, source: snapshot ? 'live' : 'unavailable', assessedAt: now,
-    telemetry: snapshot ? {
-      temperatureC: snapshot.temperatureC, temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-      waterLevelPercent: snapshot.waterLevelPercent, waterLevelValid: true,
-      tdsPpm: snapshot.tdsPpm, tdsPurityPercent: snapshot.tdsPercent, tdsValid: snapshot.hasFreshPurityTelemetry,
-      ph: snapshot.ph, phValid: snapshot.hasFreshPhTelemetry,
-      turbidity: snapshot.turbidity, turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-      filterState: snapshot.filterState, equipmentStatus: snapshot.equipmentStatus, powerStatus: snapshot.powerStatus,
-    } : null,
-  });
+  if (!snapshot) {
+    return toConditionAssessment({ overall: 'unavailable', perParameter: [], faults: [], draft: false },
+      { source: 'unavailable', assessedAt: now, origin: 'none' });
+  }
+  const thresholds = resolveThresholds(ruleConfig.speciesById.goldfish, readAquariumOverrides(profile));
+  const result = evaluateAquarium(device, thresholds, ruleConfig.rules, { hasFiltrationSystem: profile.hasFiltrationSystem });
+  return toConditionAssessment(result, { source: 'live', assessedAt: now, origin: 'client' });
 }
 mobileTest('web and mobile adapters produce identical assessments', () => {
   for (const patch of [
@@ -147,7 +147,8 @@ test('water-level display hides invalid and unavailable values while preserving 
   assert.equal(formatWaterLevel(70, false), '--');
   const result = webFrom(normalizeTelemetry(deviceFrom({ waterLevelPercent: 150 })));
   assert.equal(result.parameters.find((p) => p.parameter === 'waterLevel').severity, 'unavailable');
-  assert.equal(result.recommendations.length, 0);
+  // A sensor fault never yields water advice: only the single sensor_fault recommendation.
+  assert.deepEqual(result.matchedRules.map((rule) => [rule.ruleId, rule.parameter]), [['sensor_fault', 'waterLevelPercent']]);
 });
 
 mobileTest('future timestamps are unavailable in both apps, including just beyond now', () => {

@@ -30,10 +30,8 @@ import type {
   DashboardTankStat,
   OwnerGroup,
 } from '../types/dashboard';
-import {
-  assessAquariumCondition,
-  type AssessmentTelemetry,
-} from './monitoringAssessment';
+import { assessAquarium, getEffectiveThresholds } from './conditionAssessment';
+import type { AquariumEngineState, RuleConfigSnapshot } from '../services/ruleConfigService';
 
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -45,40 +43,19 @@ export function getErrorMessage(error: unknown, fallback: string) {
 
 export type FreshTelemetrySnapshot = NonNullable<ReturnType<typeof getFreshTelemetrySnapshot>>;
 
-// Single mapping from a validated live snapshot to the shared assessment input.
-// Used by the dashboard, monitoring, and alerts views so they classify identically.
-export function buildAssessmentTelemetry(
-  snapshot: FreshTelemetrySnapshot | null
-): AssessmentTelemetry | null {
-  if (!snapshot) return null;
-  return {
-    temperatureC: snapshot.temperatureC,
-    temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-    waterLevelPercent: snapshot.waterLevelPercent,
-    waterLevelValid: true,
-    waterPresent: snapshot.waterPresent,
-    tdsPpm: snapshot.tdsPpm,
-    tdsPurityPercent: snapshot.tdsPercent,
-    tdsValid: snapshot.hasFreshPurityTelemetry,
-    ph: snapshot.ph,
-    phValid: snapshot.hasFreshPhTelemetry,
-    turbidity: snapshot.turbidity,
-    turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-    filterState: snapshot.filterState,
-    equipmentStatus: snapshot.equipmentStatus,
-    powerStatus: snapshot.powerStatus,
-  };
-}
+const UNASSESSED = (now = Date.now()) => assessAquarium({
+  aquarium: {},
+  reading: null,
+  source: 'unavailable',
+  now,
+  ruleConfig: null,
+});
 
 export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
     status: 'warning',
-    assessment: assessAquariumCondition({
-      profile: aquarium,
-      telemetry: null,
-      source: 'unavailable',
-    }),
+    assessment: UNASSESSED(),
     telemetrySource: 'unavailable',
     fishCount: aquarium.fishCount ?? 0,
     hasFreshTelemetry: false,
@@ -91,13 +68,17 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     lastUpdatedAt: null,
     sensorValidity: null,
     commandStatus: 'none',
+    thresholds: null,
+    engineState: null,
   }));
 }
 
 export function mergeDashboardAquariums(
   aquariums: DashboardAquarium[],
   deviceShadows: Record<string, DeviceShadow>,
-  now = Date.now()
+  now = Date.now(),
+  ruleConfig: RuleConfigSnapshot | null = null,
+  engineStates: Record<string, AquariumEngineState> = {}
 ): DashboardAquarium[] {
   return aquariums.map((aquarium) => {
     const telemetry = deviceShadows[aquarium.id]?.telemetry;
@@ -122,12 +103,13 @@ export function mergeDashboardAquariums(
         ? { ...aquarium.manualStatus, filter: snapshot.filterState }
         : aquarium.manualStatus,
     };
-    const assessmentTelemetry = buildAssessmentTelemetry(snapshot);
-    const assessment = assessAquariumCondition({
-      profile: nextAquarium,
-      telemetry: assessmentTelemetry,
+    const assessment = assessAquarium({
+      aquarium: nextAquarium as unknown as Record<string, unknown>,
+      reading: snapshot && telemetry ? telemetry as unknown as Record<string, unknown> : null,
       source: snapshot ? 'live' : 'unavailable',
-      assessedAt: now,
+      now,
+      ruleConfig,
+      engineState: engineStates[aquarium.id] ?? null,
     });
 
     return {
@@ -146,6 +128,8 @@ export function mergeDashboardAquariums(
       lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
       sensorValidity: snapshot?.validity ?? null,
       commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], now),
+      thresholds: getEffectiveThresholds(nextAquarium as unknown as Record<string, unknown>, ruleConfig),
+      engineState: engineStates[aquarium.id] ?? null,
     };
   });
 }

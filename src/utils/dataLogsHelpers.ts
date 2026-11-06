@@ -7,11 +7,11 @@ import {
 } from '../types/device';
 import type { ChartPoint, PeriodKey, SummaryItem } from '../types/dataLogs';
 import {
-  assessAquariumCondition,
-  buildAssessmentTelemetryFromRaw,
   evaluateTelemetryValidity,
   type TelemetryValidity,
 } from './monitoringAssessmentCore';
+import { evaluateAquariumReading } from './conditionAssessment';
+import type { RuleConfigSnapshot } from '../services/ruleConfigService';
 import type { UserRole } from '../types/user';
 
 export const periodConfig: Record<PeriodKey, { days: number; label: string }> = {
@@ -158,23 +158,22 @@ export function formatHistoryValue(
   return status === 'invalid' ? 'Sensor error' : status === 'missing' ? '--' : format();
 }
 
-const WATER_PARAMETERS = new Set(['temperature', 'ph', 'turbidity', 'tds', 'waterLevel']);
+const WATER_PARAMETERS = new Set<string>(['temperatureC', 'ph', 'turbidity', 'tdsPpm', 'waterLevelPercent']);
 
-// Row status uses the shared assessment (no thresholds defined here). Only
-// water parameters are considered; invalid readings are a sensor error, not a
-// water condition.
-export function getRowStatus(entry: DeviceTelemetryLogEntry, aquarium: Aquarium): HistoryRowStatus {
+// Row status uses the shared rule engine with the Firestore thresholds (no
+// thresholds defined here). Only water parameters are considered; invalid
+// readings are a sensor error, not a water condition.
+export function getRowStatus(
+  entry: DeviceTelemetryLogEntry,
+  aquarium: Aquarium,
+  ruleConfig: RuleConfigSnapshot | null
+): HistoryRowStatus {
   const raw = entry as unknown as Record<string, unknown>;
   const validity = evaluateTelemetryValidity(raw);
-  const assessment = assessAquariumCondition({
-    profile: aquarium,
-    telemetry: buildAssessmentTelemetryFromRaw(raw, validity),
-    source: 'live',
-    assessedAt: entry.recordedAtEpoch,
-  });
-  const water = assessment.parameters.filter((item) => WATER_PARAMETERS.has(item.parameter));
-  if (water.some((item) => item.severity === 'critical')) return 'critical';
-  if (water.some((item) => item.severity === 'warning')) return 'warning';
+  const result = evaluateAquariumReading(aquarium as unknown as Record<string, unknown>, raw, ruleConfig);
+  const water = (result?.perParameter ?? []).filter((item) => WATER_PARAMETERS.has(item.parameter));
+  if (water.some((item) => item.status === 'critical')) return 'critical';
+  if (water.some((item) => item.status === 'warning')) return 'warning';
   return validity.allValid ? 'normal' : 'sensor error';
 }
 

@@ -13,13 +13,14 @@ import type {
 import {
   formatAutomationTimes,
   formatAutomationTime,
-  getQualityLabel,
 } from '../../utils/monitoringHelpers';
 import {
   formatBiomass,
   formatEstimatedBioload,
 } from '../../utils/aquariumProfileCalculations';
 import Badge from '../ui/Badge';
+import { DraftThresholdsBadge, ParameterStatusBadge } from '../condition/ConditionBadges';
+import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -111,9 +112,7 @@ export function AquariumDetailsView({
                 {
                   label: 'TDS Quality',
                   display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
-                    typeof aquarium.tdsPpm === 'number'
-                      ? `${Math.round(aquarium.tdsPpm)} ppm`
-                      : getQualityLabel(aquarium.quality, aquarium.tdsPpm)),
+                    typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
                 },
                 { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
                 { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
@@ -146,12 +145,15 @@ export function AquariumDetailsView({
             <div>
               <h3 className="text-lg font-semibold text-white">Condition Assessment</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Profile-based assessment using rule set {aquarium.assessment.ruleVersion}. Guidance only; maintenance actions require your review.
+                Rule-based assessment ({aquarium.assessment.ruleVersion}). Guidance only; maintenance actions require your review.
               </p>
             </div>
-            <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
-              {aquarium.assessment.overallSeverity}
-            </Badge>
+            <div className="flex flex-wrap gap-2">
+              <DraftThresholdsBadge draft={aquarium.assessment.draft} />
+              <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
+                {aquarium.assessment.overallSeverity}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -160,7 +162,7 @@ export function AquariumDetailsView({
               <div key={item.parameter} className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium text-white">{item.label}</p>
-                  <Badge variant={getSeverityVariant(item.severity)}>{item.severity}</Badge>
+                  <ParameterStatusBadge item={item} />
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-400">{item.message}</p>
               </div>
@@ -184,6 +186,8 @@ export function AquariumDetailsView({
           ) : null}
         </CardContent>
       </Card>
+
+      {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} /> : null}
 
       <Card>
         <CardHeader>

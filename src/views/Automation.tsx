@@ -1,3 +1,4 @@
+import { useRuleConfig } from '../hooks/useRuleConfig';
 import { useState } from 'react';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import StatusMessage from '../components/ui/StatusMessage';
@@ -29,13 +30,6 @@ const filterConfig = [
   { tank: 'Breeding Tank D', runtime: '12 hrs/day', speed: 'High', active: true },
 ];
 
-const automationRules = [
-  { id: 1, condition: 'IF Temperature > 28°C', action: 'Turn on cooling fan', enabled: true },
-  { id: 2, condition: 'IF Water Level < 70%', action: 'Trigger water refill alert', enabled: true },
-  { id: 3, condition: 'IF Water Purity (TDS Level) < 80%', action: 'Increase filter runtime by 2hrs', enabled: true },
-  { id: 4, condition: 'IF pH < 6.5 OR pH > 7.8', action: 'Send alert notification', enabled: true },
-  { id: 6, condition: 'IF Power outage detected', action: 'Send SMS/Email alert', enabled: true },
-];
 
 const bioloadProfiles = [
   {
@@ -74,9 +68,8 @@ export default function Automation() {
   const [feedingEnabled, setFeedingEnabled] = useState<Record<number, boolean>>(
     Object.fromEntries(feedingSchedules.map((s) => [s.id, s.enabled]))
   );
-  const [rulesEnabled, setRulesEnabled] = useState<Record<number, boolean>>(
-    Object.fromEntries(automationRules.map((r) => [r.id, r.enabled]))
-  );
+  const ruleConfig = useRuleConfig();
+  const rules = [...ruleConfig.rules].sort((a, b) => a.parameter.localeCompare(b.parameter) || a.priority - b.priority);
 
   return (
     <div className="space-y-6">
@@ -197,26 +190,41 @@ export default function Automation() {
           </h3>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {automationRules.map((rule) => (
-              <div key={rule.id} className="flex items-center justify-between gap-4 bg-slate-700/30 rounded-lg p-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-lg bg-slate-600 flex items-center justify-center">
-                    <Settings className="w-4 h-4 text-slate-300" />
+          <p className="mb-3 text-xs text-slate-400">
+            Live IF-THEN rules from Firestore (read-only here). Thresholds come from the species defaults plus any per-aquarium overrides.
+          </p>
+          {ruleConfig.error ? <p className="mb-3 text-sm text-amber-300">{ruleConfig.error}</p> : null}
+          {!ruleConfig.loaded ? (
+            <p className="text-sm text-slate-400">Loading rules...</p>
+          ) : rules.length === 0 ? (
+            <p className="text-sm text-slate-400">No rules are stored yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {rules.map((rule) => (
+                <div key={rule.ruleId} className="flex items-start justify-between gap-4 rounded-lg bg-slate-700/30 p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-600">
+                      <Settings className="h-4 w-4 text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-teal-200">{rule.title}</p>
+                      <p className="text-xs text-slate-400">
+                        IF {rule.parameter} {rule.condition.op} {rule.condition.ref ?? JSON.stringify(rule.condition.value)}
+                        {rule.condition.marginPct ? ` +${rule.condition.marginPct}%` : ''}
+                        {rule.extraChecks.map((check) => ` AND ${check.field} ${check.op} ${String(check.value)}`).join('')}
+                        {' '}THEN {rule.severity}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-300">→ {rule.action}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-teal-200">{rule.condition}</p>
-                    <p className="text-xs text-slate-400">→ {rule.action}</p>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
+                    <span className={rule.status === 'draft' ? 'text-teal-200' : 'text-emerald-300'}>{rule.status}</span>
+                    <span className="text-slate-500">{rule.enabled ? 'enabled' : 'disabled'}</span>
                   </div>
                 </div>
-                <Toggle
-                  checked={rulesEnabled[rule.id]}
-                  label={rule.condition}
-                  onChange={() => setRulesEnabled({ ...rulesEnabled, [rule.id]: !rulesEnabled[rule.id] })}
-                />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

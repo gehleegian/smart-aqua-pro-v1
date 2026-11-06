@@ -12,6 +12,8 @@ import {
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
 import { getFreshTelemetrySnapshot } from '../../src/types/device.ts';
 import { createSimulatedContractPayload } from '../../src/utils/monitoringSimulator.ts';
+import { resolveThresholds } from '../../src/utils/monitoringAssessmentCore.ts';
+import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 
 const rules = JSON.parse(readFileSync(new URL('../../database.rules.json', import.meta.url), 'utf8'));
 const telemetryRules = rules.rules.devices.$aquariumId.telemetry;
@@ -46,7 +48,7 @@ test('freshness: 60 s window (3 missed 15 s sends); the live ~7.5 s firmware cad
 
 test('every simulator scenario emits only rule-allowed telemetry fields', () => {
   for (const scenario of ['normal', 'warning', 'critical']) {
-    const payload = createSimulatedContractPayload(profile, scenario, 1793980261525);
+    const payload = createSimulatedContractPayload(resolveThresholds(seedRuleConfig().speciesById.goldfish), scenario, 1793980261525, profile);
     for (const key of Object.keys(payload)) assert.ok(ALLOWED_FIELDS.includes(key), `${scenario}: ${key}`);
     for (const key of REQUIRED_FIELDS) assert.ok(key in payload, `${scenario}: missing ${key}`);
     assert.equal(payload.phReadingValid, true);
@@ -120,9 +122,11 @@ test('history rows: invalid values show "Sensor error" and never classify as wat
   const zero = entry({ temperatureC: 0, ph: 0 });
   assert.equal(formatHistoryValue(zero, 'ph', () => '0.0'), 'Sensor error');
   assert.equal(formatHistoryValue(zero, 'temperature', () => '0.0'), 'Sensor error');
-  assert.equal(getRowStatus(zero, profile), 'sensor error');
-  assert.equal(getRowStatus(entry(), profile), 'normal');
-  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile), 'critical');
+  const config = seedRuleConfig();
+  assert.equal(getRowStatus(zero, profile, config), 'sensor error');
+  assert.equal(getRowStatus(entry(), profile, config), 'normal');
+  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, config), 'critical');
+  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, null), 'normal', 'no rules loaded: never invents a classification');
   assert.equal(formatHistoryValue(entry({ turbidity: undefined }), 'turbidity', () => 'x'), '--');
   if (typeof buildSummaryItems === 'function') {
     const items = buildSummaryItems([zero]);

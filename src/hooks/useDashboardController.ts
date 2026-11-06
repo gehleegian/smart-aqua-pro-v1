@@ -18,6 +18,7 @@ import {
   getErrorMessage,
   getStatsForTank,
 } from '../utils/dashboardHelpers';
+import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
 export function useDashboardController() {
   const [dashboardAquariums, setDashboardAquariums] = useState<DashboardAquarium[]>([]);
@@ -160,9 +161,13 @@ export function useDashboardController() {
     };
   }, [aquariumSubscriptionKey, userRole]);
 
+  const ruleConfig = useRuleConfig(userRole !== 'Admin');
+  const engineStates = useAquariumEngineStates(
+    useMemo(() => (userRole === 'Admin' ? [] : JSON.parse(aquariumSubscriptionKey) as string[]), [aquariumSubscriptionKey, userRole])
+  );
   const liveAquariums = useMemo(
-    () => mergeDashboardAquariums(dashboardAquariums, deviceShadows, telemetryNow),
-    [dashboardAquariums, deviceShadows, telemetryNow]
+    () => mergeDashboardAquariums(dashboardAquariums, deviceShadows, telemetryNow, ruleConfig, engineStates),
+    [dashboardAquariums, deviceShadows, telemetryNow, ruleConfig, engineStates]
   );
 
   const selectedTank = useMemo(
@@ -201,6 +206,7 @@ export function useDashboardController() {
       healthyAquariums,
       selectedTankName: selectedTank?.name || 'None',
     }),
+    ruleConfigError: ruleConfig.error,
     actions: {
       selectTank: setSelectedTankId,
     },

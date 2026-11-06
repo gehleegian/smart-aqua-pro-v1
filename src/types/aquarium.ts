@@ -102,6 +102,10 @@ export interface Aquarium {
   createdAt?: string;
   updatedAt?: string;
   directorySchemaVersion?: number;
+  /** Optional explicit species config id (Firestore `species`); otherwise derived from `species`. */
+  speciesId?: string;
+  /** Admin-set per-aquarium threshold overrides (camelCase, per parameter). Wins over minTemp/maxTemp/... */
+  thresholdOverrides?: Record<string, { min?: number; max?: number }>;
 }
 
 export interface AquariumDirectoryEntry {

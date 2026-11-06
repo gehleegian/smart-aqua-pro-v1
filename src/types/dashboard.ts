@@ -3,6 +3,8 @@ import type { Aquarium, AquariumDirectoryEntry } from './aquarium';
 import type { CommandStatus, DeviceTelemetryState, TelemetryValidity } from './device';
 import type { UserData } from './user';
 import type { AquariumConditionAssessment, TelemetrySource } from './monitoring';
+import type { EffectiveThresholds } from '../utils/monitoringAssessmentCore';
+import type { AquariumEngineState } from '../services/ruleConfigService';
 
 export type DashboardStatus = 'healthy' | 'warning';
 
@@ -23,6 +25,10 @@ export type DashboardAquarium = Aquarium & {
   lastUpdatedAt: number | null;
   sensorValidity: TelemetryValidity | null;
   commandStatus: CommandStatus;
+  /** Effective thresholds (species defaults + per-aquarium overrides) from Firestore. */
+  thresholds: EffectiveThresholds | null;
+  /** Server condition / cleaning summaries from the aquarium doc. */
+  engineState: AquariumEngineState | null;
 };
 
 export type OwnerGroup = {

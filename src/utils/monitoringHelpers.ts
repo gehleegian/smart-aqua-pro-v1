@@ -5,7 +5,6 @@ import type {
 } from '../types/aquarium';
 import { getDeviceTelemetryStatusText } from '../types/device';
 import type {
-  HealthStatus,
   ManualActionDisplay,
   ManualActionLock,
   MonitoringAquarium,
@@ -14,7 +13,7 @@ import type {
   SystemField,
 } from '../types/monitoring';
 import type { UserData, UserRole } from '../types/user';
-import { assessAquariumCondition } from './monitoringAssessment';
+import { assessAquarium } from './conditionAssessment';
 
 export const systemStatusConfig: Record<
   SystemField,
@@ -43,60 +42,11 @@ export const defaultAutomationSettings: AutomationSettings = {
   filtrationRuntimeHours: 8,
 };
 
-export function getHealthStatus(
-  level: number,
-  quality: number,
-  minLevel = 75,
-  minQuality = 80,
-  hasPurityReading = true,
-  tdsPpm?: number | null
-): HealthStatus {
-  const purityIsHealthy =
-    typeof tdsPpm === 'number' ? tdsPpm <= 500 : quality >= minQuality;
-
-  if (!hasPurityReading || level < minLevel || !purityIsHealthy) {
-    return 'warning';
-  }
-
-  return 'healthy';
-}
-
-export function getQualityLabel(quality: number, tdsPpm?: number | null) {
-  if (typeof tdsPpm === 'number') {
-    if (tdsPpm <= 300) return 'Healthy';
-    if (tdsPpm <= 500) return 'Moderate';
-    return 'Poor';
-  }
-
-  if (quality >= 85) return 'Healthy';
-  if (quality >= 65) return 'Moderate';
-  return 'Poor';
-}
-
-export function getLevelLabel(level: number) {
-  if (level >= 90) return 'High';
-  if (level >= 75) return 'Normal';
-  if (level >= 60) return 'Low';
-  return 'Critical';
-}
-
-export function getTemperatureLabel(temp: number, minTemp: number, maxTemp: number) {
-  if (temp < minTemp || temp > maxTemp) {
-    return 'Out of Range';
-  }
-
-  return 'Normal';
-}
-
 export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
     healthStatus: 'warning',
-    assessment: assessAquariumCondition({
-      profile: aquarium,
-      telemetry: null,
-      source: 'unavailable',
-    }),
+    assessment: assessAquarium({ aquarium: {}, reading: null, source: 'unavailable', now: Date.now(), ruleConfig: null }),
     telemetrySource: 'unavailable',
     hasFreshTelemetry: false,
     hasFreshTemperatureTelemetry: false,

@@ -7,6 +7,7 @@ import type {
   AquariumUpdatePayload,
 } from '../types/aquariumManagement';
 import type { UserRole } from '../types/user';
+import type { SpeciesConfig } from './monitoringAssessmentCore.ts';
 import {
   calculateAquariumBioload,
   parseFishWeights,
@@ -15,16 +16,23 @@ import {
 
 export const CANONICAL_AQUARIUM_TYPE = 'Freshwater';
 export const CANONICAL_FISH_SPECIES = 'Goldfish';
-export const INDOOR_GOLDFISH_PRESET = {
-  minTemp: '20',
-  maxTemp: '24',
-  minPh: '6.5',
-  maxPh: '7.5',
-  minLevel: '70',
-  minQuality: '80',
-} as const;
+type ThresholdPresetFields = Pick<AquariumFormData, 'minTemp' | 'maxTemp' | 'minPh' | 'maxPh' | 'minLevel'>;
 
-export function createEmptyAquariumForm(): AquariumFormData {
+// Profile limits are prefilled from the species defaults stored in Firestore
+// (`species/{id}`, seeded by scripts/seed-rules.ts). There are no hard-coded
+// threshold values here. Missing values stay blank for the owner to fill in.
+export function buildSpeciesThresholdPreset(species: SpeciesConfig | null): ThresholdPresetFields {
+  const text = (value: number | undefined) => (value === undefined ? '' : String(value));
+  return {
+    minTemp: text(species?.ranges.temperatureC?.min),
+    maxTemp: text(species?.ranges.temperatureC?.max),
+    minPh: text(species?.ranges.ph?.min),
+    maxPh: text(species?.ranges.ph?.max),
+    minLevel: text(species?.minWaterLevelPercent),
+  };
+}
+
+export function createEmptyAquariumForm(species: SpeciesConfig | null = null): AquariumFormData {
   return {
     name: '',
     species: CANONICAL_FISH_SPECIES,
@@ -36,7 +44,8 @@ export function createEmptyAquariumForm(): AquariumFormData {
     hasFiltrationSystem: '',
     fishCount: '',
     fishWeightsG: [],
-    ...INDOOR_GOLDFISH_PRESET,
+    ...buildSpeciesThresholdPreset(species),
+    minQuality: '',
   };
 }
 

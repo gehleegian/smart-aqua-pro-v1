@@ -45,11 +45,9 @@ import {
   prepareAutomationSettings,
   systemStatusConfig,
 } from '../utils/monitoringHelpers';
-import {
-  assessAquariumCondition,
-} from '../utils/monitoringAssessment';
 import { createSimulatedTelemetry } from '../utils/monitoringSimulator';
-import { buildAssessmentTelemetry } from '../utils/dashboardHelpers';
+import { assessAquarium, getEffectiveThresholds } from '../utils/conditionAssessment';
+import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -289,11 +287,17 @@ export function useMonitoringController() {
     }
   }, [deviceShadows, savingMode, selectedAquariumId, systemMode]);
 
+  const ruleConfig = useRuleConfig();
+  const engineStates = useAquariumEngineStates(useMemo(() => aquariums.map((aquarium) => aquarium.id), [aquariums]));
+
   const liveAquariums = useMemo<MonitoringAquarium[]>(() => {
     return aquariums.map((aquarium) => {
       const liveTelemetry = deviceShadows[aquarium.id]?.telemetry;
+      const thresholds = getEffectiveThresholds(aquarium as unknown as Record<string, unknown>, ruleConfig);
       const telemetry = simulationEnabled
-        ? createSimulatedTelemetry(aquarium, simulationScenario, telemetryNow)
+        ? (thresholds
+          ? createSimulatedTelemetry(thresholds, simulationScenario, telemetryNow, aquarium) ?? undefined
+          : undefined)
         : liveTelemetry;
       const telemetryState = getDeviceTelemetryState(telemetry, telemetryNow);
       const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow);
@@ -302,12 +306,13 @@ export function useMonitoringController() {
         : snapshot
           ? 'live'
           : 'unavailable';
-      const assessmentTelemetry = buildAssessmentTelemetry(snapshot);
-      const assessment = assessAquariumCondition({
-        profile: aquarium,
-        telemetry: assessmentTelemetry,
-        source: telemetrySource,
-        assessedAt: telemetryNow,
+      const assessment = assessAquarium({
+        aquarium: aquarium as unknown as Record<string, unknown>,
+        reading: snapshot && telemetry ? telemetry as unknown as Record<string, unknown> : null,
+        source: snapshot ? telemetrySource : 'unavailable',
+        now: telemetryNow,
+        ruleConfig,
+        engineState: simulationEnabled ? null : engineStates[aquarium.id] ?? null,
       });
 
       return {
@@ -344,7 +349,7 @@ export function useMonitoringController() {
           : aquarium.manualStatus,
       };
     });
-  }, [aquariums, deviceShadows, simulationEnabled, simulationScenario, telemetryNow]);
+  }, [aquariums, deviceShadows, engineStates, ruleConfig, simulationEnabled, simulationScenario, telemetryNow]);
 
   const ownerCards = useMemo(
     () => buildMonitoringOwners(liveAquariums, users),

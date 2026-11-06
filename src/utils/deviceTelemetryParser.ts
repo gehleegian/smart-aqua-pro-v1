@@ -58,6 +58,7 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
         ? telemetry.equipmentStatus
         : undefined,
     powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
+    ...(typeof telemetry.mainsPresent === 'boolean' ? { mainsPresent: telemetry.mainsPresent } : {}),
     ph: readTelemetryNumber(telemetry.ph),
     phReadingValid: typeof telemetry.phReadingValid === 'boolean' ? telemetry.phReadingValid : undefined,
     updatedAt,

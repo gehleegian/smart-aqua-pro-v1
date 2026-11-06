@@ -1,83 +1,75 @@
-import type { Aquarium } from '../types/aquarium';
 import type { DeviceTelemetry } from '../types/device';
 import type { SimulationScenario } from '../types/monitoring';
+import type { EffectiveThresholds, RangeThreshold, WaterParameter } from './monitoringAssessmentCore.ts';
 import { normalizeTelemetry } from './deviceTelemetryParser.ts';
 
 // Dev-only simulator. It builds a raw payload in the device contract shape
 // (docs/device-contract.md) and passes it through the same parser used for
 // RTDB telemetry, so simulated and live data follow one contract. It is never
-// written to Firebase.
+// written to Firebase. Values are placed relative to the aquarium's effective
+// thresholds from Firestore; the simulator has no thresholds of its own. A
+// parameter with no threshold is simply not sent.
 
-function midpoint(minimum: number, maximum: number) {
-  return minimum + (maximum - minimum) / 2;
+type Placement = 'inside' | 'just_outside' | 'far_outside';
+
+function place(range: RangeThreshold | undefined, placement: Placement): number | undefined {
+  if (!range) return undefined;
+  const { min, max } = range;
+  if (placement === 'inside') {
+    if (min !== undefined && max !== undefined) return min + (max - min) / 2;
+    if (max !== undefined) return max / 2;
+    return min! + Math.abs(min!) * 0.2;
+  }
+  // "just outside" moves 1% past the limit; "far outside" moves 50% past it.
+  const factor = placement === 'just_outside' ? 0.01 : 0.5;
+  if (max !== undefined) return Number((max + Math.max(Math.abs(max) * factor, 0.01)).toFixed(2));
+  return Number((min! - Math.max(Math.abs(min!) * factor, 0.01)).toFixed(2));
 }
 
 export function createSimulatedContractPayload(
-  aquarium: Aquarium,
+  thresholds: EffectiveThresholds,
   scenario: SimulationScenario,
-  now = Date.now()
+  now = Date.now(),
+  profile: { hasFiltrationSystem?: boolean } = {}
 ): Record<string, unknown> {
-  const minPh = aquarium.minPh ?? 6.5;
-  const maxPh = aquarium.maxPh ?? 7.5;
-  const normal = {
-    temperatureC: midpoint(aquarium.minTemp, aquarium.maxTemp),
-    waterLevelPercent: Math.min(100, Math.max(aquarium.minLevel + 15, 85)),
-    tdsPpm: 220,
-    tdsPercent: Math.min(100, Math.max(aquarium.minQuality + 10, 90)),
-    turbidity: 2,
-    ph: midpoint(minPh, maxPh),
-    filterState: aquarium.hasFiltrationSystem === false ? undefined : 'Active' as const,
-    equipmentStatus: 'Normal' as const,
-    powerStatus: 'Online' as const,
-  };
-
-  const scenarioValues = scenario === 'critical'
-    ? {
-        temperatureC: aquarium.maxTemp + 3,
-        waterLevelPercent: Math.max(0, aquarium.minLevel - 15),
-        tdsPercent: Math.max(0, aquarium.minQuality - 15),
-        turbidity: 12,
-        ph: Math.min(14, maxPh + 0.8),
-        filterState: aquarium.hasFiltrationSystem === false ? undefined : 'Inactive' as const,
-        equipmentStatus: 'Fault' as const,
-        powerStatus: 'Power Interruption' as const,
-      }
-    : scenario === 'warning'
-      ? {
-          temperatureC: aquarium.maxTemp + 0.8,
-          waterLevelPercent: Math.max(0, aquarium.minLevel - 5),
-          tdsPercent: Math.max(0, aquarium.minQuality - 5),
-          turbidity: 7,
-          ph: Math.min(14, maxPh + 0.2),
-          filterState: aquarium.hasFiltrationSystem === false ? undefined : 'Inactive' as const,
-          equipmentStatus: 'Warning' as const,
-          powerStatus: 'Online' as const,
-        }
-      : {};
+  const placement: Placement = scenario === 'critical' ? 'far_outside' : scenario === 'warning' ? 'just_outside' : 'inside';
+  const value = (parameter: WaterParameter) => place(thresholds.values[parameter], placement);
+  const level = thresholds.values.waterLevelPercent;
+  const waterLevelPercent = scenario === 'normal' && level?.min !== undefined
+    ? Math.min(100, level.min + (100 - level.min) / 2)
+    : value('waterLevelPercent');
+  const filterInstalled = profile.hasFiltrationSystem !== false;
 
   const payload: Record<string, unknown> = {
-    ...normal,
-    ...scenarioValues,
+    temperatureC: value('temperatureC'),
     temperatureReadingValid: true,
+    waterLevelPercent: waterLevelPercent === undefined ? undefined : Math.max(1, Math.min(100, waterLevelPercent)),
     waterPresent: true,
+    tdsPpm: value('tdsPpm'),
     tdsReadingValid: true,
-    phReadingValid: true,
+    turbidity: value('turbidity'),
     turbidityReadingValid: true,
+    ph: (() => {
+      const ph = value('ph');
+      return ph === undefined ? undefined : Math.min(13.9, Math.max(0.1, ph));
+    })(),
+    phReadingValid: true,
+    filterState: filterInstalled ? (scenario === 'normal' ? 'Active' : 'Inactive') : undefined,
+    equipmentStatus: scenario === 'critical' ? 'Fault' : scenario === 'warning' ? 'Warning' : 'Normal',
+    mainsPresent: scenario !== 'critical',
     updatedAt: now,
     online: true,
   };
   // RTDB has no undefined; drop absent optional fields as the device would.
-  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+  return Object.fromEntries(Object.entries(payload).filter(([, item]) => item !== undefined));
 }
 
 export function createSimulatedTelemetry(
-  aquarium: Aquarium,
+  thresholds: EffectiveThresholds,
   scenario: SimulationScenario,
-  now = Date.now()
-): DeviceTelemetry {
-  const telemetry = normalizeTelemetry(createSimulatedContractPayload(aquarium, scenario, now));
-  if (!telemetry) {
-    throw new Error('Simulated payload does not satisfy the device telemetry contract.');
-  }
-  return telemetry;
+  now = Date.now(),
+  profile: { hasFiltrationSystem?: boolean } = {}
+): DeviceTelemetry | null {
+  // Without temperature and level thresholds there is no contract-valid payload to simulate.
+  return normalizeTelemetry(createSimulatedContractPayload(thresholds, scenario, now, profile));
 }

@@ -9,12 +9,14 @@ import {
   getAquariumFormSubmitLabel,
   getAquariumFormTitle,
   getFormBioloadCalculation,
-  INDOOR_GOLDFISH_PRESET,
+  buildSpeciesThresholdPreset,
 } from '../../utils/aquariumManagementHelpers';
 import {
   formatBiomass,
   formatEstimatedBioload,
 } from '../../utils/aquariumProfileCalculations';
+import { useRuleConfig } from '../../hooks/useRuleConfig';
+import { selectSpeciesConfig } from '../../utils/monitoringAssessmentCore';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Modal from '../ui/Modal';
@@ -53,13 +55,13 @@ export function AquariumFormModal({
     event.preventDefault();
     onSave();
   };
+  const ruleConfig = useRuleConfig();
+  const species = selectSpeciesConfig({ species: [formData.species] }, ruleConfig.speciesById);
   const applyIndoorPreset = () => {
-    onFieldChange('minTemp', INDOOR_GOLDFISH_PRESET.minTemp);
-    onFieldChange('maxTemp', INDOOR_GOLDFISH_PRESET.maxTemp);
-    onFieldChange('minPh', INDOOR_GOLDFISH_PRESET.minPh);
-    onFieldChange('maxPh', INDOOR_GOLDFISH_PRESET.maxPh);
-    onFieldChange('minLevel', INDOOR_GOLDFISH_PRESET.minLevel);
-    onFieldChange('minQuality', INDOOR_GOLDFISH_PRESET.minQuality);
+    const preset = buildSpeciesThresholdPreset(species);
+    for (const [field, value] of Object.entries(preset) as [keyof typeof preset, string][]) {
+      if (value) onFieldChange(field, value);
+    }
   };
 
   return (
@@ -151,13 +153,18 @@ export function AquariumFormModal({
             <div className="rounded-lg border border-teal-500/30 bg-teal-500/10 px-4 py-3 sm:col-span-2">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-teal-100">Indoor Goldfish aquarium preset</p>
+                  <p className="text-sm font-medium text-teal-100">
+                    {species ? `${species.name} species defaults` : 'Species defaults'}
+                    {species?.status === 'draft' ? ' (draft)' : ''}
+                  </p>
                   <p className="mt-1 text-xs leading-5 text-slate-300">
-                    New profiles start at 20-24 C and pH 6.5-7.5 for an ordinary home aquarium, not breeding or commercial production. Water level and TDS start at the current system defaults and must be adjusted after sensor calibration. All values remain editable.
+                    {species
+                      ? `Fills temperature, pH and water level from the stored ${species.name} thresholds${species.status === 'draft' ? ', which are drafts awaiting adviser approval' : ''}. These limits override the species defaults for this aquarium. TDS purity % is a legacy field and is not used by the rules engine.`
+                      : 'No species thresholds are stored yet, so there is nothing to fill in.'}
                   </p>
                 </div>
-                <Button type="button" variant="secondary" size="sm" disabled={saving} className="shrink-0" onClick={applyIndoorPreset}>
-                  Apply indoor preset
+                <Button type="button" variant="secondary" size="sm" disabled={saving || !species} className="shrink-0" onClick={applyIndoorPreset}>
+                  Apply species defaults
                 </Button>
               </div>
             </div>
@@ -166,7 +173,7 @@ export function AquariumFormModal({
             <Input label="Minimum pH" type="number" min="0" max="14" step="any" value={formData.minPh} disabled={saving} onChange={(event) => onFieldChange('minPh', event.target.value)} />
             <Input label="Maximum pH" type="number" min="0" max="14" step="any" value={formData.maxPh} disabled={saving} onChange={(event) => onFieldChange('maxPh', event.target.value)} />
             <Input label="Minimum Water Level %" type="number" value={formData.minLevel} disabled={saving} onChange={(event) => onFieldChange('minLevel', event.target.value)} />
-            <Input label="Minimum TDS Purity %" type="number" value={formData.minQuality} disabled={saving} onChange={(event) => onFieldChange('minQuality', event.target.value)} />
+            <Input label="Minimum TDS Purity % (legacy)" type="number" value={formData.minQuality} disabled={saving} onChange={(event) => onFieldChange('minQuality', event.target.value)} />
           </div>
         </div>
 

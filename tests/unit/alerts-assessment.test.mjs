@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadTsModule } from '../helpers/loadTsModule.mjs';
+import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 
 const { mapDashboardAquariums, mergeDashboardAquariums } = await loadTsModule(
   new URL('../../src/utils/dashboardHelpers.ts', import.meta.url)
@@ -31,7 +32,7 @@ function alertsFor(shadowTelemetry, at = now) {
   const shadows = shadowTelemetry === undefined
     ? {}
     : { 'aq-1': { telemetry: shadowTelemetry, control: null, latestCommand: null } };
-  return buildAlertCandidates(mergeDashboardAquariums(mapDashboardAquariums([profile]), shadows, at));
+  return buildAlertCandidates(mergeDashboardAquariums(mapDashboardAquariums([profile]), shadows, at, seedRuleConfig()));
 }
 
 const WATER_CATEGORIES = new Set(['temperature', 'ph', 'tds', 'turbidity', 'water_level', 'water_quality']);
@@ -74,6 +75,9 @@ test('valid out-of-range live readings raise alerts from the shared assessment',
   const alerts = alertsFor(telemetry({ temperatureC: 26.5, ph: 8.12, waterLevelPercent: 15.7 }));
   const byCategory = Object.fromEntries(alerts.map((a) => [a.category, a.type]));
   assert.equal(byCategory.temperature, 'critical');
-  assert.equal(byCategory.ph, 'critical');
+  // Draft rule: pH critical only beyond the 7.5 max + 10% (8.25); 8.12 is a warning.
+  assert.equal(byCategory.ph, 'warning');
   assert.equal(byCategory.water_level, 'critical');
+  const critical = alertsFor(telemetry({ ph: 8.3 }));
+  assert.equal(Object.fromEntries(critical.map((a) => [a.category, a.type])).ph, 'critical');
 });

@@ -1,241 +1,125 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { assessAquariumCondition } from '../../src/utils/monitoringAssessment.ts';
+import { assessAquarium, getEffectiveThresholds } from '../../src/utils/conditionAssessment.ts';
 import { createSimulatedTelemetry } from '../../src/utils/monitoringSimulator.ts';
 import { getFreshTelemetrySnapshot } from '../../src/types/device.ts';
+import {
+  CONDITION_SUMMARY_MAX_AGE_MS,
+  evaluateAquarium,
+  readAquariumOverrides,
+  resolveThresholds,
+  toConditionSummary,
+} from '../../src/utils/monitoringAssessmentCore.ts';
+import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 
+// Client-side condition assessment (Sprint 2): the browser uses the same rule
+// engine and the Firestore rules, and prefers the server summary when fresh.
+
+const now = 1792627200000;
+const ruleConfig = seedRuleConfig();
 const profile = {
-  id: 'aquarium-a',
-  name: 'Indoor Goldfish Aquarium',
-  species: ['Goldfish'],
-  temp: 22,
-  level: 90,
-  quality: 90,
-  feeder: 'Inactive',
-  light: 'Off',
-  filter: 'Active',
-  minTemp: 20,
-  maxTemp: 24,
-  minPh: 6.5,
-  maxPh: 7.5,
-  minLevel: 70,
-  minQuality: 80,
-  ownerId: 'owner-a',
-  ownerName: 'Owner A',
-  hasFiltrationSystem: true,
+  id: 'aquarium-a', name: 'Indoor Goldfish Aquarium', species: ['Goldfish'],
+  minTemp: 20, maxTemp: 24, minPh: 6.5, maxPh: 7.5, minLevel: 70, minQuality: 80,
+  ownerId: 'owner-a', ownerName: 'Owner A', hasFiltrationSystem: true,
 };
+const reading = (patch = {}) => ({
+  temperatureC: 22, temperatureReadingValid: true, ph: 7, phReadingValid: true,
+  tdsPpm: 250, tdsReadingValid: true, turbidity: 2, turbidityReadingValid: true,
+  waterLevelPercent: 90, waterPresent: true, filterState: 'Active', equipmentStatus: 'Normal',
+  powerStatus: 'Online', online: true, updatedAt: now, ...patch,
+});
+const assess = (patch = {}, options = {}) => assessAquarium({
+  aquarium: profile, reading: reading(patch), source: 'live', now, ruleConfig, ...options,
+});
 
-function assessScenario(scenario) {
-  const now = 1792627200000;
-  const telemetry = createSimulatedTelemetry(profile, scenario, now);
-  const snapshot = getFreshTelemetrySnapshot(telemetry, now);
-  assert.ok(snapshot);
-
-  return assessAquariumCondition({
-    profile,
-    source: 'simulated',
-    assessedAt: now,
-    telemetry: {
-      temperatureC: snapshot.temperatureC,
-      temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-      waterLevelPercent: snapshot.waterLevelPercent,
-      waterLevelValid: snapshot.waterPresent,
-      tdsPpm: snapshot.tdsPpm,
-      tdsPurityPercent: snapshot.tdsPercent,
-      tdsValid: snapshot.hasFreshPurityTelemetry,
-      ph: snapshot.ph,
-      phValid: snapshot.hasFreshPhTelemetry,
-      turbidity: snapshot.turbidity,
-      turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-      filterState: snapshot.filterState,
-      equipmentStatus: snapshot.equipmentStatus,
-      powerStatus: snapshot.powerStatus,
-    },
+for (const [scenario, expected] of [['normal', 'normal'], ['warning', 'warning'], ['critical', 'critical']]) {
+  test(`simulator ${scenario} scenario is placed from the Firestore thresholds and classifies ${expected}`, () => {
+    const thresholds = getEffectiveThresholds(profile, ruleConfig);
+    const telemetry = createSimulatedTelemetry(thresholds, scenario, now, profile);
+    assert.ok(getFreshTelemetrySnapshot(telemetry, now));
+    const result = assessAquarium({ aquarium: profile, reading: telemetry, source: 'simulated', now, ruleConfig });
+    assert.equal(result.overallSeverity, expected);
+    assert.equal(result.origin, 'client');
+    if (expected !== 'normal') assert.ok(result.recommendations.length > 0);
   });
 }
 
-test('normal simulator scenario produces a normal profile-based assessment', () => {
-  const result = assessScenario('normal');
-  assert.equal(result.source, 'simulated');
-  assert.equal(result.ruleVersion, 'indoor-goldfish-v2');
-  assert.equal(result.overallSeverity, 'normal');
-  assert.equal(result.recommendations.length, 0);
-  assert.equal(result.parameters.length, 8);
-});
-
-test('warning simulator scenario produces maintenance recommendations', () => {
-  const result = assessScenario('warning');
-  assert.equal(result.overallSeverity, 'warning');
-  assert.ok(result.recommendations.length > 0);
-  assert.ok(result.parameters.some((item) => item.severity === 'warning'));
-});
-
-test('critical simulator scenario detects power and water-quality risks', () => {
-  const result = assessScenario('critical');
-  assert.equal(result.overallSeverity, 'critical');
-  assert.equal(result.parameters.find((item) => item.parameter === 'power')?.severity, 'critical');
-  assert.equal(result.parameters.find((item) => item.parameter === 'waterLevel')?.severity, 'critical');
+test('simulator sends nothing for a parameter without a threshold', () => {
+  const thresholds = resolveThresholds(null);
+  assert.equal(createSimulatedTelemetry(thresholds, 'normal', now, profile), null, 'no temperature/level threshold: no valid payload');
 });
 
 test('missing telemetry is explicitly unavailable rather than healthy', () => {
-  const result = assessAquariumCondition({
-    profile,
-    source: 'unavailable',
-    telemetry: null,
-    assessedAt: 1792627200000,
-  });
+  const result = assessAquarium({ aquarium: profile, reading: null, source: 'unavailable', now, ruleConfig });
   assert.equal(result.overallSeverity, 'unavailable');
-  assert.ok(result.parameters.every((item) => item.severity === 'unavailable'));
+  assert.equal(result.origin, 'none');
+  assert.deepEqual(result.recommendations, []);
 });
 
-const validTelemetry = {
-  temperatureC: 22, temperatureValid: true,
-  waterLevelPercent: 90, waterLevelValid: true,
-  tdsPpm: 220, tdsPurityPercent: 90, tdsValid: true,
-  ph: 7, phValid: true, turbidity: 2, turbidityValid: true,
-  filterState: 'Active', equipmentStatus: 'Normal', powerStatus: 'Online',
-};
-const now = 1792627200000;
-function evaluate(overrides = {}, profileOverrides = {}, source = 'live') {
-  return assessAquariumCondition({
-    profile: { ...profile, ...profileOverrides },
-    telemetry: { ...validTelemetry, ...overrides }, source, assessedAt: now,
-  });
-}
-function parameter(result, name) {
-  return result.parameters.find((entry) => entry.parameter === name);
-}
+test('rules not loaded: unavailable with an explanation, never a guessed classification', () => {
+  const result = assess({ temperatureC: 30 }, { ruleConfig: null });
+  assert.equal(result.overallSeverity, 'unavailable');
+  assert.match(result.ruleNotes.join(' '), /not loaded/);
+});
 
+test('a fresh server condition summary wins over the browser evaluation', () => {
+  const serverResult = evaluateAquarium(reading({ temperatureC: 25 }), resolveThresholds(ruleConfig.speciesById.goldfish), ruleConfig.rules, {});
+  const engineState = { condition: toConditionSummary(serverResult, now - 60_000, now - 60_000), cleaning: null, bioloadLevel: null };
+  const fresh = assess({}, { engineState });
+  assert.equal(fresh.origin, 'server');
+  assert.equal(fresh.overallSeverity, 'warning');
+  const stale = assess({}, { engineState: { ...engineState, condition: { ...engineState.condition, evaluatedAt: now - CONDITION_SUMMARY_MAX_AGE_MS - 1 } } });
+  assert.equal(stale.origin, 'client');
+  assert.equal(stale.overallSeverity, 'normal');
+  const simulated = assess({}, { engineState, source: 'simulated' });
+  assert.equal(simulated.origin, 'client', 'simulation never shows the server summary');
+});
 
-for (const [name, field, cases] of [
-  ['temperature', 'temperatureC', [[18, 'critical'], [18.01, 'warning'], [19.99, 'warning'], [20, 'normal'], [24, 'normal'], [24.01, 'warning'], [25.99, 'warning'], [26, 'critical']]],
-  ['ph', 'ph', [[6, 'critical'], [6.01, 'warning'], [6.5, 'normal'], [7.5, 'normal'], [7.99, 'warning'], [8, 'critical']]],
-  ['waterLevel', 'waterLevelPercent', [[0.5, 'critical'], [60, 'critical'], [60.01, 'warning'], [69.99, 'warning'], [70, 'normal'], [100, 'normal']]],
-  ['tds', 'tdsPurityPercent', [[70, 'critical'], [70.01, 'warning'], [79.99, 'warning'], [80, 'normal'], [100, 'normal']]],
-  ['turbidity', 'turbidity', [[0, 'normal'], [5, 'normal'], [5.01, 'warning'], [10, 'warning'], [10.01, 'critical']]],
-]) {
-  for (const [value, expected] of cases) {
-    test(`${name} boundary ${value} is ${expected}`, () => {
-      const entry = parameter(evaluate({ [field]: value }), name);
-      assert.equal(entry.severity, expected);
-      if (expected === 'normal') {
-        assert.equal(entry.recommendation, undefined);
-      } else {
-        assert.equal(entry.recommendationPriority, expected === 'critical' ? 'immediate' : 'review');
-        assert.equal(entry.recommendationRuleId, `indoor-goldfish-v2:${name}:${expected}`);
-      }
-    });
+test('impossible values and explicit invalid flags are sensor faults with only the probe check', () => {
+  const result = assess({ ph: 0, temperatureReadingValid: false, waterLevelPercent: 150 });
+  assert.deepEqual(result.faults.map((fault) => fault.parameter).sort(), ['ph', 'temperatureC', 'waterLevelPercent']);
+  assert.ok(result.matchedRules.every((rule) => rule.ruleId === 'sensor_fault'));
+  assert.ok(result.recommendations.every((text) => /probe connection or calibration/.test(text)));
+});
+
+test('owner profile limits act as per-aquarium overrides; thresholdOverrides wins over them', () => {
+  const custom = { ...profile, maxTemp: 26 };
+  assert.equal(assessAquarium({ aquarium: custom, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'normal');
+  assert.equal(assess({ temperatureC: 25 }).overallSeverity, 'warning', 'the other aquarium is unaffected');
+  const admin = { ...custom, thresholdOverrides: { temperatureC: { max: 23 } } };
+  assert.deepEqual(readAquariumOverrides(admin), { temperatureC: { max: 23 } });
+  assert.equal(assessAquarium({ aquarium: admin, reading: reading({ temperatureC: 23.5 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
+});
+
+test('inverted or out-of-range profile limits are ignored, falling back to the species defaults', () => {
+  assert.deepEqual(readAquariumOverrides({ minTemp: 30, maxTemp: 20, minPh: -1, maxPh: 20, minLevel: 0 }), {});
+  const broken = { ...profile, minTemp: 30, maxTemp: 20 };
+  assert.equal(assessAquarium({ aquarium: broken, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
+});
+
+test('unknown power/equipment show "not monitored" and do not block NORMAL', () => {
+  const result = assess({ powerStatus: 'Unknown', equipmentStatus: 'Unknown' });
+  assert.equal(result.overallSeverity, 'normal');
+  const power = result.parameters.find((item) => item.parameter === 'power');
+  assert.equal(power.notMonitored, true);
+  assert.equal(power.message, 'Not monitored: the device does not report this status yet.');
+});
+
+test('critical findings are listed before warnings, each traceable to a rule id', () => {
+  const result = assess({ temperatureC: 26.5, ph: 8 });
+  assert.deepEqual(result.matchedRules.map((rule) => [rule.ruleId, rule.severity]), [
+    ['temp_high_critical', 'critical'],
+    ['ph_high_warning', 'warning'],
+  ]);
+  for (const item of result.parameters.filter((entry) => entry.recommendation)) {
+    assert.ok(item.recommendationRuleId);
   }
-  for (const value of [null, undefined, NaN, Infinity, -Infinity, '22']) {
-    test(`${name} rejects malformed value ${String(value)}`, () => {
-      const result = evaluate({ [field]: value });
-      assert.equal(parameter(result, name).severity, 'unavailable');
-      assert.equal(parameter(result, name).recommendation, undefined);
-      assert.equal(result.recommendations.length, 0);
-    });
-  }
-}
-
-test('impossible ranges and explicit invalid flags cannot produce maintenance advice', () => {
-  for (const [name, patch] of [
-    ['ph', { ph: -1 }], ['ph', { ph: 15 }],
-    ['waterLevel', { waterLevelPercent: -1 }], ['waterLevel', { waterLevelPercent: 101 }],
-    ['tds', { tdsPurityPercent: -1 }], ['tds', { tdsPurityPercent: 101 }],
-    ['turbidity', { turbidity: -1 }],
-    ['temperature', { temperatureC: 30, temperatureValid: false }],
-    ['ph', { ph: 8, phValid: false }],
-    ['waterLevel', { waterLevelPercent: 0, waterLevelValid: false }],
-    ['tds', { tdsPurityPercent: 0, tdsValid: false }],
-    ['turbidity', { turbidity: 20, turbidityValid: false }],
-  ]) {
-    const entry = parameter(evaluate(patch), name);
-    assert.equal(entry.severity, 'unavailable');
-    assert.equal(entry.recommendation, undefined);
-  }
+  assert.equal(result.draft, true);
+  assert.equal(result.ruleVersion, 'rules:draft');
 });
 
-test('missing, inverted, and malformed settings do not silently use defaults', () => {
-  for (const [name, patch] of [
-    ['temperature', { minTemp: undefined }], ['temperature', { minTemp: 25, maxTemp: 20 }],
-    ['temperature', { minTemp: NaN }], ['temperature', { minTemp: 24, maxTemp: 24 }],
-    ['ph', { minPh: undefined }], ['ph', { minPh: -1 }], ['ph', { maxPh: 15 }],
-    ['ph', { minPh: 8, maxPh: 7 }], ['waterLevel', { minLevel: 101 }],
-    ['waterLevel', { minLevel: undefined }], ['tds', { minQuality: -1 }],
-    ['tds', { minQuality: undefined }],
-  ]) {
-    assert.equal(parameter(evaluate({}, patch), name).severity, 'unavailable');
-    assert.equal(parameter(evaluate({}, patch), name).recommendation, undefined);
-  }
-});
-
-test('custom settings and aquarium assessments stay isolated', () => {
-  assert.equal(parameter(evaluate({ temperatureC: 26 }, { minTemp: 25, maxTemp: 27 }), 'temperature').severity, 'normal');
-  assert.equal(parameter(evaluate({ temperatureC: 26 }), 'temperature').severity, 'critical');
-  assert.equal(parameter(evaluate({ ph: 8 }, { minPh: 7, maxPh: 8 }), 'ph').severity, 'normal');
-  assert.equal(parameter(evaluate({ waterLevelPercent: 60 }, { minLevel: 50 }), 'waterLevel').severity, 'normal');
-  assert.equal(parameter(evaluate({ tdsPurityPercent: 60 }, { minQuality: 50 }), 'tds').severity, 'normal');
-});
-
-test('critical recommendations precede warnings, with distinct urgency and traceability', () => {
-  const result = evaluate({ temperatureC: 25, powerStatus: 'Offline' });
-  assert.equal(result.overallSeverity, 'critical');
-  assert.match(result.recommendations[0], /^Critical/);
-  assert.match(result.recommendations[1], /^Warning/);
-  assert.notEqual(parameter(evaluate({ temperatureC: 25 }), 'temperature').recommendation,
-    parameter(evaluate({ temperatureC: 26 }), 'temperature').recommendation);
-  assert.ok(result.ruleNotes.some((note) => note.includes('provisional')));
-});
-
-test('unknown status values and unavailable sources never become water-condition alerts', () => {
-  const result = evaluate({ filterState: 'broken', equipmentStatus: 'broken', powerStatus: 'broken' });
-  for (const name of ['filtration', 'equipment', 'power']) {
-    assert.equal(parameter(result, name).severity, 'unavailable');
-  }
-  const unavailable = evaluate({ temperatureC: 40, powerStatus: 'Offline' }, {}, 'unavailable');
-  assert.equal(unavailable.overallSeverity, 'unavailable');
-  assert.equal(unavailable.recommendations.length, 0);
-  assert.ok(unavailable.parameters.every((entry) => entry.severity === 'unavailable'));
-});
-
-test('filtration and equipment evaluate only their reported status', () => {
-  assert.equal(parameter(evaluate({ filterState: 'Inactive' }), 'filtration').severity, 'warning');
-  assert.equal(parameter(evaluate({ filterState: 'Inactive' }, { hasFiltrationSystem: false }), 'filtration').recommendation, undefined);
-  assert.match(parameter(evaluate(), 'filtration').message, /does not establish filtration effectiveness/);
-  assert.equal(parameter(evaluate({ equipmentStatus: 'Warning' }), 'equipment').severity, 'warning');
-  assert.equal(parameter(evaluate({ equipmentStatus: 'Fault' }), 'equipment').severity, 'critical');
-});
-
-test('sensor-fault values are unavailable and never produce recommendations', () => {
-  const base = {
-    temperatureC: 22, temperatureValid: true, waterLevelPercent: 90, waterLevelValid: true,
-    waterPresent: true, tdsPpm: 220, tdsPurityPercent: 90, tdsValid: true, ph: 7, phValid: true,
-    turbidity: 2, turbidityValid: true, filterState: 'Active', equipmentStatus: 'Normal', powerStatus: 'Online',
-  };
-  for (const [parameter, patch] of [
-    ['ph', { ph: 0 }], ['ph', { ph: 14.5 }], ['ph', { ph: -0.1 }],
-    ['temperature', { temperatureC: 0 }], ['temperature', { temperatureC: 85 }], ['temperature', { temperatureC: -127 }],
-    ['tds', { tdsPpm: 0, tdsPurityPercent: 0 }], ['tds', { tdsPpm: null, tdsPurityPercent: 0 }],
-    ['waterLevel', { waterLevelPercent: 0 }], ['waterLevel', { waterLevelPercent: 0, waterPresent: undefined }],
-  ]) {
-    const result = assessAquariumCondition({ profile, source: 'live', assessedAt: 1, telemetry: { ...base, ...patch } });
-    const item = result.parameters.find((p) => p.parameter === parameter);
-    assert.equal(item.severity, 'unavailable', JSON.stringify(patch));
-    assert.equal(item.recommendation, undefined, JSON.stringify(patch));
-    assert.deepEqual(result.recommendations, [], JSON.stringify(patch));
-  }
-});
-
-test('confirmed empty tank and converted 0% TDS purity with real ppm remain assessable', () => {
-  const base = {
-    temperatureC: 22, temperatureValid: true, waterLevelPercent: 90, waterLevelValid: true,
-    tdsPpm: 220, tdsPurityPercent: 90, tdsValid: true, ph: 7, phValid: true,
-    turbidity: 2, turbidityValid: true, filterState: 'Active', equipmentStatus: 'Normal', powerStatus: 'Online',
-  };
-  const empty = assessAquariumCondition({ profile, source: 'live', assessedAt: 1,
-    telemetry: { ...base, waterLevelPercent: 0, waterPresent: false } });
-  assert.equal(empty.parameters.find((p) => p.parameter === 'waterLevel').severity, 'critical');
-  const highTds = assessAquariumCondition({ profile, source: 'live', assessedAt: 1,
-    telemetry: { ...base, tdsPpm: 1281.4, tdsPurityPercent: 0 } });
-  assert.equal(highTds.parameters.find((p) => p.parameter === 'tds').severity, 'critical');
+test('a confirmed empty tank (0% with waterPresent=false) is a real critical water level', () => {
+  const result = assess({ waterLevelPercent: 0, waterPresent: false, temperatureReadingValid: undefined, temperatureC: 22 });
+  assert.equal(result.parameters.find((item) => item.parameter === 'waterLevel').severity, 'critical');
 });
