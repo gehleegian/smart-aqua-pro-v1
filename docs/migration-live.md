@@ -2,14 +2,14 @@
 
 **Status:** plan only. **Nothing in this file has been run.** Each step is run by a person (Jay, plus Gian for the firmware), at a time scheduled together, with the live tank watched as you go.
 
-**Order:** rules → index and binding → function → firmware → app → enforce flags. Every step is backward compatible with the step before it, so you can stop between any two steps.
+**Order:** rules → indexes, binding and rule seed → functions → firmware → app → enforce flags. Every step is backward compatible with the step before it, so you can stop between any two steps.
 
 ---
 
 ## 0. Before you start
 
 - [ ] Upgrade the project to Blaze (needed for the Cloud Function). Set a budget alert.
-- [ ] On `feat/device-pipeline`, run `npm run test:security`, `npm run test:telemetry-ingest`, `npm run test:telemetry-ingest-trigger`, `npm run build`, and `npm run lint`. All must pass.
+- [ ] On `feat/device-pipeline`, run `npm run test:security`, `npm run test:rule-engine`, `npm run test:telemetry-ingest`, `npm run test:telemetry-ingest-trigger`, `npm run test:device-heartbeat`, `npm run build`, and `npm run lint`. All must pass.
 - [ ] Back up the current state (reads only):
   ```bash
   firebase database:get / --project practice-smartaqua > backup-rtdb-$(date +%F).json   # keep out of git
@@ -21,7 +21,7 @@
 ## 1. Deploy the RTDB rules (backward compatible)
 
 **What changes:**
-- optional `phReadingValid` and `turbidityReadingValid` in telemetry
+- optional `phReadingValid`, `turbidityReadingValid` and `mainsPresent` in telemetry
 - the new `commandAck/latest` node
 - the new `deviceBindings/{deviceUid}` node
 
@@ -50,40 +50,54 @@ The value must equal the `authorization/aquariums/{id}` entry whose `deviceUids`
 
 **Rollback:** delete `deviceBindings/esp32-SAQ-7K3M-9R2X`. Current firmware doesn't read it.
 
-### 1c. Deploy the Firestore index
+### 1c. Deploy the Firestore rules and indexes
 
 ```bash
 firebase deploy --only firestore:indexes --project practice-smartaqua
+firebase deploy --only firestore:rules --project practice-smartaqua
 ```
 
-Wait until the index shows **Enabled** in the console. Until it does, the history page falls back to RTDB history.
+Indexes: `sensor_readings` (history), `recommendations` (aquariumId, createdAt desc), `alert_records` (aquarium_id, lastSeenAt desc), `maintenance_actions` (aquariumId, actionType, performedAt desc). Wait until all show **Enabled** in the console. Until then the history page falls back to RTDB history and the recommendations / stored-alerts panels show an error.
 
-**Rollback:** not needed (an extra index is harmless). To remove it, delete it in the console.
+The Firestore rules (Sprint 2) add read access to `species` and `rules`, owner read and the applied/dismissed transition on `recommendations`, and owner read on `maintenance_actions`. Nothing existing is loosened (FS-01..36).
 
-**Don't** deploy `firestore:rules` in this step: they haven't changed in this sprint.
+**Rollback:** indexes: none needed. Rules: `git show 750427f:firestore.rules > firestore.rules && firebase deploy --only firestore:rules --project practice-smartaqua && git checkout firestore.rules`.
 
-## 2. Deploy the history ingest function
+### 1d. Seed the DRAFT thresholds and rules
+
+```bash
+npm run seed:rules -- --dry-run --project practice-smartaqua   # shows what would be written
+npm run seed:rules -- --project practice-smartaqua             # asks you to type the project id
+```
+
+Writes `species/goldfish` and the 27 `rules/*` docs, all `status: draft`. The app shows "Thresholds and rules have not loaded" for every aquarium until this is done, so seed **before** step 4.
+
+**Rollback:** delete the `species` and `rules` collections in the console (nothing else reads them before step 2/4).
+
+## 2. Deploy the rules-engine functions
 
 ```bash
 npm run build:functions
-firebase deploy --only functions:ingestDeviceTelemetry --project practice-smartaqua
+firebase deploy --only functions:ingestDeviceTelemetry,functions:checkDeviceHeartbeat,functions:checkCleaningSchedule,functions:onMaintenanceActionLogged --project practice-smartaqua
 ```
 
-Deploy **only** this function. The other functions in `functions/src/index.ts` (authorization sync, trusted mutations, support email) have never been deployed, and deploying them needs a separate decision and its own review.
+Deploy **only** these four. The other functions in `functions/src/index.ts` (authorization sync, trusted mutations, support email) have never been deployed, and deploying them needs a separate decision and its own review.
 
 **Check:**
 - Within about 1 minute, one `sensor_readings` doc appears for Aquarium 1 with `source: "device"` and `sampleReason: "first_of_day"`, plus a `validity` map. Expect `ph: "valid"`, `tds: "invalid"`, `turbidity: "missing"`.
+- Aquarium 1 gets a `condition` summary (expected `critical` with today's 26.5 °C / ~16 % level) and open `alert_records` for temperature, pH, water level, the TDS sensor fault and the inactive filter, each with a pending recommendation. **These are real alerts the owner will see.** Decide beforehand whether to calibrate/check the tank first (see AUDIT §4.1).
+- No `device_offline` alert while telemetry is fresh.
 - After that, roughly one row every 5 minutes.
 - `firebase functions:log --only ingestDeviceTelemetry` shows no errors.
 
-**Cost note:** the function runs on every telemetry write, which is about 11,700 times a day per aquarium at the current ~7.4 s interval, or 5,760 at 15 s. Each run reads the aquarium doc, so check the Blaze usage after 24 h.
+**Cost note:** the ingest function runs on every telemetry write: about 11,700 times a day per aquarium at the current ~7.4 s interval, or 5,760 at 15 s. Each run reads the aquarium doc and the engine state (rules are cached 5 min). Firestore writes are about 1,560 a day per aquarium when normal and about 2,060 with two open alerts (measured, `docs/rule-engine.md` §8). The heartbeat adds 1,440 runs a day for the whole project. Check the Blaze usage after 24 h.
 
 **Rollback:**
 ```bash
-firebase functions:delete ingestDeviceTelemetry --project practice-smartaqua
+firebase functions:delete ingestDeviceTelemetry checkDeviceHeartbeat checkCleaningSchedule onMaintenanceActionLogged --project practice-smartaqua
 ```
 
-Rows it already wrote stay (they're marked `source: "device"`). Telemetry is unaffected.
+Rows, alerts and recommendations it already wrote stay (they're marked `source: "device"`). Telemetry is unaffected.
 
 ## 3. Flash the firmware (Gian), in stages
 
@@ -95,7 +109,7 @@ Follow `docs/firmware-changes.md`. Flash one stage at a time and check each befo
 | 3b | `phReadingValid`, `turbidityReadingValid`, no placeholder zeros | The dashboard pH stays a number; unplugging the pH probe shows "Sensor error" |
 | 3c | `commandAck/latest` | Feed Now in the web shows Waiting → Done |
 | 3d | WiFiManager + 5 s reset; `deviceBindings` lookup | Reboot reconnects; a 5 s press opens the portal; telemetry resumes |
-| 3e | Real `powerStatus` / `equipmentStatus`; TDS fix; turbidity | Values other than `Unknown`; `tdsReadingValid: true` |
+| 3e | `mainsPresent`; real `equipmentStatus`; TDS fix; turbidity | Unplug the mains adapter: a Power Interruption alert within ~15 s; `tdsReadingValid: true` |
 
 **Rollback (any stage):** reflash the previous `.bin`. The rules accept both the old and the new payloads.
 
@@ -107,7 +121,8 @@ Deploy the `feat/device-pipeline` build to wherever the web app is hosted. That 
 - the 60 s offline window
 - "Sensor error" shown in place of invalid values
 - command status (Waiting / Done / Failed / No response)
-- alerts and history driven by the shared assessment
+- alerts and history driven by the rule engine (stored `alert_records`, recommendations panel, condition badge, "Draft thresholds" and "Not monitored" badges, next-cleaning card)
+- profile limits are no longer pre-filled from code; "Apply species defaults" uses `species/goldfish`
 
 The app tolerates rules without `commandAck`: the ack listener fails quietly. So deploying the app before step 1 is safe, but it isn't the planned order.
 

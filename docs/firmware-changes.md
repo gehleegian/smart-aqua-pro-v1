@@ -168,12 +168,20 @@ bool loadBinding() {
 
 Today both are always `"Unknown"`, so the app can't evaluate them.
 
+Agreed hardware (Sprint 2): the ESP32 runs from a power bank or UPS, and a **separate 5 V adapter on mains** feeds a voltage divider into a GPIO. Send that as `mainsPresent` (new, additive). The server derives the power status from it; you can keep sending `powerStatus` too.
+
 ```cpp
-// Power: needs an AC-sense input (e.g. an opto-isolated mains detector) and the ESP32 on battery/UPS.
-const int PIN_AC_SENSE = /* choose */;
-String powerStatus() {
-  return digitalRead(PIN_AC_SENSE) == HIGH ? "Online" : "Power Interruption";
+// Mains sense: 5 V adapter -> voltage divider (to about 3.0 V) -> any input-capable GPIO.
+const int PIN_MAINS_SENSE = /* choose */;
+// CALIBRATE: confirm the divider output reads HIGH with mains on and LOW with the adapter unplugged.
+
+bool mainsPresent() {
+  return digitalRead(PIN_MAINS_SENSE) == HIGH;
 }
+
+// In the telemetry JSON:
+json.set("mainsPresent", mainsPresent());
+json.set("powerStatus", mainsPresent() ? "Online" : "Power Interruption");
 
 // Equipment: report what the firmware can actually observe.
 String equipmentStatus() {
@@ -183,10 +191,12 @@ String equipmentStatus() {
 }
 ```
 
+- [ ] `mainsPresent` sent every telemetry write (boolean). On a power cut the device keeps sending (battery) with `mainsPresent: false`; the app raises a **Power Interruption** alert through the normal rule.
+- [ ] When mains drops, send one telemetry write right away rather than waiting for the next 15 s slot.
 - [ ] `powerStatus` is one of `Online` / `Power Interruption`. Send `Unknown` only if there's no AC-sense hardware.
 - [ ] `equipmentStatus` is one of `Normal` / `Warning` / `Fault` / `Unknown`.
 - [ ] **Needs a decision (Jay and Gian):**
-  - What hardware detects mains loss? The manuscript requires power-interruption detection, but the ESP32 can't report an outage it loses power in, so it needs a battery or UPS.
+  - ~~What hardware detects mains loss?~~ Decided: power bank/UPS for the ESP32 plus a mains 5 V adapter into a GPIO (`mainsPresent`). Pin and divider values still to choose.
   - What counts as an equipment fault? There's no filter-flow or current sensor yet.
 
 ## 8. Fix TDS (currently invalid) and add turbidity

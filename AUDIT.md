@@ -198,6 +198,35 @@ Data-model mismatches with the manuscript:
 
 ---
 
+### 4.4 Sprint 2 (2026-11-07): rule engine, recommendations, alerts — emulator only, nothing deployed
+
+The rows of §5 below are the original audit snapshot. Status after Sprint 2 (software only; verified on the emulator, not in production):
+
+| FR | Now | Evidence |
+|---|---|---|
+| FR5 Bioload | ✅ (draft bands) | `computeBioload()` light/moderate/heavy from g/L; `docs/bioload.md` (DRAFT, citation needed) |
+| FR6 Per-aquarium thresholds | ✅ (draft values) | `species/goldfish` defaults → profile limits → admin `thresholdOverrides` (`resolveThresholds`, `readAquariumOverrides`). No admin editor UI yet. |
+| FR8 Validation | ✅ | Sprint 1 validity feeds the engine; faults → one `sensor_fault` recommendation, never water advice |
+| FR11 Classification | ✅ (draft) | `evaluateAquarium()`; persisted as `aquariums/{id}.condition` and `sensor_readings.classification` |
+| FR12 Rule → recommendation | ✅ (draft rules) | 27 rules with action / basis / preCheck; stored in `recommendations` |
+| FR13 Rules in DB | ✅ | `rules/*`, `species/*` in Firestore; seeded by `scripts/seed-rules.ts`; no admin editor UI yet |
+| FR14 Alerts | ✅ except FCM | `alert_records` written by the functions for warn/crit, power interruption (`mainsPresent`), device offline, sensor fault |
+| FR15 Push | ❌ | Alerts carry `notifyRequestedAt`; no FCM sender |
+| FR16 Dedup/cooldown | ✅ | Server-side: one open alert per aquarium+parameter, 15 min cooldown, auto-resolve after 3 normals (`planAlertChanges`) |
+| FR20 Maintenance log | 🟡 | `maintenance_actions` collection + rules + trigger; logging UI is Sprint 4 |
+
+**Removed hardcoded thresholds:** the old severity margins and turbidity 5/10 NTU (`MONITORING_SEVERITY_MARGINS`), the 500/300 ppm and 85/65 % label helpers (`monitoringHelpers.ts`), the form preset (20–24 °C etc.), the simulator's 6.5/7.5 defaults, and the Automation page's sample rule list. All values now come from Firestore.
+
+**Behaviour changes to know about:**
+- Unknown/missing power or equipment is "Not monitored" and no longer blocks NORMAL.
+- A sensor fault no longer makes the overall condition UNAVAILABLE; the remaining valid parameters decide it.
+- With the draft rules, Aquarium 1's live pH 8.1 is WARNING (critical above 8.25), not CRITICAL as before.
+- Until `species`/`rules` are seeded, the app shows "rules not loaded" instead of a classification.
+
+**Docs:** `docs/rule-engine.md`, `docs/rule-matrix.md` (generated from the seed), `docs/bioload.md`; `mainsPresent` added to `docs/device-contract.md` and `docs/firmware-changes.md`; migration steps 1c/1d/2 updated.
+
+**Overlap to resolve:** `docs/threshold-approval-matrix.csv` and `docs/recommendation-approval-matrix.csv` predate this sprint. `docs/rule-matrix.md` is now the list that matches the engine; the team should pick one for sign-off.
+
 ## 5. Feature status matrix
 
 Legend: ✅ Done · 🟡 Partial · 🧪 Stubbed/mocked · ❌ Missing. "Rules tests not run" means the emulator suite exists but couldn't run in this audit.

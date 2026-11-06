@@ -61,7 +61,8 @@ The device writes the whole node in one `set`. Any field not in this table is re
 | `turbidityReadingValid` | boolean | | no | **new (additive)** | Turbidity probe read OK. |
 | `filterState` | `"Active"` \| `"Inactive"` | | no | current | Filter relay state. |
 | `equipmentStatus` | `Normal` \| `Warning` \| `Fault` \| `Unknown` | | no | current (always `Unknown`) | Equipment health. |
-| `powerStatus` | `Online` \| `Offline` \| `Power Interruption` \| `Unknown` | | no | current (always `Unknown`) | Mains power state. |
+| `powerStatus` | `Online` \| `Offline` \| `Power Interruption` \| `Unknown` | | no | current (always `Unknown`) | Mains power state. Overridden by `mainsPresent` when that is sent. |
+| `mainsPresent` | boolean | | no | **new (additive, Sprint 2)** | A separate 5 V adapter on mains, read through a voltage divider into a GPIO. `false` while the device is online (ESP32 on a power bank/UPS) = `Power Interruption`; `true` = `Online`. Absent: `powerStatus` is used as before. |
 | `waterQualityPercent` | number | | no | allowed, legacy | Older name for `tdsPercent`. |
 | `ammoniaPpm` | number | ppm | no | allowed, out of scope | There is no ammonia sensor in the prototype. |
 
@@ -170,7 +171,7 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 
 **Sampling:**
 - At most one row every 5 min per aquarium (`HISTORY_SAMPLE_INTERVAL_MS`).
-- A change in classification writes immediately.
+- A change in any per-parameter classification (or in the rule chosen) writes immediately.
 - The first reading of each local day is always written.
 
 **Rejected (not written):**
@@ -195,16 +196,17 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 | `ingestedAtEpoch` | number | current | epoch ms, function clock |
 | telemetry fields | | current/new | the fields from §2 that were present |
 | `sampleReason` | string | new | `first_of_day` \| `interval` \| `classification_change` |
+| `classification` | string | new (Sprint 2) | overall `normal` \| `warning` \| `critical` \| `unavailable` from the rule engine |
 | `validity` | map | new | `{ allValid, temperature, ph, tds, turbidity, waterLevel: "valid"\|"invalid"\|"missing", invalidReasons? }` |
 | `reading_id` | string | current | equals the doc ID |
 
 **Day doc fields:**
 - `aquariumId`, `ownerId`, `ownerName`, `dateKey`, `lastRecordedAtEpoch`, `updatedAtEpoch` (current)
-- `lastClassification`, `lastRuleVersion` (new; sampler state)
+- `lastClassification`, `lastSignature`, `lastRuleVersion` (new; sampler state; `lastRuleVersion` is `rules:draft` or `rules:approved`)
 
 **Production index:** the history query (`aquariumId ==`, `dateKey ==`, order by `recordedAtEpoch`) needs the composite index in `firestore.indexes.json`.
 
-Classification and alert records come in Sprint 2.
+Classification, alerts, recommendations and the aquarium `condition` summary are written by the same function since Sprint 2: see `docs/rule-engine.md`.
 
 ### 5.2 RTDB `devices/{aquariumId}/history/{YYYY-MM-DD}/{HH-mm-ss}` (legacy, read-only)
 
@@ -248,4 +250,4 @@ The UI and the ingest function already treat these values as sensor faults (zero
 - **Device token:** how the custom token for `esp32-SAQ-…` is minted, and where it is stored on the device. Ask Gian. It must never be committed.
 - **Provisioning:** the provisioning script that writes `deviceUids`, `claimOperationId` and now `deviceBindings` is not in the repo.
 - **TDS:** Aquarium 1 sends `tdsReadingValid: false` and no `tdsPpm`, so TDS is never assessed.
-- **Not sent yet:** turbidity, plus real `powerStatus` and `equipmentStatus` values.
+- **Not sent yet:** turbidity, `mainsPresent`, plus real `powerStatus` and `equipmentStatus` values. Until then the app shows power and equipment as "Not monitored" (they no longer block a NORMAL condition).
