@@ -344,7 +344,8 @@ export type SensorReadingsBackfillResult = {
  * but no normal production UI read path invokes this client-side writer.
  */
 export async function backfillSensorReadingsFromDeviceHistory(
-  aquariumId: string
+  aquariumId: string,
+  dateKeys: string[]
 ): Promise<SensorReadingsBackfillResult> {
   const deviceRootRef = getDeviceRootRef(aquariumId);
 
@@ -368,20 +369,19 @@ export async function backfillSensorReadingsFromDeviceHistory(
     };
   }
 
-  const historySnapshot = await get(child(deviceRootRef, 'history'));
-
-  if (!historySnapshot.exists()) {
-    return {
-      dateKeysProcessed: 0,
-      readingsWritten: 0,
-    };
-  }
-
-  const historyByDate = historySnapshot.val() as Record<string, unknown>;
+  // RTDB rules grant owner reads at history/{dateKey} only; reading the
+  // history root is denied. Read each requested date key individually.
   let dateKeysProcessed = 0;
   let readingsWritten = 0;
 
-  for (const [dateKey, dayValue] of Object.entries(historyByDate)) {
+  for (const dateKey of new Set(dateKeys)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+      continue;
+    }
+
+    const daySnapshot = await get(child(deviceRootRef, `history/${dateKey}`));
+    const dayValue: unknown = daySnapshot.exists() ? daySnapshot.val() : null;
+
     if (!dayValue || typeof dayValue !== 'object' || Array.isArray(dayValue)) {
       continue;
     }
