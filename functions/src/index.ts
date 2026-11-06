@@ -25,6 +25,7 @@ import {
   type TrustedMutationDependencies,
 } from './trustedMutations.js';
 import { ingestTelemetry } from './telemetryIngest.js';
+import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -376,8 +377,9 @@ export const reconcileAuthorizationMirror = onSchedule(
   }
 );
 
-// Device contract decision 6: sampled, validated history from live telemetry.
-// Writes Firestore sensor_readings (flat + nested) with a validity summary.
+// Device contract decision 6 + Sprint 2 rules engine: validate, evaluate,
+// reconcile alerts/recommendations, sampled history, condition summary.
+// See docs/rule-engine.md. Firestore is written only when something changes.
 export const ingestDeviceTelemetry = onValueWritten(
   { ref: '/devices/{aquariumId}/telemetry' },
   async (event) => {
@@ -386,10 +388,49 @@ export const ingestDeviceTelemetry = onValueWritten(
     }
     const aquariumId = event.params.aquariumId;
     const result = await ingestTelemetry({ firestore: dependencies.firestore }, aquariumId, event.data.after.val());
-    if (result.written) {
-      logger.info('Telemetry history row written.', { aquariumId, docId: result.docId, sampleReason: result.sampleReason });
-    } else if (result.reason !== 'rate_limited') {
+    if (!result.ingested) {
       logger.warn('Telemetry not ingested.', { aquariumId, reason: result.reason });
+    } else if (result.firestoreWrites > 0) {
+      logger.info('Telemetry evaluated.', {
+        aquariumId,
+        classification: result.classification,
+        sampleReason: result.sampleReason,
+        alertOperations: result.alertOperations,
+        firestoreWrites: result.firestoreWrites,
+      });
     }
+  }
+);
+
+// Every minute: device_offline alerts from a stale RTDB updatedAt (60 s window).
+export const checkDeviceHeartbeat = onSchedule(
+  { schedule: 'every 1 minutes', retryCount: 0, maxInstances: 1, timeoutSeconds: 50 },
+  async () => {
+    const result = await checkDeviceHeartbeats(dependencies);
+    if (result.opened > 0 || result.resolved > 0) {
+      logger.info('Device heartbeat changes.', result);
+    }
+  }
+);
+
+// Daily: next-cleaning schedule and cleaning_due recommendations.
+export const checkCleaningSchedule = onSchedule(
+  { schedule: 'every day 06:00', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 300 },
+  async () => {
+    const result = await runDailyCleaningCheck({ firestore: dependencies.firestore });
+    logger.info('Cleaning schedule check completed.', result);
+  }
+);
+
+// A logged cleaning starts a new cleaning cycle (logging UI arrives in Sprint 4;
+// maintenance_actions are trusted-writes only until then).
+export const onMaintenanceActionLogged = onDocumentCreated(
+  { document: 'maintenance_actions/{actionId}' },
+  async (event) => {
+    const action = event.data?.data();
+    if (!action || action.actionType !== 'cleaning' || typeof action.aquariumId !== 'string') {
+      return;
+    }
+    await refreshCleaningSchedule({ firestore: dependencies.firestore }, action.aquariumId, { resolvePendingCleaning: true });
   }
 );
