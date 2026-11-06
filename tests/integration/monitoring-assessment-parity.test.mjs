@@ -116,11 +116,11 @@ mobileTest('production Firebase parsers reject malformed numbers before assessme
   }
 });
 
-mobileTest('real zero measurements remain valid numbers rather than missing values', () => {
+mobileTest('zero values parse as numbers but are assessed as sensor faults, not water conditions', () => {
   const raw = deviceFrom({ ph: 0, waterLevelPercent: 0, turbidity: 0, tdsPpm: 0 });
   assert.equal(normalizeTelemetry(raw).ph, 0);
   assert.equal(mapTelemetry(raw).waterLevelPercent, 0);
-  assert.equal(webFrom(normalizeTelemetry(raw)).overallSeverity, 'critical');
+  assert.equal(webFrom(normalizeTelemetry(raw)).recommendations.length, 0);
   assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now), webFrom(normalizeTelemetry(raw)));
 });
 

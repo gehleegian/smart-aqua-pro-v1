@@ -46,9 +46,9 @@ import {
 } from '../utils/monitoringHelpers';
 import {
   assessAquariumCondition,
-  type AssessmentTelemetry,
 } from '../utils/monitoringAssessment';
 import { createSimulatedTelemetry } from '../utils/monitoringSimulator';
+import { buildAssessmentTelemetry } from '../utils/dashboardHelpers';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -301,24 +301,7 @@ export function useMonitoringController() {
         : snapshot
           ? 'live'
           : 'unavailable';
-      const assessmentTelemetry: AssessmentTelemetry | null = snapshot
-        ? {
-            temperatureC: snapshot.temperatureC,
-            temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-            waterLevelPercent: snapshot.waterLevelPercent,
-            waterLevelValid: true,
-            tdsPpm: snapshot.tdsPpm,
-            tdsPurityPercent: snapshot.tdsPercent,
-            tdsValid: snapshot.hasFreshPurityTelemetry,
-            ph: snapshot.ph,
-            phValid: snapshot.hasFreshPhTelemetry,
-            turbidity: snapshot.turbidity,
-            turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-            filterState: snapshot.filterState,
-            equipmentStatus: snapshot.equipmentStatus,
-            powerStatus: snapshot.powerStatus,
-          }
-        : null;
+      const assessmentTelemetry = buildAssessmentTelemetry(snapshot);
       const assessment = assessAquariumCondition({
         profile: aquarium,
         telemetry: assessmentTelemetry,

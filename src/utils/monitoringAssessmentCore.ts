@@ -72,6 +72,8 @@ export type AssessmentTelemetry = {
   phValid: boolean;
   turbidity: number | null;
   turbidityValid: boolean;
+  /** Device-reported water presence. A 0% level is only trusted when this is explicitly false. */
+  waterPresent?: boolean;
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: 'Online' | 'Offline' | 'Power Interruption' | 'Unknown';
@@ -98,6 +100,45 @@ function finite(value: unknown): value is number {
 
 function bounded(value: unknown, min: number, max: number): value is number {
   return finite(value) && value >= min && value <= max;
+}
+
+// Sensor-fault rules (AGENTS.md §5, device contract decision 4). These are not
+// water-condition thresholds: they identify values a working sensor cannot
+// produce in an indoor aquarium, or well-known driver default/sentinel values.
+// A value that matches is treated as a sensor fault: severity "unavailable",
+// no water-condition alert, and no maintenance recommendation.
+// - pH: 0 (unset/disconnected probe) or outside 0-14.
+// - Temperature: 0 C (unset default), 85 C (DS18B20 power-on reset value),
+//   -127 C (DallasTemperature DEVICE_DISCONNECTED_C).
+// - TDS: 0 ppm (probe out of water or disconnected).
+// - Water level: 0% is accepted only when the device also reports waterPresent === false.
+export const SENSOR_FAULT_TEMPERATURE_SENTINELS_C = [0, 85, -127] as const;
+
+export type SensorFaultParameter = 'temperature' | 'ph' | 'tds' | 'waterLevel';
+
+export function getSensorFault(
+  parameter: SensorFaultParameter,
+  value: unknown,
+  context: { waterPresent?: boolean } = {}
+): string | null {
+  if (!finite(value)) return 'missing or malformed value';
+  switch (parameter) {
+    case 'ph':
+      if (value === 0) return 'pH 0 is a sensor default, not a water reading';
+      return value < 0 || value > 14 ? 'pH outside the physical 0-14 range' : null;
+    case 'temperature':
+      return (SENSOR_FAULT_TEMPERATURE_SENTINELS_C as readonly number[]).includes(value)
+        ? `temperature ${value} C is a sensor default/disconnected value`
+        : null;
+    case 'tds':
+      if (value < 0) return 'negative TDS';
+      return value === 0 ? 'TDS 0 ppm indicates a dry or disconnected probe' : null;
+    case 'waterLevel':
+      if (value < 0 || value > 100) return 'water level outside 0-100%';
+      return value === 0 && context.waterPresent !== false
+        ? 'water level 0% without a confirming waterPresent=false'
+        : null;
+  }
 }
 
 export const TELEMETRY_STALE_MS = 30_000;
@@ -344,13 +385,22 @@ export function assessAquariumCondition(options: {
 }): AquariumConditionAssessment {
   const assessedAt = options.assessedAt ?? Date.now();
   const input = options.source === 'unavailable' ? null : options.telemetry;
+  const tdsPpmFault = input && input.tdsPpm !== null && input.tdsPpm !== undefined
+    ? getSensorFault('tds', input.tdsPpm)
+    : null;
   const telemetry: AssessmentTelemetry = input ? {
     ...input,
-    temperatureC: finite(input.temperatureC) ? input.temperatureC : null,
-    waterLevelPercent: bounded(input.waterLevelPercent, 0, 100) ? input.waterLevelPercent : null,
-    tdsPurityPercent: bounded(input.tdsPurityPercent, 0, 100) ? input.tdsPurityPercent : null,
-    tdsPpm: finite(input.tdsPpm) && input.tdsPpm >= 0 ? input.tdsPpm : null,
-    ph: bounded(input.ph, 0, 14) ? input.ph : null,
+    temperatureC: getSensorFault('temperature', input.temperatureC) ? null : input.temperatureC,
+    waterLevelPercent: getSensorFault('waterLevel', input.waterLevelPercent, { waterPresent: input.waterPresent })
+      ? null
+      : input.waterLevelPercent,
+    // Purity percent is a conversion of ppm. With no ppm, a bare 0% is treated as an unset default.
+    tdsPurityPercent: !tdsPpmFault && bounded(input.tdsPurityPercent, 0, 100) &&
+      (input.tdsPurityPercent > 0 || finite(input.tdsPpm))
+      ? input.tdsPurityPercent
+      : null,
+    tdsPpm: finite(input.tdsPpm) && !tdsPpmFault ? input.tdsPpm : null,
+    ph: getSensorFault('ph', input.ph) ? null : input.ph,
     turbidity: finite(input.turbidity) && input.turbidity >= 0 ? input.turbidity : null,
     filterState: input.filterState === 'Active' || input.filterState === 'Inactive' ? input.filterState : undefined,
     equipmentStatus: ['Normal', 'Warning', 'Fault'].includes(input.equipmentStatus ?? '') ? input.equipmentStatus : 'Unknown',

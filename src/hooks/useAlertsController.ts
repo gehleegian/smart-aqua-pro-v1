@@ -1,99 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import { getAlertsPageData } from '../services/alertsService';
+import { isRealtimeDatabaseConfigured, subscribeToDeviceShadow } from '../services/deviceService';
 import type {
-  AlertCategory,
-  AlertSeverity,
   AlertSeverityFilter,
   AlertStatusFilter,
   AquariumAlert,
 } from '../types/alerts';
 import type { Aquarium } from '../types/aquarium';
+import type { DeviceShadow } from '../types/device';
 import type { UserRole } from '../types/user';
 import {
+  buildAlertCandidates,
   buildDistribution,
   buildSummaryCounts,
   filterAlerts,
   getAlertPanelTitle,
   getAlertStatus,
+  getErrorMessage,
   sortAlertsByRecency,
+  syncAlertHistory,
 } from '../utils/alertsHelpers';
+import { mapDashboardAquariums, mergeDashboardAquariums } from '../utils/dashboardHelpers';
 
-function makeAlert(
-  aquarium: Aquarium,
-  category: AlertCategory,
-  type: AlertSeverity,
-  message: string,
-  suffix: string
-): AquariumAlert {
-  const now = Date.now();
-
-  return {
-    id: `${aquarium.id}:${suffix}`,
-    fingerprint: `${aquarium.id}:${category}:${suffix}`,
-    aquariumId: aquarium.id,
-    tankName: aquarium.name,
-    ownerName: aquarium.ownerName,
-    type,
-    category,
-    message,
-    firstDetectedAt: now,
-    lastDetectedAt: now,
-    acknowledgedAt: null,
-    resolvedAt: null,
-  };
-}
-
-function buildStaticAlerts(aquariums: Aquarium[]) {
-  return sortAlertsByRecency(
-    aquariums.flatMap((aquarium) => {
-      const alerts: AquariumAlert[] = [];
-
-      if (aquarium.temp < aquarium.minTemp || aquarium.temp > aquarium.maxTemp) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'temperature',
-            'warning',
-            `${aquarium.name} temperature is outside the configured range.`,
-            'temperature'
-          )
-        );
-      }
-
-      if (aquarium.level < aquarium.minLevel) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'water_level',
-            aquarium.level <= Math.max(aquarium.minLevel - 10, 0) ? 'critical' : 'warning',
-            `${aquarium.name} water level is below the minimum threshold.`,
-            'water-level'
-          )
-        );
-      }
-
-      const qualityWarning =
-        typeof aquarium.tdsPpm === 'number'
-          ? aquarium.tdsPpm > 500
-          : aquarium.quality < aquarium.minQuality;
-
-      if (qualityWarning) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'water_quality',
-            'warning',
-            `${aquarium.name} water purity needs attention.`,
-            'water-quality'
-          )
-        );
-      }
-
-      return alerts;
-    })
-  );
-}
+const ALERT_REFRESH_MS = 5000;
 
 export function useAlertsController() {
   const [aquariums, setAquariums] = useState<Aquarium[]>([]);
@@ -104,6 +34,9 @@ export function useAlertsController() {
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deviceShadows, setDeviceShadows] = useState<Record<string, DeviceShadow>>({});
+  const [liveDataError, setLiveDataError] = useState('');
+  const [telemetryNow, setTelemetryNow] = useState(() => Date.now());
 
   const loadAlerts = useCallback(async () => {
     try {
@@ -130,7 +63,6 @@ export function useAlertsController() {
 
       setUserRole(data.userProfile.role);
       setAquariums(data.aquariums);
-      setAlerts(buildStaticAlerts(data.aquariums));
     } catch (loadError) {
       console.error(loadError);
       setError('Failed to load alerts.');
@@ -148,6 +80,62 @@ export function useAlertsController() {
 
     return () => window.clearTimeout(loadTimer);
   }, [loadAlerts]);
+
+  const aquariumSubscriptionKey = useMemo(
+    () => JSON.stringify(aquariums.map((aquarium) => aquarium.id).sort()),
+    [aquariums]
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTelemetryNow(Date.now()), ALERT_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const aquariumIds = JSON.parse(aquariumSubscriptionKey) as string[];
+    if (aquariumIds.length === 0) return;
+
+    if (!isRealtimeDatabaseConfigured()) {
+      const timer = window.setTimeout(
+        () => setLiveDataError('Realtime Database is not configured. Live device data is unavailable.'),
+        0
+      );
+      return () => window.clearTimeout(timer);
+    }
+
+    const unsubscribers = aquariumIds.map((aquariumId) =>
+      subscribeToDeviceShadow(
+        aquariumId,
+        (shadow) => setDeviceShadows((prev) => ({ ...prev, [aquariumId]: shadow })),
+        {
+          onError: (subscriptionError) =>
+            setLiveDataError(
+              getErrorMessage(subscriptionError, `Live device data for aquarium ${aquariumId} is unavailable.`)
+            ),
+        }
+      )
+    );
+
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
+  }, [aquariumSubscriptionKey]);
+
+  // Alerts come only from the shared assessment of validated, fresh telemetry.
+  // Stored profile values and sensor-fault readings never raise alerts.
+  const alertCandidates = useMemo(
+    () => buildAlertCandidates(
+      mergeDashboardAquariums(mapDashboardAquariums(aquariums), deviceShadows, telemetryNow)
+    ),
+    [aquariums, deviceShadows, telemetryNow]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAlerts((prev) => sortAlertsByRecency(syncAlertHistory(prev, alertCandidates, telemetryNow)));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [alertCandidates, telemetryNow]);
 
   const filteredAlerts = useMemo(
     () => filterAlerts(alerts, selectedSeverity, selectedStatus),
@@ -172,7 +160,7 @@ export function useAlertsController() {
     distribution: buildDistribution(alerts),
     error,
     filteredAlerts,
-    liveDataError: '',
+    liveDataError,
     loading,
     openAlertCount: alerts.filter((alert) => getAlertStatus(alert) === 'active').length,
     panelTitle: getAlertPanelTitle(userRole),

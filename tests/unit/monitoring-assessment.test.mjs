@@ -111,7 +111,7 @@ function parameter(result, name) {
 for (const [name, field, cases] of [
   ['temperature', 'temperatureC', [[18, 'critical'], [18.01, 'warning'], [19.99, 'warning'], [20, 'normal'], [24, 'normal'], [24.01, 'warning'], [25.99, 'warning'], [26, 'critical']]],
   ['ph', 'ph', [[6, 'critical'], [6.01, 'warning'], [6.5, 'normal'], [7.5, 'normal'], [7.99, 'warning'], [8, 'critical']]],
-  ['waterLevel', 'waterLevelPercent', [[0, 'critical'], [60, 'critical'], [60.01, 'warning'], [69.99, 'warning'], [70, 'normal'], [100, 'normal']]],
+  ['waterLevel', 'waterLevelPercent', [[0.5, 'critical'], [60, 'critical'], [60.01, 'warning'], [69.99, 'warning'], [70, 'normal'], [100, 'normal']]],
   ['tds', 'tdsPurityPercent', [[70, 'critical'], [70.01, 'warning'], [79.99, 'warning'], [80, 'normal'], [100, 'normal']]],
   ['turbidity', 'turbidity', [[0, 'normal'], [5, 'normal'], [5.01, 'warning'], [10, 'warning'], [10.01, 'critical']]],
 ]) {
@@ -204,4 +204,38 @@ test('filtration and equipment evaluate only their reported status', () => {
   assert.match(parameter(evaluate(), 'filtration').message, /does not establish filtration effectiveness/);
   assert.equal(parameter(evaluate({ equipmentStatus: 'Warning' }), 'equipment').severity, 'warning');
   assert.equal(parameter(evaluate({ equipmentStatus: 'Fault' }), 'equipment').severity, 'critical');
+});
+
+test('sensor-fault values are unavailable and never produce recommendations', () => {
+  const base = {
+    temperatureC: 22, temperatureValid: true, waterLevelPercent: 90, waterLevelValid: true,
+    waterPresent: true, tdsPpm: 220, tdsPurityPercent: 90, tdsValid: true, ph: 7, phValid: true,
+    turbidity: 2, turbidityValid: true, filterState: 'Active', equipmentStatus: 'Normal', powerStatus: 'Online',
+  };
+  for (const [parameter, patch] of [
+    ['ph', { ph: 0 }], ['ph', { ph: 14.5 }], ['ph', { ph: -0.1 }],
+    ['temperature', { temperatureC: 0 }], ['temperature', { temperatureC: 85 }], ['temperature', { temperatureC: -127 }],
+    ['tds', { tdsPpm: 0, tdsPurityPercent: 0 }], ['tds', { tdsPpm: null, tdsPurityPercent: 0 }],
+    ['waterLevel', { waterLevelPercent: 0 }], ['waterLevel', { waterLevelPercent: 0, waterPresent: undefined }],
+  ]) {
+    const result = assessAquariumCondition({ profile, source: 'live', assessedAt: 1, telemetry: { ...base, ...patch } });
+    const item = result.parameters.find((p) => p.parameter === parameter);
+    assert.equal(item.severity, 'unavailable', JSON.stringify(patch));
+    assert.equal(item.recommendation, undefined, JSON.stringify(patch));
+    assert.deepEqual(result.recommendations, [], JSON.stringify(patch));
+  }
+});
+
+test('confirmed empty tank and converted 0% TDS purity with real ppm remain assessable', () => {
+  const base = {
+    temperatureC: 22, temperatureValid: true, waterLevelPercent: 90, waterLevelValid: true,
+    tdsPpm: 220, tdsPurityPercent: 90, tdsValid: true, ph: 7, phValid: true,
+    turbidity: 2, turbidityValid: true, filterState: 'Active', equipmentStatus: 'Normal', powerStatus: 'Online',
+  };
+  const empty = assessAquariumCondition({ profile, source: 'live', assessedAt: 1,
+    telemetry: { ...base, waterLevelPercent: 0, waterPresent: false } });
+  assert.equal(empty.parameters.find((p) => p.parameter === 'waterLevel').severity, 'critical');
+  const highTds = assessAquariumCondition({ profile, source: 'live', assessedAt: 1,
+    telemetry: { ...base, tdsPpm: 1281.4, tdsPurityPercent: 0 } });
+  assert.equal(highTds.parameters.find((p) => p.parameter === 'tds').severity, 'critical');
 });

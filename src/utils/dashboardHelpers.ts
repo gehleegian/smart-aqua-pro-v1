@@ -41,6 +41,33 @@ export function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+export type FreshTelemetrySnapshot = NonNullable<ReturnType<typeof getFreshTelemetrySnapshot>>;
+
+// Single mapping from a validated live snapshot to the shared assessment input.
+// Used by the dashboard, monitoring, and alerts views so they classify identically.
+export function buildAssessmentTelemetry(
+  snapshot: FreshTelemetrySnapshot | null
+): AssessmentTelemetry | null {
+  if (!snapshot) return null;
+  return {
+    temperatureC: snapshot.temperatureC,
+    temperatureValid: snapshot.hasFreshTemperatureTelemetry,
+    waterLevelPercent: snapshot.waterLevelPercent,
+    waterLevelValid: true,
+    waterPresent: snapshot.waterPresent,
+    tdsPpm: snapshot.tdsPpm,
+    tdsPurityPercent: snapshot.tdsPercent,
+    tdsValid: snapshot.hasFreshPurityTelemetry,
+    ph: snapshot.ph,
+    phValid: snapshot.hasFreshPhTelemetry,
+    turbidity: snapshot.turbidity,
+    turbidityValid: snapshot.hasFreshTurbidityTelemetry,
+    filterState: snapshot.filterState,
+    equipmentStatus: snapshot.equipmentStatus,
+    powerStatus: snapshot.powerStatus,
+  };
+}
+
 export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
@@ -91,24 +118,7 @@ export function mergeDashboardAquariums(
         ? { ...aquarium.manualStatus, filter: snapshot.filterState }
         : aquarium.manualStatus,
     };
-    const assessmentTelemetry: AssessmentTelemetry | null = snapshot
-      ? {
-          temperatureC: snapshot.temperatureC,
-          temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-          waterLevelPercent: snapshot.waterLevelPercent,
-          waterLevelValid: true,
-          tdsPpm: snapshot.tdsPpm,
-          tdsPurityPercent: snapshot.tdsPercent,
-          tdsValid: snapshot.hasFreshPurityTelemetry,
-          ph: snapshot.ph,
-          phValid: snapshot.hasFreshPhTelemetry,
-          turbidity: snapshot.turbidity,
-          turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-          filterState: snapshot.filterState,
-          equipmentStatus: snapshot.equipmentStatus,
-          powerStatus: snapshot.powerStatus,
-        }
-      : null;
+    const assessmentTelemetry = buildAssessmentTelemetry(snapshot);
     const assessment = assessAquariumCondition({
       profile: nextAquarium,
       telemetry: assessmentTelemetry,
