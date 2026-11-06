@@ -27,11 +27,13 @@
     "test:firestore-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-firestore-auth \"node --test tests/firestore/firestore.rules.test.mjs\"",
     "test:email-verification": "firebase emulators:exec --only auth --project demo-smartaqua-email-verification \"node --experimental-strip-types --test tests/auth/email-verification.test.mjs\"",
     "dev:plan-legacy-policy": "node functions/scripts/backfillLegacyEmailVerificationPolicy.mjs",
-    "test:security": "npm run test:client-contracts && npm run test:aquarium-profile && npm run test:auth-sync && npm run test:auth-sync-trigger && npm run test:trusted-mutations && npm run test:trusted-mutation-callables && npm run test:email-verification && npm run test:firestore-rules && npm run test:rtdb-rules && npm run test:org-access",
+    "test:security": "npm run test:client-contracts && npm run test:aquarium-profile && npm run test:auth-sync && npm run test:auth-sync-trigger && npm run test:trusted-mutations && npm run test:trusted-mutation-callables && npm run test:email-verification && npm run test:firestore-rules && npm run test:rtdb-rules && npm run test:org-access && npm run test:firestore-org-rules && npm run test:rtdb-org-rules",
     "test:device-heartbeat": "npm run build:functions && firebase emulators:exec --only firestore,database --project demo-smartaqua-device-heartbeat \"node --test functions/lib/test/deviceHeartbeat.test.js\"",
     "test:rule-engine": "node --experimental-strip-types --test tests/unit/rule-engine.test.mjs",
     "seed:rules": "node --experimental-strip-types scripts/seed-rules.ts",
-    "test:org-access": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-org-access \"node --test functions/lib/test/orgAccess.test.js\""
+    "test:org-access": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-org-access \"node --test functions/lib/test/orgAccess.test.js\"",
+    "test:firestore-org-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-firestore-org \"node --test tests/firestore/org-access.rules.test.mjs\"",
+    "test:rtdb-org-rules": "firebase emulators:exec --only database --project demo-smartaqua-rtdb-org \"node --test tests/rtdb/org-access.rules.test.mjs\""
   },
   "dependencies": {
     "clsx": "^2.1.1",

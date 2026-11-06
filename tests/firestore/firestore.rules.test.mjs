@@ -230,8 +230,11 @@ test('FS-01 verified owner retains normal aquarium access while unblocked', asyn
   await assertSucceeds(batch.commit());
 });
 
-test('FS-01A1 verified owner can query only their aquariums', async () => {
-  const snapshot = await assertSucceeds(
+// Sprint 3: list queries must filter on orgId (tests/firestore/org-access.rules.test.mjs).
+// The pre-migration ownerId query is denied, which is why migrate-orgs runs
+// before these rules are deployed (docs/migration-live.md).
+test('FS-01A1 the legacy ownerId list query is denied after the org model', async () => {
+  await assertFails(
     getDocs(
       query(
         collection(userDatabase(), 'aquariums'),
@@ -239,8 +242,6 @@ test('FS-01A1 verified owner can query only their aquariums', async () => {
       )
     )
   );
-
-  assert.deepEqual(snapshot.docs.map((entry) => entry.id), [AQUARIUM_A]);
 });
 
 test('FS-01A2 owner query cannot request another users aquariums', async () => {
@@ -292,7 +293,10 @@ test('FS-01B2 explicitly exempt legacy owner can query only their aquariums', as
     );
   });
   const database = userDatabase(USER_A, false);
-  const snapshot = await assertSucceeds(
+  // Direct reads keep working for an exempt legacy owner; list queries need orgId.
+  await assertSucceeds(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
+  await assertFails(getDoc(doc(database, 'aquariums', AQUARIUM_B)));
+  await assertFails(
     getDocs(
       query(
         collection(database, 'aquariums'),
@@ -300,8 +304,6 @@ test('FS-01B2 explicitly exempt legacy owner can query only their aquariums', as
       )
     )
   );
-
-  assert.deepEqual(snapshot.docs.map((entry) => entry.id), [AQUARIUM_A]);
 });
 
 test('FS-01C missing policy fails closed for an unverified owner', async () => {
@@ -408,13 +410,16 @@ test('FS-06 a user security block denies the blocked account', async () => {
   );
 });
 
-test('FS-07 Admin can read the directory but not live aquarium records', async () => {
+// Sprint 3 access model: the platform admin reads everything, writes nothing.
+test('FS-07 platform admin reads the directory and live aquarium records but cannot write them', async () => {
   const database = adminDatabase();
   await assertSucceeds(
     getDocs(query(collection(database, 'aquarium_directory'), where('ownerId', '==', USER_A)))
   );
-  await assertFails(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
-  await assertFails(getDoc(doc(database, 'alert_records', 'alert-a')));
+  await assertSucceeds(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
+  await assertSucceeds(getDoc(doc(database, 'alert_records', 'alert-a')));
+  await assertFails(updateDoc(doc(database, 'aquariums', AQUARIUM_A), { name: 'Admin edit' }));
+  await assertFails(updateDoc(doc(database, 'alert_records', 'alert-a'), { isRead: true }));
 });
 
 test('FS-08 clients cannot read or write trusted workflow collections', async () => {
@@ -428,7 +433,8 @@ test('FS-08 clients cannot read or write trusted workflow collections', async ()
   assert.ok(true);
 });
 
-test('FS-09 owner can create and reload a complete Goldfish profile without invented bioload', async () => {
+// Sprint 3: aquariums are created only by the claimDevice callable.
+test('FS-09 clients cannot create aquariums directly, even with a complete profile', async () => {
   const database = userDatabase();
   const aquariumId = 'aquarium-profile-create';
   const { bioload: _legacyBioload, ...profileAquarium } = aquarium;
@@ -444,15 +450,7 @@ test('FS-09 owner can create and reload a complete Goldfish profile without inve
     name: 'Profile Aquarium',
   });
 
-  await assertSucceeds(batch.commit());
-  const saved = await assertSucceeds(getDoc(doc(database, 'aquariums', aquariumId)));
-  assert.equal(saved.data().tankType, 'Freshwater');
-  assert.equal(saved.data().species[0], 'Goldfish');
-  assert.equal(saved.data().fishCount, 2);
-  assert.equal(saved.data().hasFiltrationSystem, true);
-  assert.equal(saved.data().minPh, 6.5);
-  assert.equal(saved.data().maxPh, 7.5);
-  assert.equal(saved.data().bioload, undefined);
+  await assertFails(batch.commit());
 });
 
 test('FS-10 owner can update structural profile fields with a matching directory record', async () => {
@@ -827,7 +825,8 @@ test('FS-31 owners read only their own recommendations, alerts and maintenance a
   await assertFails(getDocs(collection(database, 'recommendations')));
   await assertFails(getDoc(doc(database, 'alert_records', 'alert-engine-b')));
   await assertFails(getDoc(doc(database, 'maintenance_actions', 'clean-b')));
-  await assertFails(getDoc(doc(adminDatabase(), 'recommendations', 'rec-a')), 'admins do not read live aquarium records (as alert_records)');
+  await assertSucceeds(getDoc(doc(adminDatabase(), 'recommendations', 'rec-a')), 'the platform admin reads (Sprint 3)');
+  await assertFails(updateDoc(doc(adminDatabase(), 'recommendations', 'rec-a'), { status: 'applied', resolvedAt: Date.now(), resolvedBy: ADMIN_A }));
 });
 
 test('FS-32 the owner can mark a pending recommendation applied or dismissed, and nothing else', async () => {

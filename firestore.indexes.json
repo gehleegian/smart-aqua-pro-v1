@@ -4,36 +4,123 @@
       "collectionGroup": "sensor_readings",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "aquariumId", "order": "ASCENDING" },
-        { "fieldPath": "dateKey", "order": "ASCENDING" },
-        { "fieldPath": "recordedAtEpoch", "order": "ASCENDING" }
+        {
+          "fieldPath": "aquariumId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recordedAtEpoch",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "recommendations",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "aquariumId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "aquariumId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "alert_records",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "aquarium_id", "order": "ASCENDING" },
-        { "fieldPath": "lastSeenAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "aquarium_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastSeenAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "maintenance_actions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "aquariumId", "order": "ASCENDING" },
-        { "fieldPath": "actionType", "order": "ASCENDING" },
-        { "fieldPath": "performedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "aquariumId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "actionType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "performedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "aquariums",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "caretakerIds",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "audit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "members",
+      "fieldPath": "uid",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }
