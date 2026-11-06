@@ -248,6 +248,8 @@ export function buildDeviceControlProfile({
     mode,
     automationEnabled: automationSettings.enabled,
     feedingTimes: automationSettings.feedingTimes,
+    lightOnTime: automationSettings.lightOnTime,
+    lightOffTime: automationSettings.lightOffTime,
     filtrationStartTime: automationSettings.filtrationStartTime,
     filtrationRuntimeHours: automationSettings.filtrationRuntimeHours,
     manualLightState: aquarium.light === 'On' ? 'On' : 'Off',
