@@ -1,16 +1,22 @@
 import type { Aquarium } from '../types/aquarium';
 import type { DeviceTelemetry } from '../types/device';
 import type { SimulationScenario } from '../types/monitoring';
+import { normalizeTelemetry } from './deviceTelemetryParser.ts';
+
+// Dev-only simulator. It builds a raw payload in the device contract shape
+// (docs/device-contract.md) and passes it through the same parser used for
+// RTDB telemetry, so simulated and live data follow one contract. It is never
+// written to Firebase.
 
 function midpoint(minimum: number, maximum: number) {
   return minimum + (maximum - minimum) / 2;
 }
 
-export function createSimulatedTelemetry(
+export function createSimulatedContractPayload(
   aquarium: Aquarium,
   scenario: SimulationScenario,
   now = Date.now()
-): DeviceTelemetry {
+): Record<string, unknown> {
   const minPh = aquarium.minPh ?? 6.5;
   const maxPh = aquarium.maxPh ?? 7.5;
   const normal = {
@@ -49,13 +55,29 @@ export function createSimulatedTelemetry(
         }
       : {};
 
-  return {
+  const payload: Record<string, unknown> = {
     ...normal,
     ...scenarioValues,
     temperatureReadingValid: true,
     waterPresent: true,
     tdsReadingValid: true,
+    phReadingValid: true,
+    turbidityReadingValid: true,
     updatedAt: now,
     online: true,
   };
+  // RTDB has no undefined; drop absent optional fields as the device would.
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+export function createSimulatedTelemetry(
+  aquarium: Aquarium,
+  scenario: SimulationScenario,
+  now = Date.now()
+): DeviceTelemetry {
+  const telemetry = normalizeTelemetry(createSimulatedContractPayload(aquarium, scenario, now));
+  if (!telemetry) {
+    throw new Error('Simulated payload does not satisfy the device telemetry contract.');
+  }
+  return telemetry;
 }

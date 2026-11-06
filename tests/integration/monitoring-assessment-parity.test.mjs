@@ -77,7 +77,7 @@ mobileTest('web and mobile adapters produce identical assessments', () => {
     { waterLevelPercent: 101 }, { waterLevelPercent: -1 }, { tdsPercent: 120 },
     { waterPresent: false, waterLevelPercent: 0 },
     { temperatureReadingValid: false }, { tdsReadingValid: false },
-    { updatedAt: now - 30_000 }, { updatedAt: now - 30_001 },
+    { updatedAt: now - 60_000 }, { updatedAt: now - 60_001 },
     { online: false }, { updatedAt: undefined }, { updatedAt: NaN },
     { powerStatus: 'Power Interruption' }, { temperatureC: NaN }, { waterLevelPercent: undefined },
   ]) {
@@ -164,7 +164,7 @@ mobileTest('future timestamps are unavailable in both apps, including just beyon
 });
 
 mobileTest('freshness respects exact stale boundary and server clock correction', () => {
-  for (const [age, expected] of [[0, 'live'], [30_000, 'live'], [30_001, 'offline']]) {
+  for (const [age, expected] of [[0, 'live'], [60_000, 'live'], [60_001, 'offline']]) {
     const telemetry = deviceFrom({ updatedAt: now - age });
     assert.equal(getDeviceTelemetryState(telemetry, now), expected);
     assert.equal(getTelemetryDisplay(telemetry, null, now).state, expected);
@@ -183,17 +183,17 @@ mobileTest('mobile presentation distinguishes retained readings from current or 
   const initial = getTelemetryDisplay(live, null, now);
   assert.equal(initial.isLastKnown, false);
   assert.equal(initial.source, 'live');
-  const stale = getTelemetryDisplay(live, null, now + 30_001);
+  const stale = getTelemetryDisplay(live, null, now + 60_001);
   assert.equal(stale.isLastKnown, true);
   assert.equal(stale.source, 'unavailable');
   assert.equal(stale.telemetry, live);
   assert.equal(getTelemetryDisplay(deviceFrom({ online: false }), null, now).isLastKnown, true);
   assert.equal(getTelemetryDisplay(undefined, null, now).telemetry, null);
   assert.equal(getTelemetryDisplay(deviceFrom({ updatedAt: NaN }), null, now).telemetry, null);
-  const reconnected = getTelemetryDisplay(deviceFrom({ updatedAt: now + 31_000 }), null, now + 31_000);
+  const reconnected = getTelemetryDisplay(deviceFrom({ updatedAt: now + 61_000 }), null, now + 61_000);
   assert.equal(reconnected.source, 'live');
   assert.equal(reconnected.isLastKnown, false);
-  assert.equal(getTelemetryDisplay(null, live, now + 90_000).source, 'simulated');
+  assert.equal(getTelemetryDisplay(null, live, now + 120_000).source, 'simulated');
 });
 
 test('dashboard statistics contain no manufactured history and hide invalid temperatures', async () => {

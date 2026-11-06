@@ -1,6 +1,6 @@
 import type { Aquarium } from '../../types/aquarium';
 import type { DeviceTelemetryLogEntry } from '../../types/device';
-import { getRowStatus, toFixedValue } from '../../utils/dataLogsHelpers';
+import { formatHistoryValue, getRowStatus, toFixedValue } from '../../utils/dataLogsHelpers';
 import Badge from '../ui/Badge';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -49,20 +49,20 @@ export function HistoricalDataTable({
                   return (
                     <tr key={`${entry.recordedAtEpoch}-${entry.sampleCount || 1}`} className="text-slate-300">
                       <td className="px-3 py-2">{entry.recordedAt}</td>
-                      <td className="px-3 py-2">{toFixedValue(entry.temperatureC)}°C</td>
-                      <td className="px-3 py-2">{toFixedValue(entry.waterLevelPercent, 0)}%</td>
+                      <td className="px-3 py-2">{formatHistoryValue(entry, 'temperature', () => `${toFixedValue(entry.temperatureC)}°C`)}</td>
+                      <td className="px-3 py-2">{formatHistoryValue(entry, 'waterLevel', () => `${toFixedValue(entry.waterLevelPercent, 0)}%`)}</td>
                       <td className="px-3 py-2">
-                        {typeof entry.tdsPpm === 'number' ? `${toFixedValue(entry.tdsPpm, 0)} ppm` : '--'}
+                        {formatHistoryValue(entry, 'tds', () => typeof entry.tdsPpm === 'number' ? `${toFixedValue(entry.tdsPpm, 0)} ppm` : '--')}
                       </td>
                       <td className="px-3 py-2">
-                        {typeof entry.ph === 'number' ? toFixedValue(entry.ph, 1) : '--'}
+                        {formatHistoryValue(entry, 'ph', () => toFixedValue(entry.ph as number, 1))}
                       </td>
                       <td className="px-3 py-2">
-                        {typeof entry.turbidity === 'number' ? `${toFixedValue(entry.turbidity, 0)} NTU` : '--'}
+                        {formatHistoryValue(entry, 'turbidity', () => `${toFixedValue(entry.turbidity as number, 0)} NTU`)}
                       </td>
                       <td className="px-3 py-2">{entry.powerStatus || '--'}</td>
                       <td className="px-3 py-2">
-                        <Badge variant={status === 'normal' ? 'success' : 'warning'}>{status}</Badge>
+                        <Badge variant={status === 'normal' ? 'success' : status === 'critical' ? 'danger' : 'warning'}>{status}</Badge>
                       </td>
                     </tr>
                   );

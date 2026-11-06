@@ -105,6 +105,8 @@ export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquariu
     hasFreshTurbidityTelemetry: false,
     hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
+    sensorValidity: null,
+    commandStatus: 'none',
   }));
 }
 

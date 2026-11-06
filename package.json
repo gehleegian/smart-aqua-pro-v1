@@ -18,6 +18,7 @@
     "test:client-contracts": "node --experimental-strip-types --test tests/integration/trusted-mutation-contracts.test.mjs",
     "test:aquarium-profile": "node --experimental-strip-types --test tests/unit/aquarium-profile.test.mjs",
     "test:monitoring-assessment": "node --experimental-strip-types --test tests/unit/monitoring-assessment.test.mjs",
+    "test:device-contract": "node --experimental-strip-types --test tests/unit/device-contract.test.mjs",
     "test:alerts-assessment": "node --experimental-strip-types --test tests/unit/alerts-assessment.test.mjs",
     "test:monitoring-parity": "node --experimental-strip-types --test tests/integration/monitoring-assessment-parity.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-firestore-auth \"node --test tests/firestore/firestore.rules.test.mjs\"",

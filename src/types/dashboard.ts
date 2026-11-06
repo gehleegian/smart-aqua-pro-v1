@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { Aquarium, AquariumDirectoryEntry } from './aquarium';
-import type { DeviceTelemetryState } from './device';
+import type { CommandStatus, DeviceTelemetryState, TelemetryValidity } from './device';
 import type { UserData } from './user';
 import type { AquariumConditionAssessment, TelemetrySource } from './monitoring';
 
@@ -21,6 +21,8 @@ export type DashboardAquarium = Aquarium & {
   hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
   lastUpdatedAt: number | null;
+  sensorValidity: TelemetryValidity | null;
+  commandStatus: CommandStatus;
 };
 
 export type OwnerGroup = {

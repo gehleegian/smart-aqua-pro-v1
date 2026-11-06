@@ -25,6 +25,7 @@ import {
 } from '../types/device';
 import type {
   DeviceCommand,
+  DeviceCommandAck,
   DeviceControlProfile,
   DeviceShadow,
   DeviceTelemetry,
@@ -34,6 +35,7 @@ import type {
 const emptyDeviceShadow: DeviceShadow = {
   control: null,
   latestCommand: null,
+  latestAck: null,
   telemetry: null,
 };
 
@@ -415,6 +417,21 @@ export async function backfillSensorReadingsFromDeviceHistory(
   };
 }
 
+function normalizeCommandAck(value: unknown): DeviceCommandAck | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const ack = value as Record<string, unknown>;
+  if (typeof ack.commandId !== 'string' || (ack.status !== 'done' && ack.status !== 'failed') ||
+      typeof ack.executedAt !== 'number' || !Number.isFinite(ack.executedAt)) {
+    return null;
+  }
+  return {
+    commandId: ack.commandId,
+    status: ack.status,
+    executedAt: ack.executedAt,
+    ...(typeof ack.error === 'string' ? { error: ack.error } : {}),
+  };
+}
+
 export function subscribeToDeviceShadow(
   aquariumId: string,
   callback: (shadow: DeviceShadow) => void,
@@ -545,6 +562,29 @@ export function subscribeToDeviceShadow(
 
       if (subscriptionsClosed) {
         latestCommandUnsubscribe();
+        return;
+      }
+
+      // Command acknowledgements are additive (device contract decision 5).
+      // A denied or missing ack node must not break telemetry, so errors here
+      // only clear the ack instead of closing the whole subscription.
+      const latestAckUnsubscribe = onValue(
+        child(deviceRootRef, 'commandAck/latest'),
+        (snapshot) => {
+          if (cancelled || subscriptionsClosed) return;
+          shadow = { ...shadow, latestAck: normalizeCommandAck(snapshot.val()) };
+          if (initializedChildren.size === 3) callback(shadow);
+        },
+        (error) => {
+          console.warn('Command acknowledgements are unavailable.', error);
+          if (cancelled || subscriptionsClosed) return;
+          shadow = { ...shadow, latestAck: null };
+        }
+      );
+      unsubscribers.push(latestAckUnsubscribe);
+
+      if (subscriptionsClosed) {
+        latestAckUnsubscribe();
       }
     } catch (error) {
       // The subscription reports handled access/configuration failures to the

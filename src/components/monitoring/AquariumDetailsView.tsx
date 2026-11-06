@@ -1,5 +1,7 @@
 import { ArrowLeft, RefreshCw, Settings } from 'lucide-react';
 import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
+import { getSensorDisplay } from '../../utils/sensorDisplay';
+import { getCommandStatusText } from '../../types/device';
 import type { AutomationSettings } from '../../types/aquarium';
 import type {
   AssessmentSeverity,
@@ -101,61 +103,25 @@ export function AquariumDetailsView({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            <Reading
-              label="Temperature"
-              value={
-                aquarium.hasFreshTemperatureTelemetry
-                  ? `${aquarium.temp.toFixed(1)} C`
-                  : '--'
-              }
-              status={
-                aquarium.hasFreshTemperatureTelemetry
-                  ? 'Live telemetry'
-                  : 'Waiting for telemetry'
-              }
-            />
-            <Reading
-              label="Water Level"
-              value={formatWaterLevel(aquarium.level, aquarium.hasFreshTelemetry)}
-              status={!aquarium.hasFreshTelemetry ? 'Waiting for telemetry' : formatWaterLevel(aquarium.level) === '--' ? 'Invalid reading' : 'Live telemetry'}
-            />
-            <Reading
-              label="TDS Quality"
-              value={
-                aquarium.hasFreshPurityTelemetry
-                  ? typeof aquarium.tdsPpm === 'number'
-                    ? `${Math.round(aquarium.tdsPpm)} ppm`
-                    : getQualityLabel(aquarium.quality, aquarium.tdsPpm)
-                  : '--'
-              }
-              status={
-                aquarium.hasFreshPurityTelemetry
-                  ? getQualityLabel(aquarium.quality, aquarium.tdsPpm)
-                  : 'Waiting for telemetry'
-              }
-            />
-            <Reading
-              label="pH Level"
-              value={
-                aquarium.hasFreshPhTelemetry && typeof aquarium.ph === 'number'
-                  ? aquarium.ph.toFixed(1)
-                  : '--'
-              }
-              status={aquarium.hasFreshPhTelemetry ? 'Live telemetry' : 'Waiting for telemetry'}
-            />
-            <Reading
-              label="Turbidity"
-              value={
-                aquarium.hasFreshTurbidityTelemetry && typeof aquarium.turbidity === 'number'
-                  ? `${aquarium.turbidity.toFixed(0)} NTU`
-                  : '--'
-              }
-              status={
-                aquarium.hasFreshTurbidityTelemetry
-                  ? 'Live telemetry'
-                  : 'Waiting for telemetry'
-              }
-            />
+            {(() => {
+              const live = aquarium.hasFreshTelemetry;
+              const readings = [
+                { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
+                { label: 'Water Level', display: getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
+                {
+                  label: 'TDS Quality',
+                  display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
+                    typeof aquarium.tdsPpm === 'number'
+                      ? `${Math.round(aquarium.tdsPpm)} ppm`
+                      : getQualityLabel(aquarium.quality, aquarium.tdsPpm)),
+                },
+                { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
+                { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
+              ];
+              return readings.map(({ label, display }) => (
+                <Reading key={label} label={label} value={display.value} status={display.status} />
+              ));
+            })()}
             <Reading
               label="Power Status"
               value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
@@ -297,6 +263,20 @@ export function AquariumDetailsView({
               ))}
             </div>
 
+            {aquarium.commandStatus !== 'none' ? (
+              <p
+                className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+                  aquarium.commandStatus === 'done'
+                    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
+                    : aquarium.commandStatus === 'pending'
+                      ? 'border-slate-500/30 bg-slate-800/40 text-slate-200'
+                      : 'border-amber-400/30 bg-amber-400/10 text-amber-100'
+                }`}
+                role="status"
+              >
+                Last command: {getCommandStatusText(aquarium.commandStatus)}
+              </p>
+            ) : null}
             <div className="space-y-3">
               {(['feeder', 'light', 'filter'] as SystemField[]).map((field) => (
                 <div key={field} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">

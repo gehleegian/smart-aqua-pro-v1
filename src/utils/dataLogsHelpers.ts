@@ -6,6 +6,12 @@ import {
   normalizeDevicePowerStatus,
 } from '../types/device';
 import type { ChartPoint, PeriodKey, SummaryItem } from '../types/dataLogs';
+import {
+  assessAquariumCondition,
+  buildAssessmentTelemetryFromRaw,
+  evaluateTelemetryValidity,
+  type TelemetryValidity,
+} from './monitoringAssessmentCore';
 import type { UserRole } from '../types/user';
 
 export const periodConfig: Record<PeriodKey, { days: number; label: string }> = {
@@ -131,21 +137,45 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
   };
 }
 
-export function getRowStatus(entry: DeviceTelemetryLogEntry, aquarium: Aquarium) {
-  const outOfTempRange =
-    entry.temperatureC < aquarium.minTemp || entry.temperatureC > aquarium.maxTemp;
-  const lowLevel = entry.waterLevelPercent < aquarium.minLevel;
-  const purityPercent = getTelemetryPurityPercent(entry);
-  const tdsPpm = getTelemetryTdsPpm(entry);
-  const lowQuality =
-    purityPercent === null ||
-    (typeof tdsPpm === 'number' ? tdsPpm > 500 : purityPercent < aquarium.minQuality);
+type HistorySensor = keyof Omit<TelemetryValidity, 'allValid'>;
+export type HistoryRowStatus = 'normal' | 'warning' | 'critical' | 'sensor error';
 
-  if (outOfTempRange || lowLevel || lowQuality) {
-    return 'warning';
-  }
+export function getEntryValidity(entry: DeviceTelemetryLogEntry): TelemetryValidity {
+  return evaluateTelemetryValidity(entry as unknown as Record<string, unknown>);
+}
 
-  return 'normal';
+export function isEntrySensorValid(entry: DeviceTelemetryLogEntry, sensor: HistorySensor) {
+  return getEntryValidity(entry)[sensor].status === 'valid';
+}
+
+// History cell: invalid readings show "Sensor error", never a number.
+export function formatHistoryValue(
+  entry: DeviceTelemetryLogEntry,
+  sensor: HistorySensor,
+  format: () => string
+) {
+  const status = getEntryValidity(entry)[sensor].status;
+  return status === 'invalid' ? 'Sensor error' : status === 'missing' ? '--' : format();
+}
+
+const WATER_PARAMETERS = new Set(['temperature', 'ph', 'turbidity', 'tds', 'waterLevel']);
+
+// Row status uses the shared assessment (no thresholds defined here). Only
+// water parameters are considered; invalid readings are a sensor error, not a
+// water condition.
+export function getRowStatus(entry: DeviceTelemetryLogEntry, aquarium: Aquarium): HistoryRowStatus {
+  const raw = entry as unknown as Record<string, unknown>;
+  const validity = evaluateTelemetryValidity(raw);
+  const assessment = assessAquariumCondition({
+    profile: aquarium,
+    telemetry: buildAssessmentTelemetryFromRaw(raw, validity),
+    source: 'live',
+    assessedAt: entry.recordedAtEpoch,
+  });
+  const water = assessment.parameters.filter((item) => WATER_PARAMETERS.has(item.parameter));
+  if (water.some((item) => item.severity === 'critical')) return 'critical';
+  if (water.some((item) => item.severity === 'warning')) return 'warning';
+  return validity.allValid ? 'normal' : 'sensor error';
 }
 
 export function toFixedValue(value: number, digits = 1) {
@@ -289,17 +319,25 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
   }
 
   const validPurityReadings = rangeEntries
+    .filter((entry) => isEntrySensorValid(entry, 'tds'))
     .map((entry) => getTelemetryPurityPercent(entry))
     .filter((value): value is number => value !== null);
   const validTdsReadings = rangeEntries
+    .filter((entry) => isEntrySensorValid(entry, 'tds'))
     .map((entry) => getTelemetryTdsPpm(entry))
     .filter((value): value is number => value !== null);
   const validPhReadings = rangeEntries
-    .map((entry) => entry.ph)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    .filter((entry) => isEntrySensorValid(entry, 'ph'))
+    .map((entry) => entry.ph as number);
   const validTurbidityReadings = rangeEntries
-    .map((entry) => entry.turbidity)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    .filter((entry) => isEntrySensorValid(entry, 'turbidity'))
+    .map((entry) => entry.turbidity as number);
+  const validTemperatureReadings = rangeEntries
+    .filter((entry) => isEntrySensorValid(entry, 'temperature'))
+    .map((entry) => entry.temperatureC);
+  const validLevelReadings = rangeEntries
+    .filter((entry) => isEntrySensorValid(entry, 'waterLevel'))
+    .map((entry) => entry.waterLevelPercent);
   const latestPowerStatus = [...rangeEntries]
     .reverse()
     .map((entry) => normalizeDevicePowerStatus(entry.powerStatus))
@@ -309,14 +347,15 @@ export function buildSummaryItems(rangeEntries: DeviceTelemetryLogEntry[]): Summ
     { label: 'Samples Captured', value: `${rangeEntries.length}` },
     {
       label: 'Average Temp',
-      value: `${toFixedValue(average(rangeEntries.map((entry) => entry.temperatureC)), 1)} C`,
+      value: validTemperatureReadings.length === 0
+        ? '--'
+        : `${toFixedValue(average(validTemperatureReadings), 1)} C`,
     },
     {
       label: 'Lowest Level',
-      value: `${toFixedValue(
-        Math.min(...rangeEntries.map((entry) => entry.waterLevelPercent)),
-        0
-      )}%`,
+      value: validLevelReadings.length === 0
+        ? '--'
+        : `${toFixedValue(Math.min(...validLevelReadings), 0)}%`,
     },
     {
       label: 'Average Purity (TDS)',
@@ -359,7 +398,9 @@ export function buildTemperatureChartData(options: {
   rangeEntries: DeviceTelemetryLogEntry[];
   rangeDateKeys: string[];
 }) {
-  const { timePeriod, selectedDayEntries, rangeEntries, rangeDateKeys } = options;
+  const { timePeriod, rangeDateKeys } = options;
+  const selectedDayEntries = options.selectedDayEntries.filter((entry) => isEntrySensorValid(entry, 'temperature'));
+  const rangeEntries = options.rangeEntries.filter((entry) => isEntrySensorValid(entry, 'temperature'));
 
   return timePeriod === '24h'
     ? selectedDayEntries.map((entry) => ({
@@ -375,7 +416,9 @@ export function buildWaterLevelChartData(options: {
   rangeEntries: DeviceTelemetryLogEntry[];
   rangeDateKeys: string[];
 }) {
-  const { timePeriod, selectedDayEntries, rangeEntries, rangeDateKeys } = options;
+  const { timePeriod, rangeDateKeys } = options;
+  const selectedDayEntries = options.selectedDayEntries.filter((entry) => isEntrySensorValid(entry, 'waterLevel'));
+  const rangeEntries = options.rangeEntries.filter((entry) => isEntrySensorValid(entry, 'waterLevel'));
 
   return timePeriod === '24h'
     ? selectedDayEntries.map((entry) => ({

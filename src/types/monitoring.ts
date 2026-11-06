@@ -1,5 +1,5 @@
 import type { Aquarium } from './aquarium';
-import type { DeviceTelemetryState } from './device';
+import type { CommandStatus, DeviceTelemetryState, TelemetryValidity } from './device';
 import type { UserData, UserRole } from './user';
 
 export type HealthStatus = 'healthy' | 'warning';
@@ -20,6 +20,8 @@ export type MonitoringAquarium = Aquarium & {
   hasFreshTurbidityTelemetry: boolean;
   hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
+  sensorValidity: TelemetryValidity | null;
+  commandStatus: CommandStatus;
 };
 
 export type OwnerStats = {

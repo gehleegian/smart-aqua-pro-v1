@@ -18,6 +18,7 @@ import type {
 } from '../types/aquarium';
 import {
   buildDeviceControlProfile,
+  getDeviceCommandStatus,
   getDeviceTelemetryState,
   getDeviceTelemetryStatusText,
   getFreshTelemetrySnapshot,
@@ -333,6 +334,8 @@ export function useMonitoringController() {
         hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
         hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
         telemetryState,
+        sensorValidity: snapshot?.validity ?? null,
+        commandStatus: simulationEnabled ? 'none' : getDeviceCommandStatus(deviceShadows[aquarium.id], telemetryNow),
         manualStatus: snapshot?.filterState
           ? {
               ...getManualSystemStatus(aquarium),

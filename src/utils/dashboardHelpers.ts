@@ -19,8 +19,10 @@ import {
   getDeviceTelemetryUpdatedAt,
   getFreshTelemetrySnapshot,
   getDeviceTelemetryState,
+  getDeviceCommandStatus,
   type DeviceShadow,
 } from '../types/device';
+import { getSensorDisplay } from './sensorDisplay';
 import type {
   DashboardAquarium,
   DashboardData,
@@ -87,6 +89,8 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
     lastUpdatedAt: null,
+    sensorValidity: null,
+    commandStatus: 'none',
   }));
 }
 
@@ -140,6 +144,8 @@ export function mergeDashboardAquariums(
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       telemetryState,
       lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
+      sensorValidity: snapshot?.validity ?? null,
+      commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], now),
     };
   });
 }
@@ -239,53 +245,56 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
   const trend = (parameter: string): DashboardTankStat['trend'] =>
     condition(parameter)?.severity === 'normal' ? 'good' : 'warning';
 
+  const live = tank.hasFreshTelemetry;
+  const temperature = getSensorDisplay(tank.sensorValidity, 'temperature', live, () => `${tank.temp.toFixed(1)}\u00B0C`);
+  const waterLevel = getSensorDisplay(tank.sensorValidity, 'waterLevel', live, () => formatWaterLevel(tank.level));
+  const tds = getSensorDisplay(tank.sensorValidity, 'tds', live, () =>
+    typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm` : `${tank.quality}%`);
+  const ph = getSensorDisplay(tank.sensorValidity, 'ph', live, () =>
+    typeof tank.ph === 'number' ? tank.ph.toFixed(1) : '--');
+  const turbidity = getSensorDisplay(tank.sensorValidity, 'turbidity', live, () =>
+    typeof tank.turbidity === 'number' ? `${tank.turbidity.toFixed(0)} NTU` : '--');
+  const changeFor = (display: { isError: boolean; status: string }, parameter: string, fallback: string) =>
+    display.isError ? display.status : condition(parameter)?.message || fallback;
+
   return [
     {
       title: 'Temperature',
-      value: tank.hasFreshTemperatureTelemetry ? `${tank.temp.toFixed(1)}\u00B0C` : '--',
+      value: temperature.value,
       icon: Thermometer,
-      change:
-        condition('temperature')?.message || 'Assessment unavailable',
+      change: changeFor(temperature, 'temperature', 'Assessment unavailable'),
       trend: trend('temperature'),
       sparkline: [],
     },
     {
       title: 'Water Level',
-      value: formatWaterLevel(tank.level, tank.hasFreshTelemetry),
+      value: waterLevel.value,
       icon: Droplets,
-      change: condition('waterLevel')?.message || 'Assessment unavailable',
+      change: changeFor(waterLevel, 'waterLevel', 'Assessment unavailable'),
       trend: trend('waterLevel'),
       sparkline: [],
     },
     {
       title: 'Water Purity (TDS)',
-      value: tank.hasFreshPurityTelemetry
-        ? typeof tank.tdsPpm === 'number'
-          ? `${Math.round(tank.tdsPpm)} ppm`
-          : `${tank.quality}%`
-        : '--',
+      value: tds.value,
       icon: Waves,
-      change: condition('tds')?.message || 'Sensor unavailable',
+      change: changeFor(tds, 'tds', 'Sensor unavailable'),
       trend: trend('tds'),
       sparkline: [],
     },
     {
       title: 'pH Level',
-      value: tank.hasFreshPhTelemetry && typeof tank.ph === 'number'
-        ? tank.ph.toFixed(1)
-        : '--',
+      value: ph.value,
       icon: Activity,
-      change: condition('ph')?.message || 'Waiting for telemetry',
+      change: changeFor(ph, 'ph', 'Waiting for telemetry'),
       trend: trend('ph'),
       sparkline: [],
     },
     {
       title: 'Turbidity',
-      value: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
-        ? `${tank.turbidity.toFixed(0)} NTU`
-        : '--',
+      value: turbidity.value,
       icon: Gauge,
-      change: condition('turbidity')?.message || 'Waiting for telemetry',
+      change: changeFor(turbidity, 'turbidity', 'Waiting for telemetry'),
       trend: trend('turbidity'),
       sparkline: [],
     },

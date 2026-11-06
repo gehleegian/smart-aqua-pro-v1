@@ -141,7 +141,133 @@ export function getSensorFault(
   }
 }
 
-export const TELEMETRY_STALE_MS = 30_000;
+// Device contract (docs/device-contract.md), decision 2: the device sends every
+// 15 s; telemetry older than 60 s (3 missed sends) is offline. This is the only
+// freshness window; every view, the mobile copy, and the ingest function use it.
+export const TELEMETRY_STALE_MS = 60_000;
+
+// Decision 5: a command with no device acknowledgement after this long shows "No response".
+export const COMMAND_ACK_TIMEOUT_MS = 30_000;
+
+// Decision 4: a missing <sensor>ReadingValid flag is a sensor fault. The live
+// firmware (2026-11) does not send phReadingValid/turbidityReadingValid yet, so
+// this stays false until the scheduled firmware switchover
+// (docs/migration-live.md); while false, a missing flag falls back to the
+// value checks in getSensorFault(). An explicit `false` flag is always a fault.
+export const REQUIRE_SENSOR_VALIDITY_FLAGS = false;
+
+export function isSensorFlagValid(flag: unknown, requireFlags = REQUIRE_SENSOR_VALIDITY_FLAGS): boolean {
+  if (flag === true) return true;
+  if (flag === undefined || flag === null) return !requireFlags;
+  return false;
+}
+
+export type SensorValidityStatus = 'valid' | 'invalid' | 'missing';
+export type SensorValidity = { status: SensorValidityStatus; reason?: string };
+export type TelemetryValidity = {
+  temperature: SensorValidity;
+  ph: SensorValidity;
+  tds: SensorValidity;
+  turbidity: SensorValidity;
+  waterLevel: SensorValidity;
+  /** True when no reported sensor is invalid. Missing (not installed / not sent) sensors do not count. */
+  allValid: boolean;
+};
+
+function sensorValidity(
+  parameter: SensorFaultParameter | 'turbidity',
+  value: unknown,
+  flag: unknown,
+  flagName: string | null,
+  context: { waterPresent?: boolean; requireFlags?: boolean } = {}
+): SensorValidity {
+  if (value === undefined || value === null) return { status: 'missing' };
+  if (!finite(value)) return { status: 'invalid', reason: 'missing or malformed value' };
+  if (flagName && !isSensorFlagValid(flag, context.requireFlags)) {
+    return { status: 'invalid', reason: flag === false ? `${flagName} is false` : `${flagName} is missing` };
+  }
+  const fault = parameter === 'turbidity'
+    ? (value < 0 ? 'negative turbidity' : null)
+    : getSensorFault(parameter, value, context);
+  return fault ? { status: 'invalid', reason: fault } : { status: 'valid' };
+}
+
+// Validate a raw device telemetry payload sensor by sensor (AGENTS.md §5).
+// Shared by the web/mobile snapshot and the history ingest function.
+export function evaluateTelemetryValidity(
+  raw: Record<string, unknown>,
+  options: { requireFlags?: boolean } = {}
+): TelemetryValidity {
+  const requireFlags = options.requireFlags ?? REQUIRE_SENSOR_VALIDITY_FLAGS;
+  const waterPresent = typeof raw.waterPresent === 'boolean' ? raw.waterPresent : undefined;
+  let temperature = sensorValidity('temperature', raw.temperatureC, raw.temperatureReadingValid,
+    'temperatureReadingValid', { requireFlags });
+  if (temperature.status === 'valid' && waterPresent === false) {
+    temperature = { status: 'invalid', reason: 'probe reports no water (waterPresent is false)' };
+  }
+  const ph = sensorValidity('ph', raw.ph, raw.phReadingValid, 'phReadingValid', { requireFlags });
+  const tdsValue = raw.tdsPpm ?? raw.tdsPercent ?? raw.waterQualityPercent;
+  let tds = sensorValidity('tds', raw.tdsPpm ?? null, raw.tdsReadingValid, 'tdsReadingValid', { requireFlags });
+  if (tds.status === 'missing' && tdsValue !== undefined && tdsValue !== null) {
+    // Legacy payloads may carry only a purity percentage.
+    tds = !finite(tdsValue) || tdsValue < 0 || tdsValue > 100
+      ? { status: 'invalid', reason: 'TDS percentage outside 0-100' }
+      : isSensorFlagValid(raw.tdsReadingValid, requireFlags)
+        ? (tdsValue === 0 ? { status: 'invalid', reason: 'TDS 0% without a ppm reading' } : { status: 'valid' })
+        : { status: 'invalid', reason: raw.tdsReadingValid === false ? 'tdsReadingValid is false' : 'tdsReadingValid is missing' };
+  }
+  if (tds.status === 'missing' && raw.tdsReadingValid === false) {
+    tds = { status: 'invalid', reason: 'tdsReadingValid is false' };
+  }
+  const turbidity = sensorValidity('turbidity', raw.turbidity, raw.turbidityReadingValid,
+    'turbidityReadingValid', { requireFlags });
+  const waterLevel = sensorValidity('waterLevel', raw.waterLevelPercent, undefined, null, { waterPresent });
+  const all = [temperature, ph, tds, turbidity, waterLevel];
+  return { temperature, ph, tds, turbidity, waterLevel, allValid: all.every((item) => item.status !== 'invalid') };
+}
+
+// Map a raw device payload plus its validity summary to the shared assessment
+// input. Only sensors whose validity is "valid" reach threshold evaluation.
+export function buildAssessmentTelemetryFromRaw(
+  raw: Record<string, unknown>,
+  validity: TelemetryValidity = evaluateTelemetryValidity(raw)
+): AssessmentTelemetry {
+  const value = (input: unknown) => (finite(input) ? input : null);
+  const tdsValid = validity.tds.status === 'valid';
+  return {
+    temperatureC: value(raw.temperatureC),
+    temperatureValid: validity.temperature.status === 'valid',
+    waterLevelPercent: value(raw.waterLevelPercent),
+    waterLevelValid: validity.waterLevel.status === 'valid',
+    waterPresent: typeof raw.waterPresent === 'boolean' ? raw.waterPresent : undefined,
+    tdsPpm: tdsValid ? value(raw.tdsPpm) : null,
+    tdsPurityPercent: tdsValid ? value(raw.tdsPercent ?? raw.waterQualityPercent) : null,
+    tdsValid,
+    ph: value(raw.ph),
+    phValid: validity.ph.status === 'valid',
+    turbidity: value(raw.turbidity),
+    turbidityValid: validity.turbidity.status === 'valid',
+    filterState: raw.filterState === 'Active' || raw.filterState === 'Inactive' ? raw.filterState : undefined,
+    equipmentStatus: raw.equipmentStatus === 'Normal' || raw.equipmentStatus === 'Warning' ||
+      raw.equipmentStatus === 'Fault' || raw.equipmentStatus === 'Unknown' ? raw.equipmentStatus : undefined,
+    powerStatus: normalizeDevicePowerStatus(raw.powerStatus),
+  };
+}
+
+export type CommandStatus = 'none' | 'pending' | 'done' | 'failed' | 'no_response';
+
+// Decision 5: pending -> done/failed from commandAck/latest, or "No response" after COMMAND_ACK_TIMEOUT_MS.
+export function getCommandStatus(
+  command: { commandId?: unknown; requestedAt?: unknown } | null | undefined,
+  ack: { commandId?: unknown; status?: unknown } | null | undefined,
+  now = Date.now()
+): CommandStatus {
+  if (!command || typeof command.commandId !== 'string' || !finite(command.requestedAt)) return 'none';
+  if (ack && ack.commandId === command.commandId && (ack.status === 'done' || ack.status === 'failed')) {
+    return ack.status;
+  }
+  return now - command.requestedAt > COMMAND_ACK_TIMEOUT_MS ? 'no_response' : 'pending';
+}
 export const TELEMETRY_EPOCH_FLOOR = 946684800000;
 
 export function getTelemetryFreshness(
