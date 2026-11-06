@@ -33,11 +33,15 @@
     "seed:rules": "node --experimental-strip-types scripts/seed-rules.ts",
     "test:org-access": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-org-access \"node --test functions/lib/test/orgAccess.test.js\"",
     "test:firestore-org-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-firestore-org \"node --test tests/firestore/org-access.rules.test.mjs\"",
-    "test:rtdb-org-rules": "firebase emulators:exec --only database --project demo-smartaqua-rtdb-org \"node --test tests/rtdb/org-access.rules.test.mjs\""
+    "test:rtdb-org-rules": "firebase emulators:exec --only database --project demo-smartaqua-rtdb-org \"node --test tests/rtdb/org-access.rules.test.mjs\"",
+    "test:migrate-orgs": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-migrate-orgs \"node --test tests/integration/migrate-orgs.test.mjs\"",
+    "provision:device": "node --experimental-strip-types scripts/provision-device.ts",
+    "migrate:orgs": "node --experimental-strip-types scripts/migrate-orgs.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "firebase": "^12.12.0",
+    "html5-qrcode": "2.3.8",
     "lucide-react": "^1.8.0",
     "next": "^16.4.4",
     "react": "^19.2.4",
@@ -48,14 +52,15 @@
     "@eslint/js": "^9.39.4",
     "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/postcss": "^4.2.2",
-    "cross-env": "^10.1.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.4.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
+    "qrcode": "1.5.4",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0"

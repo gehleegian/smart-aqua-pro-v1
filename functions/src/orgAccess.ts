@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
 import {
   FieldValue,
@@ -13,6 +13,21 @@ import {
   type SyncDependencies,
 } from './authorizationSync.js';
 import { MutationError } from './trustedMutations.js';
+import {
+  DEVICE_ID_PATTERN,
+  claimCodeMatches as claimCodeMatchesRaw,
+  deviceUidFor,
+  isValidClaimCode,
+  normalizeClaimCode,
+  normalizeDeviceId,
+} from './shared/claimCode.js';
+
+export { CLAIM_CODE_ALPHABET, CLAIM_CODE_LENGTH, DEVICE_ID_PATTERN, hashClaimCode } from './shared/claimCode.js';
+
+function claimCodeMatches(pepper: string, deviceId: string, code: string, storedHash: unknown) {
+  if (!pepper) throw new MutationError('failed-precondition', 'Claim code verification is not configured.');
+  return claimCodeMatchesRaw(pepper, deviceId, code, storedHash);
+}
 
 /**
  * Sprint 3 access model: organizations, QR device claiming, caretaker invites.
@@ -43,10 +58,6 @@ export type OrgActor = {
 export type OrgRole = 'owner' | 'caretaker';
 export type OrgStatus = 'active' | 'suspended';
 
-export const DEVICE_ID_PATTERN = /^SAQ-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
-/** No 0/O, 1/I/L: the code is typed by hand from a printed label. */
-export const CLAIM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-export const CLAIM_CODE_LENGTH = 8;
 export const CLAIM_FAILURE_LIMIT = 5;
 export const CLAIM_FAILURE_WINDOW_MS = 60 * 60 * 1000;
 export const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
@@ -57,41 +68,11 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const AQUARIUM_DIRECTORY_SCHEMA_VERSION = 3;
 
 // ---------------------------------------------------------------------------
-// Pure helpers (shared with scripts/provision-device.ts through the same rules)
+// Pure helpers: claim-code hashing lives in shared/claimCode.ts
 // ---------------------------------------------------------------------------
-
-export function normalizeDeviceId(value: unknown) {
-  return typeof value === 'string' ? value.trim().toUpperCase() : '';
-}
-
-/** Upper-cases and drops spaces/dashes so "abcd-efgh" and "ABCD EFGH" match. */
-export function normalizeClaimCode(value: unknown) {
-  return typeof value === 'string' ? value.toUpperCase().replace(/[\s-]/g, '') : '';
-}
-
-export function isValidClaimCode(code: string) {
-  return code.length === CLAIM_CODE_LENGTH && [...code].every((character) => CLAIM_CODE_ALPHABET.includes(character));
-}
-
-/** HMAC-SHA256(pepper, "<deviceId>:<code>"), hex. Binding the ID stops code reuse across devices. */
-export function hashClaimCode(pepper: string, deviceId: string, code: string) {
-  if (!pepper) throw new MutationError('failed-precondition', 'Claim code verification is not configured.');
-  return createHmac('sha256', pepper).update(`${deviceId}:${code}`).digest('hex');
-}
-
-export function claimCodeMatches(pepper: string, deviceId: string, code: string, storedHash: unknown) {
-  if (typeof storedHash !== 'string' || !/^[0-9a-f]{64}$/.test(storedHash)) return false;
-  const expected = Buffer.from(storedHash, 'hex');
-  const actual = Buffer.from(hashClaimCode(pepper, deviceId, code), 'hex');
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
 
 export function hashInviteToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
-}
-
-export function deviceUidFor(deviceId: string) {
-  return `esp32-${deviceId}`;
 }
 
 // ---------------------------------------------------------------------------
