@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { assessAquariumCondition } from '../../src/utils/monitoringAssessment.ts';
 import { getFreshTelemetrySnapshot, getDeviceTelemetryState, setDeviceTelemetryClockOffsetMs } from '../../src/types/device.ts';
-import { assessTelemetry, getTelemetryDisplay } from '../../../smart-aqua-mobile/src/utils/monitoring-assessment.ts';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
-import { mapTelemetry } from '../../../smart-aqua-mobile/src/utils/device-telemetry-parser.ts';
 import { formatWaterLevel } from '../../src/utils/monitoringAssessmentCore.ts';
 import ts from 'typescript';
+
+// The mobile app lives in a sibling checkout (../smart-aqua-mobile). When it is
+// not present, parity tests are skipped instead of failing at import time.
+const mobileRoot = new URL('../../../smart-aqua-mobile/', import.meta.url);
+const hasMobile = existsSync(new URL('src/utils/monitoringAssessmentCore.ts', mobileRoot));
+const mobileSkip = hasMobile ? false : 'smart-aqua-mobile checkout not found at ../smart-aqua-mobile';
+let assessTelemetry, getTelemetryDisplay, mapTelemetry;
+if (hasMobile) {
+  ({ assessTelemetry, getTelemetryDisplay } = await import(new URL('src/utils/monitoring-assessment.ts', mobileRoot).href));
+  ({ mapTelemetry } = await import(new URL('src/utils/device-telemetry-parser.ts', mobileRoot).href));
+}
+const mobileTest = (name, fn) => test(name, { skip: mobileSkip }, fn);
 
 const profile = {
   id: 'aquarium-a',
@@ -32,7 +42,7 @@ const profile = {
 
 const now = 1792627200000;
 
-test('web and mobile rule sources are identical', () => {
+mobileTest('web and mobile rule sources are identical', () => {
   const web = readFileSync(new URL('../../src/utils/monitoringAssessmentCore.ts', import.meta.url), 'utf8');
   const mobile = readFileSync(new URL('../../../smart-aqua-mobile/src/utils/monitoringAssessmentCore.ts', import.meta.url), 'utf8');
   assert.equal(web.replaceAll('\r\n', '\n'), mobile.replaceAll('\r\n', '\n'));
@@ -61,7 +71,7 @@ function webFrom(device) {
     } : null,
   });
 }
-test('web and mobile adapters produce identical assessments', () => {
+mobileTest('web and mobile adapters produce identical assessments', () => {
   for (const patch of [
     {}, { temperatureC: 25 }, { temperatureC: 26 }, { ph: 8 },
     { waterLevelPercent: 101 }, { waterLevelPercent: -1 }, { tdsPercent: 120 },
@@ -78,13 +88,13 @@ test('web and mobile adapters produce identical assessments', () => {
   }
 });
 
-test('mobile explicit unavailable source suppresses retained stale readings', () => {
+mobileTest('mobile explicit unavailable source suppresses retained stale readings', () => {
   const result = assessTelemetry(profile, deviceFrom({ temperatureC: 40 }), 'unavailable', now);
   assert.equal(result.overallSeverity, 'unavailable');
   assert.equal(result.recommendations.length, 0);
 });
 
-test('production Firebase parsers reject malformed numbers before assessment', () => {
+mobileTest('production Firebase parsers reject malformed numbers before assessment', () => {
   for (const value of [null, undefined, '', ' ', '22', false, true, [], {}, NaN, Infinity]) {
     for (const [field, parameter] of [['ph', 'ph'], ['turbidity', 'turbidity'], ['tdsPercent', 'tds']]) {
       const raw = deviceFrom({ [field]: value });
@@ -106,7 +116,7 @@ test('production Firebase parsers reject malformed numbers before assessment', (
   }
 });
 
-test('real zero measurements remain valid numbers rather than missing values', () => {
+mobileTest('real zero measurements remain valid numbers rather than missing values', () => {
   const raw = deviceFrom({ ph: 0, waterLevelPercent: 0, turbidity: 0, tdsPpm: 0 });
   assert.equal(normalizeTelemetry(raw).ph, 0);
   assert.equal(mapTelemetry(raw).waterLevelPercent, 0);
@@ -114,7 +124,7 @@ test('real zero measurements remain valid numbers rather than missing values', (
   assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now), webFrom(normalizeTelemetry(raw)));
 });
 
-test('production power parsing accepts the same aliases on web and mobile', () => {
+mobileTest('production power parsing accepts the same aliases on web and mobile', () => {
   for (const [value, expected] of [
     ['power_interruption', 'Power Interruption'], [' POWER INTERRUPTION ', 'Power Interruption'],
     ['Power Interruption', 'Power Interruption'], ['online', 'Online'], [' OFFLINE ', 'Offline'],
@@ -140,7 +150,7 @@ test('water-level display hides invalid and unavailable values while preserving 
   assert.equal(result.recommendations.length, 0);
 });
 
-test('future timestamps are unavailable in both apps, including just beyond now', () => {
+mobileTest('future timestamps are unavailable in both apps, including just beyond now', () => {
   for (const delta of [1, 1000, 86_400_000]) {
     const telemetry = deviceFrom({ updatedAt: now + delta });
     assert.equal(getDeviceTelemetryState(telemetry, now), 'unavailable');
@@ -153,7 +163,7 @@ test('future timestamps are unavailable in both apps, including just beyond now'
   }
 });
 
-test('freshness respects exact stale boundary and server clock correction', () => {
+mobileTest('freshness respects exact stale boundary and server clock correction', () => {
   for (const [age, expected] of [[0, 'live'], [30_000, 'live'], [30_001, 'offline']]) {
     const telemetry = deviceFrom({ updatedAt: now - age });
     assert.equal(getDeviceTelemetryState(telemetry, now), expected);
@@ -168,7 +178,7 @@ test('freshness respects exact stale boundary and server clock correction', () =
   }
 });
 
-test('mobile presentation distinguishes retained readings from current or invalid data', () => {
+mobileTest('mobile presentation distinguishes retained readings from current or invalid data', () => {
   const live = deviceFrom();
   const initial = getTelemetryDisplay(live, null, now);
   assert.equal(initial.isLastKnown, false);
