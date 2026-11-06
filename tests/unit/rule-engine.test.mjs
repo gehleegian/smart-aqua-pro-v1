@@ -389,3 +389,10 @@ test('cleaning: once the interval date has passed, early triggers do not apply',
   assert.equal(schedule.due, true);
   assert.equal(schedule.newTrigger, null);
 });
+
+test('docs/rule-matrix.md is regenerated from the seed (no drift)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const generated = execFileSync(process.execPath, [new URL('../../scripts/rule-matrix.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+  const committed = readFileSync(new URL('../../docs/rule-matrix.md', import.meta.url), 'utf8');
+  assert.equal(committed, generated, 'run: node scripts/rule-matrix.mjs > docs/rule-matrix.md');
+});

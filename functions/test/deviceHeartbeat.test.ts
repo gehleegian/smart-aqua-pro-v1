@@ -21,7 +21,7 @@ const deps = () => ({ firestore, database, now: () => clock });
 
 async function alerts(aquariumId = AQUARIUM) {
   const snap = await firestore.collection('alert_records').where('aquarium_id', '==', aquariumId).get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, any>));
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirebaseFirestore.DocumentData));
 }
 
 async function writeTelemetry(aquariumId: string, updatedAt: number, online = true) {

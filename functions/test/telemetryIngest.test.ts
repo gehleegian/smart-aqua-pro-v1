@@ -43,12 +43,12 @@ async function flatRows(aquariumId = AQUARIUM) {
 
 async function alerts(aquariumId = AQUARIUM) {
   const snap = await firestore.collection('alert_records').where('aquarium_id', '==', aquariumId).get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, any>)).sort((a, b) => a.lastSeenAt - b.lastSeenAt);
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirebaseFirestore.DocumentData)).sort((a, b) => a.lastSeenAt - b.lastSeenAt);
 }
 
 async function recommendations(aquariumId = AQUARIUM) {
   const snap = await firestore.collection('recommendations').where('aquariumId', '==', aquariumId).get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, any>)).sort((a, b) => a.createdAt - b.createdAt);
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirebaseFirestore.DocumentData)).sort((a, b) => a.createdAt - b.createdAt);
 }
 
 const aquariumDoc = (patch: Record<string, unknown> = {}) => ({
@@ -230,7 +230,7 @@ test('RULES-01 a bad reading produces the classification, a recommendation, an a
   assert.equal(aquarium.condition.overall, 'warning');
   assert.equal(aquarium.condition.draft, true);
   assert.equal(aquarium.condition.evaluatedAt, T0);
-  assert.equal(aquarium.condition.perParameter.find((item: any) => item.parameter === 'temperatureC').status, 'warning');
+  assert.equal(aquarium.condition.perParameter.find((item: FirebaseFirestore.DocumentData) => item.parameter === 'temperatureC').status, 'warning');
 });
 
 test('RULES-02 a repeated bad reading does not create duplicates; occurrences bump at most every 5 min', async () => {
@@ -312,7 +312,7 @@ test('RULES-07 Unknown power and equipment are "not monitored" and do not block 
   assert.ok(result.ingested);
   assert.equal(result.classification, 'normal');
   const aquarium = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!;
-  const status = Object.fromEntries(aquarium.condition.perParameter.map((item: any) => [item.parameter, item.status]));
+  const status = Object.fromEntries(aquarium.condition.perParameter.map((item: FirebaseFirestore.DocumentData) => [item.parameter, item.status]));
   assert.equal(status.power, 'not_monitored');
   assert.equal(status.equipment, 'not_monitored');
   assert.equal(aquarium.condition.overall, 'normal');

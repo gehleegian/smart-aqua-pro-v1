@@ -29,7 +29,8 @@
     "dev:plan-legacy-policy": "node functions/scripts/backfillLegacyEmailVerificationPolicy.mjs",
     "test:security": "npm run test:client-contracts && npm run test:aquarium-profile && npm run test:auth-sync && npm run test:auth-sync-trigger && npm run test:trusted-mutations && npm run test:trusted-mutation-callables && npm run test:email-verification && npm run test:firestore-rules && npm run test:rtdb-rules",
     "test:device-heartbeat": "npm run build:functions && firebase emulators:exec --only firestore,database --project demo-smartaqua-device-heartbeat \"node --test functions/lib/test/deviceHeartbeat.test.js\"",
-    "test:rule-engine": "node --experimental-strip-types --test tests/unit/rule-engine.test.mjs"
+    "test:rule-engine": "node --experimental-strip-types --test tests/unit/rule-engine.test.mjs",
+    "seed:rules": "node --experimental-strip-types scripts/seed-rules.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

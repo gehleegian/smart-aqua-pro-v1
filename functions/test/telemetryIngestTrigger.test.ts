@@ -3,6 +3,7 @@ import test, { after, before } from 'node:test';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getDatabase, type Database } from 'firebase-admin/database';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { seedRules } from './testSeed.js';
 
 const PROJECT_ID = 'demo-smartaqua-telemetry-ingest';
 const AQUARIUM = 'aquarium-trigger';
@@ -18,6 +19,8 @@ before(async () => {
   app = initializeApp({ projectId: PROJECT_ID, databaseURL: `http://${databaseHost}?ns=${PROJECT_ID}-default-rtdb` }, 'telemetry-trigger-tests');
   firestore = getFirestore(app);
   database = getDatabase(app);
+  // Seed before any trigger runs: the function caches the rule config for 5 minutes.
+  await seedRules(firestore);
 });
 
 after(async () => {
@@ -42,4 +45,25 @@ test('TRIGGER-INGEST-01 an RTDB telemetry write produces a Firestore history row
   assert.equal(rows.length, 1, 'trigger did not write a history row');
   assert.equal(rows[0].recordedAtEpoch, updatedAt);
   assert.equal(rows[0].validity.ph, 'valid');
+});
+
+test('TRIGGER-INGEST-02 an out-of-range RTDB reading raises an alert and a recommendation through the deployed trigger', async () => {
+  const aquariumId = 'aquarium-trigger-rules';
+  await firestore.doc(`aquariums/${aquariumId}`).set({ ownerId: 'owner-t', ownerName: 'Owner T', species: ['Goldfish'], hasFiltrationSystem: true });
+  await database.ref(`devices/${aquariumId}/telemetry`).set({
+    temperatureC: 27, temperatureReadingValid: true, waterLevelPercent: 90, waterPresent: true, online: true, updatedAt: Date.now(),
+  });
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  let alerts: FirebaseFirestore.DocumentData[] = [];
+  while (Date.now() < deadline) {
+    alerts = (await firestore.collection('alert_records').where('aquarium_id', '==', aquariumId).get()).docs.map((d) => d.data());
+    if (alerts.length > 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.equal(alerts.length, 1, 'trigger did not raise an alert');
+  assert.equal(alerts[0].ruleId, 'temp_high_critical');
+  const rec = await firestore.doc(`recommendations/${alerts[0].recommendationId}`).get();
+  assert.equal(rec.get('status'), 'pending');
+  const aquarium = (await firestore.doc(`aquariums/${aquariumId}`).get()).data()!;
+  assert.equal(aquarium.condition.overall, 'critical');
 });
