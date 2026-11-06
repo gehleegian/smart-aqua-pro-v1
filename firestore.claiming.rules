@@ -1,0 +1,637 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasProtectedAccess() {
+      return isSignedIn()
+        && !exists(
+          /databases/$(database)/documents/security_user_blocks/$(request.auth.uid)
+        )
+        && (
+          request.auth.token.email_verified == true
+          || (
+            exists(
+              /databases/$(database)/documents/authorization_user_policies/$(request.auth.uid)
+            )
+            && get(
+              /databases/$(database)/documents/authorization_user_policies/$(request.auth.uid)
+            ).data.emailVerificationRequired == false
+          )
+        );
+    }
+
+    function aquariumAccessOpen(aquariumId) {
+      return aquariumId is string
+        && !exists(
+          /databases/$(database)/documents/security_aquarium_blocks/$(aquariumId)
+        );
+    }
+
+    function isAdmin() {
+      return hasProtectedAccess()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
+    function ownsAquarium(aquariumId) {
+      return hasProtectedAccess()
+        && !isAdmin()
+        && aquariumId is string
+        && aquariumAccessOpen(aquariumId)
+        && exists(/databases/$(database)/documents/aquariums/$(aquariumId))
+        && get(/databases/$(database)/documents/aquariums/$(aquariumId)).data.ownerId
+          == request.auth.uid;
+    }
+
+    function validUserProfileCreate(uid) {
+      return request.auth.uid == uid
+        && request.resource.data.keys().hasAll([
+          'full_name',
+          'name',
+          'email',
+          'contact_number',
+          'role',
+          'account_status',
+          'created_at',
+          'updated_at',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'full_name',
+          'name',
+          'email',
+          'contact_number',
+          'role',
+          'account_status',
+          'created_at',
+          'updated_at',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.full_name is string
+        && request.resource.data.name is string
+        && request.resource.data.email is string
+        && request.resource.data.contact_number is string
+        && request.resource.data.role == 'User'
+        && request.resource.data.account_status in ['active', 'inactive']
+        && request.resource.data.created_at is string
+        && request.resource.data.updated_at is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && request.resource.data.created_at == request.resource.data.createdAt
+        && request.resource.data.updated_at == request.resource.data.updatedAt
+        && request.resource.data.email == request.auth.token.email;
+    }
+
+    function validSelfProfileUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+          'full_name',
+          'name',
+          'contact_number',
+          'updated_at',
+          'updatedAt'
+        ])
+        && request.resource.data.full_name is string
+        && request.resource.data.name is string
+        && request.resource.data.contact_number is string
+        && request.resource.data.updated_at is string
+        && request.resource.data.updatedAt is string;
+    }
+
+    function userAquariumUpdateFields() {
+      return [
+        'name',
+        'species',
+        'bioload',
+        'minTemp',
+        'maxTemp',
+        'minLevel',
+        'minQuality',
+        'feeder',
+        'light',
+        'filter',
+        'automationSettings',
+        'manualStatus',
+        'tankType',
+        'tankSizeLiters',
+        'tankSizeCategory',
+        'tankLengthCm',
+        'tankWidthCm',
+        'tankHeightCm',
+        'workingWaterVolumeLiters',
+        'filtrationSetup',
+        'filterCapacity',
+        'fishCount',
+        'updatedAt',
+        'directorySchemaVersion'
+      ];
+    }
+
+    function aquariumCreateRequiredFields() {
+      return [
+        'name',
+        'species',
+        'bioload',
+        'minTemp',
+        'maxTemp',
+        'minLevel',
+        'minQuality',
+        'temp',
+        'level',
+        'quality',
+        'feeder',
+        'light',
+        'filter',
+        'ownerId',
+        'ownerName',
+        'createdAt',
+        'updatedAt',
+        'directorySchemaVersion'
+      ];
+    }
+
+    function userAquariumCreateFields() {
+      return aquariumCreateRequiredFields().concat([
+        'automationSettings',
+        'manualStatus',
+        'tankType',
+        'tankSizeLiters',
+        'tankSizeCategory',
+        'tankLengthCm',
+        'tankWidthCm',
+        'tankHeightCm',
+        'workingWaterVolumeLiters',
+        'filtrationSetup',
+        'filterCapacity',
+        'fishCount'
+      ]);
+    }
+
+    function aquariumDirectoryFields() {
+      return [
+        'name',
+        'ownerId',
+        'ownerName',
+        'species',
+        'fishCount',
+        'tankType',
+        'tankSizeLiters',
+        'workingWaterVolumeLiters',
+        'createdAt',
+        'updatedAt',
+        'schemaVersion'
+      ];
+    }
+
+    function validAutomationSettings(settings) {
+      return settings is map
+        && settings.keys().hasAll([
+          'enabled',
+          'feedingTimes',
+          'lightOnTime',
+          'lightOffTime',
+          'filtrationStartTime',
+          'filtrationRuntimeHours'
+        ])
+        && settings.keys().hasOnly([
+          'enabled',
+          'feedingTimes',
+          'lightOnTime',
+          'lightOffTime',
+          'filtrationStartTime',
+          'filtrationRuntimeHours'
+        ])
+        && settings.enabled is bool
+        && settings.feedingTimes is list
+        && settings.lightOnTime is string
+        && settings.lightOffTime is string
+        && settings.filtrationStartTime is string
+        && settings.filtrationRuntimeHours is number;
+    }
+
+    function validManualStatus(status) {
+      return status is map
+        && status.keys().hasOnly(['feeder', 'light', 'filter'])
+        && (!status.keys().hasAny(['feeder'])
+          || status.feeder in ['Active', 'Inactive'])
+        && (!status.keys().hasAny(['light'])
+          || status.light in ['On', 'Off'])
+        && (!status.keys().hasAny(['filter'])
+          || status.filter in ['Active', 'Inactive']);
+    }
+
+    function validAquariumFieldValues(changed) {
+      return (!changed.hasAny(['name']) || request.resource.data.name is string)
+        && (!changed.hasAny(['species']) || request.resource.data.species is list)
+        && (!changed.hasAny(['bioload'])
+          || request.resource.data.bioload in ['low', 'medium', 'high'])
+        && (!changed.hasAny(['minTemp']) || request.resource.data.minTemp is number)
+        && (!changed.hasAny(['maxTemp']) || request.resource.data.maxTemp is number)
+        && (!changed.hasAny(['minLevel']) || request.resource.data.minLevel is number)
+        && (!changed.hasAny(['minQuality']) || request.resource.data.minQuality is number)
+        && (!changed.hasAny(['feeder'])
+          || request.resource.data.feeder in ['Active', 'Inactive'])
+        && (!changed.hasAny(['light'])
+          || request.resource.data.light in ['On', 'Off'])
+        && (!changed.hasAny(['filter'])
+          || request.resource.data.filter in ['Active', 'Inactive'])
+        && (!changed.hasAny(['automationSettings'])
+          || validAutomationSettings(request.resource.data.automationSettings))
+        && (!changed.hasAny(['manualStatus'])
+          || validManualStatus(request.resource.data.manualStatus))
+        && (!changed.hasAny(['tankType']) || request.resource.data.tankType is string)
+        && (!changed.hasAny(['tankSizeLiters'])
+          || request.resource.data.tankSizeLiters is number)
+        && (!changed.hasAny(['tankSizeCategory'])
+          || request.resource.data.tankSizeCategory in ['small', 'medium', 'large'])
+        && (!changed.hasAny(['tankLengthCm'])
+          || request.resource.data.tankLengthCm is number)
+        && (!changed.hasAny(['tankWidthCm'])
+          || request.resource.data.tankWidthCm is number)
+        && (!changed.hasAny(['tankHeightCm'])
+          || request.resource.data.tankHeightCm is number)
+        && (!changed.hasAny(['workingWaterVolumeLiters'])
+          || request.resource.data.workingWaterVolumeLiters is number)
+        && (!changed.hasAny(['filtrationSetup'])
+          || request.resource.data.filtrationSetup is string)
+        && (!changed.hasAny(['filterCapacity'])
+          || request.resource.data.filterCapacity is string)
+        && (!changed.hasAny(['fishCount']) || request.resource.data.fishCount is number)
+        && (!changed.hasAny(['updatedAt']) || request.resource.data.updatedAt is string)
+        && (!changed.hasAny(['directorySchemaVersion'])
+          || request.resource.data.directorySchemaVersion == 1);
+    }
+
+    function validAquariumCreate(allowedFields) {
+      return request.resource.data.keys().hasAll(aquariumCreateRequiredFields())
+        && request.resource.data.keys().hasOnly(allowedFields)
+        && request.resource.data.name is string
+        && request.resource.data.species is list
+        && request.resource.data.bioload in ['low', 'medium', 'high']
+        && request.resource.data.minTemp is number
+        && request.resource.data.maxTemp is number
+        && request.resource.data.minLevel is number
+        && request.resource.data.minQuality is number
+        && request.resource.data.temp == request.resource.data.minTemp
+        && request.resource.data.level == 100
+        && request.resource.data.quality == 100
+        && request.resource.data.feeder == 'Active'
+        && request.resource.data.light == 'On'
+        && request.resource.data.filter == 'Active'
+        && request.resource.data.ownerId is string
+        && request.resource.data.ownerName is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && request.resource.data.directorySchemaVersion == 1
+        && (!request.resource.data.keys().hasAny(['automationSettings'])
+          || validAutomationSettings(request.resource.data.automationSettings))
+        && (!request.resource.data.keys().hasAny(['manualStatus'])
+          || validManualStatus(request.resource.data.manualStatus));
+    }
+
+    function validAquariumDirectoryDocument(data) {
+      return data.keys().hasAll([
+          'name',
+          'ownerId',
+          'ownerName',
+          'species',
+          'updatedAt',
+          'schemaVersion'
+        ])
+        && data.keys().hasOnly(aquariumDirectoryFields())
+        && data.name is string
+        && data.ownerId is string
+        && data.ownerName is string
+        && data.species is list
+        && data.updatedAt is string
+        && data.schemaVersion == 1
+        && (!data.keys().hasAny(['fishCount']) || data.fishCount is number)
+        && (!data.keys().hasAny(['tankType']) || data.tankType is string)
+        && (!data.keys().hasAny(['tankSizeLiters']) || data.tankSizeLiters is number)
+        && (!data.keys().hasAny(['workingWaterVolumeLiters'])
+          || data.workingWaterVolumeLiters is number)
+        && (!data.keys().hasAny(['createdAt']) || data.createdAt is string);
+    }
+
+    function legacyDirectoryMatchesSource(aquariumId) {
+      let aquariumPath = /databases/$(database)/documents/aquariums/$(aquariumId);
+      let directoryPath = /databases/$(database)/documents/aquarium_directory/$(aquariumId);
+      let aquarium = getAfter(aquariumPath).data;
+      let directory = getAfter(directoryPath).data;
+      return existsAfter(aquariumPath)
+        && existsAfter(directoryPath)
+        && validAquariumDirectoryDocument(directory)
+        && aquarium.ownerId == directory.ownerId
+        && aquarium.name == directory.name
+        && aquarium.ownerName == directory.ownerName
+        && aquarium.species == directory.species
+        && aquarium.get('fishCount', null) == directory.get('fishCount', null)
+        && aquarium.get('tankType', null) == directory.get('tankType', null)
+        && aquarium.get('tankSizeLiters', null) == directory.get('tankSizeLiters', null)
+        && aquarium.get('workingWaterVolumeLiters', null)
+          == directory.get('workingWaterVolumeLiters', null);
+    }
+
+    function legacyUserAquariumUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && changed.hasOnly(userAquariumUpdateFields())
+        && validAquariumFieldValues(changed);
+    }
+
+    function claimed_validUserAquariumUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && changed.hasOnly(claimed_userAquariumUpdateFields())
+        && claimed_validAquariumFieldValues(changed);
+    }
+
+    function claimed_userAquariumUpdateFields() {
+      return [
+        'name',
+        'species',
+        'minTemp',
+        'maxTemp',
+        'minPh',
+        'maxPh',
+        'minLevel',
+        'minQuality',
+        'feeder',
+        'light',
+        'filter',
+        'automationSettings',
+        'manualStatus',
+        'tankType',
+        'tankSizeLiters',
+        'tankSizeCategory',
+        'tankLengthCm',
+        'tankWidthCm',
+        'tankHeightCm',
+        'workingWaterVolumeLiters',
+        'hasFiltrationSystem',
+        'filtrationSetup',
+        'filterCapacity',
+        'fishCount',
+        'fishWeightsG',
+        'updatedAt',
+        'directorySchemaVersion'
+      ];
+    }
+
+    function claimed_validAquariumFieldValues(changed) {
+      return (!changed.hasAny(['name']) || request.resource.data.name is string)
+        && (!changed.hasAny(['species'])
+          || (request.resource.data.species is list
+            && request.resource.data.species.size() == 1
+            && request.resource.data.species[0] == 'Goldfish'))
+        && (!changed.hasAny(['minTemp']) || request.resource.data.minTemp is number)
+        && (!changed.hasAny(['maxTemp']) || request.resource.data.maxTemp is number)
+        && (!changed.hasAny(['minPh', 'maxPh'])
+          || (request.resource.data.minPh is number
+            && request.resource.data.maxPh is number
+            && request.resource.data.minPh >= 0
+            && request.resource.data.maxPh <= 14
+            && request.resource.data.minPh <= request.resource.data.maxPh))
+        && (!changed.hasAny(['minLevel']) || request.resource.data.minLevel is number)
+        && (!changed.hasAny(['minQuality']) || request.resource.data.minQuality is number)
+        && (!changed.hasAny(['feeder'])
+          || request.resource.data.feeder in ['Active', 'Inactive'])
+        && (!changed.hasAny(['light'])
+          || request.resource.data.light in ['On', 'Off'])
+        && (!changed.hasAny(['filter'])
+          || request.resource.data.filter in ['Active', 'Inactive'])
+        && (!changed.hasAny(['automationSettings'])
+          || claimed_validAutomationSettings(request.resource.data.automationSettings))
+        && (!changed.hasAny(['manualStatus'])
+          || claimed_validManualStatus(request.resource.data.manualStatus))
+        && (!changed.hasAny(['tankType'])
+          || request.resource.data.tankType == 'Freshwater')
+        && (!changed.hasAny(['tankSizeLiters'])
+          || request.resource.data.tankSizeLiters is number)
+        && (!changed.hasAny(['tankSizeCategory'])
+          || request.resource.data.tankSizeCategory in ['small', 'medium', 'large'])
+        && (!changed.hasAny(['tankLengthCm'])
+          || (request.resource.data.tankLengthCm is number
+            && request.resource.data.tankLengthCm > 0))
+        && (!changed.hasAny(['tankWidthCm'])
+          || (request.resource.data.tankWidthCm is number
+            && request.resource.data.tankWidthCm > 0))
+        && (!changed.hasAny(['tankHeightCm'])
+          || (request.resource.data.tankHeightCm is number
+            && request.resource.data.tankHeightCm > 0))
+        && (!changed.hasAny(['workingWaterVolumeLiters'])
+          || (request.resource.data.workingWaterVolumeLiters is number
+            && request.resource.data.workingWaterVolumeLiters > 0))
+        && (!changed.hasAny(['hasFiltrationSystem'])
+          || request.resource.data.hasFiltrationSystem is bool)
+        && (!changed.hasAny(['filtrationSetup'])
+          || (request.resource.data.filtrationSetup is string
+            && request.resource.data.filtrationSetup.size() > 0))
+        && (!changed.hasAny(['filterCapacity'])
+          || request.resource.data.filterCapacity is string)
+        && (!changed.hasAny(['fishCount', 'fishWeightsG'])
+          || claimed_validFishProfile(request.resource.data))
+        && (!changed.hasAny(['updatedAt']) || request.resource.data.updatedAt is string)
+        && (!changed.hasAny(['directorySchemaVersion'])
+          || request.resource.data.directorySchemaVersion == 3);
+    }
+
+    function claimed_validAutomationSettings(settings) {
+      return settings is map
+        && settings.keys().hasAll([
+          'enabled',
+          'feedingTimes',
+          'lightOnTime',
+          'lightOffTime',
+          'filtrationStartTime',
+          'filtrationRuntimeHours'
+        ])
+        && settings.keys().hasOnly([
+          'enabled',
+          'feedingTimes',
+          'lightOnTime',
+          'lightOffTime',
+          'filtrationStartTime',
+          'filtrationRuntimeHours'
+        ])
+        && settings.enabled is bool
+        && settings.feedingTimes is list
+        && settings.lightOnTime is string
+        && settings.lightOffTime is string
+        && settings.filtrationStartTime is string
+        && settings.filtrationRuntimeHours is number;
+    }
+
+    function claimed_validManualStatus(status) {
+      return status is map
+        && status.keys().hasOnly(['feeder', 'light', 'filter'])
+        && (!status.keys().hasAny(['feeder'])
+          || status.feeder in ['Active', 'Inactive'])
+        && (!status.keys().hasAny(['light'])
+          || status.light in ['On', 'Off'])
+        && (!status.keys().hasAny(['filter'])
+          || status.filter in ['Active', 'Inactive']);
+    }
+
+    // Firestore Rules cannot iterate through an arbitrarily sized list. The
+    // client validates every weight; rules enforce the canonical list shape,
+    // count match, and a positive numeric first entry. A future trusted backend
+    // should validate every entry if writes move behind a callable API.
+
+    function claimed_validFishProfile(data) {
+      return data.fishCount is int
+        && data.fishCount > 0
+        && data.fishWeightsG is list
+        && data.fishWeightsG.size() == data.fishCount
+        && data.fishWeightsG[0] is number
+        && data.fishWeightsG[0] > 0;
+    }
+
+    function claimed_aquariumDirectoryMatchesSource(aquariumId) {
+      let aquariumPath = /databases/$(database)/documents/aquariums/$(aquariumId);
+      let directoryPath = /databases/$(database)/documents/aquarium_directory/$(aquariumId);
+      let aquarium = getAfter(aquariumPath).data;
+      let directory = getAfter(directoryPath).data;
+      return existsAfter(aquariumPath)
+        && existsAfter(directoryPath)
+        && aquarium.ownerId == directory.ownerId
+        && aquarium.name == directory.name
+        && aquarium.ownerName == directory.ownerName
+        && aquarium.species == directory.species
+        && aquarium.get('bioload', null) == directory.get('bioload', null)
+        && aquarium.get('fishCount', null) == directory.get('fishCount', null)
+        && aquarium.get('tankType', null) == directory.get('tankType', null)
+        && aquarium.get('tankSizeLiters', null) == directory.get('tankSizeLiters', null)
+        && aquarium.get('tankLengthCm', null) == directory.get('tankLengthCm', null)
+        && aquarium.get('tankWidthCm', null) == directory.get('tankWidthCm', null)
+        && aquarium.get('tankHeightCm', null) == directory.get('tankHeightCm', null)
+        && aquarium.get('workingWaterVolumeLiters', null)
+          == directory.get('workingWaterVolumeLiters', null)
+        && aquarium.get('hasFiltrationSystem', null)
+          == directory.get('hasFiltrationSystem', null)
+        && aquarium.get('filtrationSetup', null)
+          == directory.get('filtrationSetup', null);
+    }
+
+    function deviceClaimed(data) {
+      return data.get('deviceId', '') != '' && data.get('deviceUid', '') != '';
+    }
+
+    function validUserAquariumUpdate() {
+      return deviceClaimed(resource.data)
+        ? claimed_validUserAquariumUpdate() : legacyUserAquariumUpdate();
+    }
+
+    function aquariumDirectoryMatchesSource(aquariumId) {
+      let aquarium = getAfter(/databases/$(database)/documents/aquariums/$(aquariumId)).data;
+      return deviceClaimed(aquarium)
+        ? claimed_aquariumDirectoryMatchesSource(aquariumId) : legacyDirectoryMatchesSource(aquariumId);
+    }
+
+    match /users/{uid} {
+      allow get: if hasProtectedAccess() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && validUserProfileCreate(uid);
+      allow update: if hasProtectedAccess()
+        && request.auth.uid == uid
+        && validSelfProfileUpdate();
+      allow delete: if false;
+    }
+
+    match /aquariums/{aquariumId} {
+      allow get: if hasProtectedAccess()
+        && !isAdmin() && aquariumAccessOpen(aquariumId)
+        && resource.data.ownerId == request.auth.uid;
+      allow list: if hasProtectedAccess() && !isAdmin()
+        && resource.data.ownerId == request.auth.uid;
+
+      // Device registration is required; only the trusted claiming endpoint creates profiles.
+      allow create: if false;
+
+      allow update: if hasProtectedAccess()
+        && !isAdmin()
+        && aquariumAccessOpen(aquariumId)
+        && validUserAquariumUpdate()
+        && aquariumDirectoryMatchesSource(aquariumId);
+
+      allow delete: if !deviceClaimed(resource.data)
+        && hasProtectedAccess() && aquariumAccessOpen(aquariumId)
+        && !isAdmin()
+        && resource.data.ownerId == request.auth.uid
+        && !existsAfter(
+          /databases/$(database)/documents/aquarium_directory/$(aquariumId)
+        );
+
+      match /sensor_readings/{dateKey} {
+        allow read: if ownsAquarium(aquariumId);
+        allow write: if false;
+
+        match /readings/{timeKey} {
+          allow read: if ownsAquarium(aquariumId);
+          allow write: if false;
+        }
+      }
+    }
+
+    match /aquarium_directory/{aquariumId} {
+      allow read: if isAdmin()
+        || (hasProtectedAccess() && aquariumAccessOpen(aquariumId)
+          && resource.data.ownerId == request.auth.uid);
+
+      allow create: if hasProtectedAccess()
+        && !isAdmin() && aquariumAccessOpen(aquariumId)
+        && request.resource.data.ownerId == request.auth.uid
+        && aquariumDirectoryMatchesSource(aquariumId);
+
+      allow update: if hasProtectedAccess()
+        && !isAdmin() && aquariumAccessOpen(aquariumId)
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && aquariumDirectoryMatchesSource(aquariumId);
+
+      allow delete: if !deviceClaimed(get(/databases/$(database)/documents/aquariums/$(aquariumId)).data)
+        && hasProtectedAccess()
+        && !isAdmin() && aquariumAccessOpen(aquariumId)
+        && resource.data.ownerId == request.auth.uid
+        && !existsAfter(
+          /databases/$(database)/documents/aquariums/$(aquariumId)
+        );
+    }
+
+    match /sensor_readings/{readingId} {
+      allow read: if ownsAquarium(resource.data.aquariumId);
+      allow write: if false;
+    }
+
+    match /alert_records/{alertId} {
+      allow read: if ownsAquarium(resource.data.aquarium_id);
+      allow update: if ownsAquarium(resource.data.aquarium_id)
+        && request.resource.data.aquarium_id == resource.data.aquarium_id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])
+        && request.resource.data.isRead is bool;
+      allow create, delete: if false;
+    }
+
+    match /monitoring_reports/{reportId} {
+      allow read: if ownsAquarium(resource.data.aquarium_id);
+      allow write: if false;
+    }
+
+    match /authorization_user_policies/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

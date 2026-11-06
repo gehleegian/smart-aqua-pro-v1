@@ -1,4 +1,4 @@
-import type { Aquarium, AutomationSettings } from './aquarium';
+import type { Aquarium, AutomationSettings, ManualSystemStatus } from './aquarium';
 import { normalizeDevicePowerStatus, getTelemetryFreshness, TELEMETRY_STALE_MS, TELEMETRY_EPOCH_FLOOR } from '../utils/monitoringAssessmentCore.ts';
 import type { SystemMode } from './monitoring';
 
@@ -12,6 +12,7 @@ export type DeviceCommandState = 'Active' | 'Inactive' | 'On' | 'Off';
 export type DevicePowerStatus = 'Online' | 'Offline' | 'Power Interruption' | 'Unknown';
 
 export interface DeviceTelemetry {
+  lightState?: 'On' | 'Off';
   temperatureC: number;
   temperatureReadingValid?: boolean;
   waterLevelPercent: number;
@@ -20,6 +21,7 @@ export interface DeviceTelemetry {
   tdsPercent?: number;
   tdsReadingValid?: boolean;
   turbidity?: number;
+  turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
@@ -170,6 +172,21 @@ export function hasFreshDeviceTelemetry(
   return getDeviceTelemetryState(telemetry, now) === 'live';
 }
 
+export function getReportedManualStatus(
+  fallback: ManualSystemStatus,
+  telemetry: DeviceTelemetry | null | undefined,
+  now = Date.now()
+): ManualSystemStatus {
+  if (!telemetry || !hasFreshDeviceTelemetry(telemetry, now)) return { ...fallback };
+  return {
+    ...fallback,
+    light: telemetry.lightState === 'On' || telemetry.lightState === 'Off'
+      ? telemetry.lightState : fallback.light,
+    filter: telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
+      ? telemetry.filterState : fallback.filter,
+  };
+}
+
 export function getDeviceTelemetryStatusText(state: DeviceTelemetryState) {
   return state === 'offline' ? 'Device offline' : state === 'unavailable' ? 'No live data' : 'Live data';
 }
@@ -216,6 +233,8 @@ export function getFreshTelemetrySnapshot(
     ph,
     hasFreshPhTelemetry: ph !== null,
     turbidity,
+    turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy'
+      ? telemetry.turbidityState : undefined,
     hasFreshTurbidityTelemetry: turbidity !== null,
     powerStatus,
     hasFreshPowerTelemetry: Boolean(powerStatus),
@@ -248,6 +267,8 @@ export function buildDeviceControlProfile({
     mode,
     automationEnabled: automationSettings.enabled,
     feedingTimes: automationSettings.feedingTimes,
+    lightOnTime: automationSettings.lightOnTime,
+    lightOffTime: automationSettings.lightOffTime,
     filtrationStartTime: automationSettings.filtrationStartTime,
     filtrationRuntimeHours: automationSettings.filtrationRuntimeHours,
     manualLightState: aquarium.light === 'On' ? 'On' : 'Off',

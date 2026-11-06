@@ -26,6 +26,7 @@ export const INDOOR_GOLDFISH_PRESET = {
 
 export function createEmptyAquariumForm(): AquariumFormData {
   return {
+    deviceId: '',
     name: '',
     species: CANONICAL_FISH_SPECIES,
     tankType: CANONICAL_AQUARIUM_TYPE,
@@ -49,6 +50,7 @@ export function populateAquariumForm(aquarium: Aquarium): AquariumFormData {
         : undefined;
 
   return {
+    deviceId: aquarium.deviceId || '',
     name: aquarium.name,
     species: CANONICAL_FISH_SPECIES,
     tankType: aquarium.tankType || CANONICAL_AQUARIUM_TYPE,

@@ -29,7 +29,7 @@ export const manualActionTiming: Record<
   SystemField,
   { activeMs: number; cooldownMs: number }
 > = {
-  feeder: { activeMs: 10000, cooldownMs: 20000 },
+  feeder: { activeMs: 10000, cooldownMs: 5000 },
   light: { activeMs: 2000, cooldownMs: 5000 },
   filter: { activeMs: 3000, cooldownMs: 10000 },
 };
@@ -361,6 +361,8 @@ export function prepareAutomationSettings(draft: AutomationSettings):
   | { settings: null; error: string } {
   const runtimeHours = Number(draft.filtrationRuntimeHours);
   const feedingTimes = draft.feedingTimes.map((time) => time.trim()).filter(Boolean);
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const allTimes = [...feedingTimes, draft.lightOnTime, draft.lightOffTime, draft.filtrationStartTime];
 
   if (
     feedingTimes.length === 0 ||
@@ -374,6 +376,13 @@ export function prepareAutomationSettings(draft: AutomationSettings):
       settings: null,
       error: 'Filtration runtime must be between 1 and 24 hours.',
     };
+  }
+
+  if (allTimes.some((time) => !timePattern.test(time))) {
+    return { settings: null, error: 'Enter every time in 24-hour HH:MM format.' };
+  }
+  if (draft.lightOnTime === draft.lightOffTime) {
+    return { settings: null, error: 'Light On and Light Off must be different times.' };
   }
 
   return {

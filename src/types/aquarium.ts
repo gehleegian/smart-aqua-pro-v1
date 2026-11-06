@@ -59,6 +59,8 @@ export interface ManualSystemStatus {
 
 export interface Aquarium {
   id: string;
+  deviceId?: string;
+  deviceUid?: string;
   name: string;
   species: string[];
   bioload?: BioloadLevel;

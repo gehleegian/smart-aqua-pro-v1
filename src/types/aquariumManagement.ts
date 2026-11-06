@@ -8,6 +8,7 @@ export type AquariumOwnerGroup = {
 };
 
 export type AquariumFormData = {
+  deviceId: string;
   name: string;
   species: string;
   tankType: string;
