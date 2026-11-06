@@ -1,0 +1,5 @@
+#pragma once
+// Copy to DeviceIdentity.h (ignored) and use this device's private manifest.
+// Keep unclaimed IDs private; never reuse another device's identity.
+constexpr char DEVICE_UID[] = "esp32-REPLACE_WITH_ENCLOSURE_ID";
+constexpr char ENCLOSURE_ID[] = "REPLACE_WITH_ENCLOSURE_ID";

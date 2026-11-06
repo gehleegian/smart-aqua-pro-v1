@@ -125,6 +125,7 @@ export function useDashboardController() {
       subscribeToDeviceShadow(
         aquariumId,
         (shadow) => {
+          setTelemetryNow(Date.now());
           setDeviceShadows((prev) => ({
             ...prev,
             [aquariumId]: shadow,

@@ -1,4 +1,5 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
+import { validateDeviceId } from '../../services/deviceClaimContracts';
 import { X } from 'lucide-react';
 import type {
   AquariumFormData,
@@ -48,9 +49,18 @@ export function AquariumFormModal({
   onFishWeightChange,
 }: AquariumFormModalProps) {
   const titleId = useId();
+  const [profileStep, setProfileStep] = useState(formMode === 'edit');
+  const [deviceError, setDeviceError] = useState('');
   const bioloadCalculation = getFormBioloadCalculation(formData);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
+    if (!profileStep) {
+      const message = validateDeviceId(formData.deviceId);
+      setDeviceError(message);
+      if (!message) setProfileStep(true);
+      return;
+    }
     onSave();
   };
   const applyIndoorPreset = () => {
@@ -63,7 +73,7 @@ export function AquariumFormModal({
   };
 
   return (
-    <Modal labelledBy={titleId} onClose={onClose} className="max-w-3xl overflow-hidden p-0">
+    <Modal labelledBy={titleId} onClose={() => { if (!saving) onClose(); }} className="max-w-3xl overflow-hidden p-0">
       <form
         onSubmit={handleSubmit}
         noValidate
@@ -76,12 +86,23 @@ export function AquariumFormModal({
               <p className="mt-1 text-sm text-slate-400">Owner: {selectedOwnerName}</p>
             ) : null}
           </div>
-          <button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={onClose}>
+          <button type="button" aria-label="Close aquarium setup" disabled={saving} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={onClose}>
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="overflow-y-auto px-6 py-5">
+          {!profileStep ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-300">Step 1 of 2: enter the unique device ID printed on your enclosure.</p>
+              <Input label="Device ID" placeholder="SAQ-7K3M-9R2X" maxLength={13}
+                autoComplete="off" spellCheck={false} value={formData.deviceId}
+                onChange={event => { setDeviceError(''); onFieldChange('deviceId', event.target.value); }} />
+              <p className="text-xs text-slate-400">Device availability is checked when you save. An unclaimed device is linked to the first eligible account that registers its ID. Keep the ID private until setup is complete.</p>
+            </div>
+          ) : (
+          <>
+          {formMode === 'create' ? <p className="mb-4 text-sm text-slate-300">Step 2 of 2: aquarium profile for {formData.deviceId.toUpperCase()}. No readings or equipment state are assumed until the device reports them.</p> : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Aquarium Name" value={formData.name} disabled={saving} onChange={(event) => onFieldChange('name', event.target.value)} />
             <Input label="Aquarium Type" value={formData.tankType} readOnly disabled />
@@ -168,15 +189,17 @@ export function AquariumFormModal({
             <Input label="Minimum Water Level %" type="number" value={formData.minLevel} disabled={saving} onChange={(event) => onFieldChange('minLevel', event.target.value)} />
             <Input label="Minimum TDS Purity %" type="number" value={formData.minQuality} disabled={saving} onChange={(event) => onFieldChange('minQuality', event.target.value)} />
           </div>
+          </>
+          )}
         </div>
 
-        {error ? (
+        {error || deviceError ? (
           <div
             role="alert"
             aria-live="assertive"
             className="mx-6 mb-1 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
           >
-            {error}
+            {deviceError || error}
           </div>
         ) : null}
 
@@ -184,8 +207,9 @@ export function AquariumFormModal({
           <Button type="button" variant="ghost" disabled={saving} onClick={onClose}>
             Cancel
           </Button>
+          {profileStep && formMode === 'create' ? <Button type="button" variant="secondary" disabled={saving} onClick={() => setProfileStep(false)}>Back to device</Button> : null}
           <Button type="submit" disabled={saving}>
-            {getAquariumFormSubmitLabel(formMode, saving)}
+            {profileStep ? getAquariumFormSubmitLabel(formMode, saving) : 'Continue to aquarium setup'}
           </Button>
         </div>
       </form>

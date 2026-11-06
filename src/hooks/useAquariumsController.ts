@@ -13,7 +13,6 @@ import type {
 } from '../types/aquariumManagement';
 import type { UserRole } from '../types/user';
 import {
-  buildAquariumCreatePayload,
   buildAquariumUpdatePayload,
   buildOwnerGroups,
   createEmptyAquariumForm,
@@ -28,7 +27,6 @@ import { resizeFishWeights } from '../utils/aquariumProfileCalculations';
 export function useAquariumsController() {
   const [aquariums, setAquariums] = useState<Aquarium[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('User');
-  const [currentUserName, setCurrentUserName] = useState('');
   const [selectedOwnerId, setSelectedOwnerId] = useState('');
   const [formData, setFormData] = useState<AquariumFormData>(createEmptyAquariumForm);
   const [formMode, setFormMode] = useState<AquariumFormMode>('create');
@@ -75,7 +73,6 @@ export function useAquariumsController() {
       }
 
       setCurrentUserRole(data.userProfile.role);
-      setCurrentUserName(data.userProfile.name);
       setAquariums(data.aquariums);
       setSelectedOwnerId((prev) =>
         prev && data.aquariums.some((aquarium) => aquarium.ownerId === prev) ? prev : ''
@@ -181,17 +178,10 @@ export function useAquariumsController() {
         await updateAquarium(editingId, buildAquariumUpdatePayload(formData));
         setSuccess('Aquarium updated successfully.');
       } else {
-        const ownerId =
-          currentUserRole === 'Admin' && selectedOwnerId
-            ? selectedOwnerId
-            : auth.currentUser?.uid || '';
-        const ownerName =
-          currentUserRole === 'Admin' && selectedOwnerName
-            ? selectedOwnerName
-            : currentUserName || 'Current User';
-
-        await createAquarium(buildAquariumCreatePayload({ formData, ownerId, ownerName }));
-        setSuccess('Aquarium added successfully.');
+        await createAquarium(buildAquariumUpdatePayload(formData), {
+          deviceId: formData.deviceId,
+        });
+        setSuccess('Device linked and aquarium created successfully. Waiting for live sensor readings.');
       }
 
       closeModal();

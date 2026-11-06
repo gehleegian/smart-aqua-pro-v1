@@ -39,7 +39,6 @@ interface AquariumDetailsViewProps {
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
   onRefresh: () => void;
-  onSystemToggle: (field: SystemField) => void;
 }
 
 export function AquariumDetailsView({
@@ -60,7 +59,6 @@ export function AquariumDetailsView({
   onModeChange,
   onOpenAutomationEditor,
   onRefresh,
-  onSystemToggle,
 }: AquariumDetailsViewProps) {
   return (
     <div className="space-y-6">
@@ -131,7 +129,7 @@ export function AquariumDetailsView({
               status={
                 aquarium.hasFreshPurityTelemetry
                   ? getQualityLabel(aquarium.quality, aquarium.tdsPpm)
-                  : 'Waiting for telemetry'
+                  : aquarium.hasFreshTelemetry ? 'No validated TDS conversion from device' : 'Waiting for telemetry'
               }
             />
             <Reading
@@ -141,25 +139,25 @@ export function AquariumDetailsView({
                   ? aquarium.ph.toFixed(1)
                   : '--'
               }
-              status={aquarium.hasFreshPhTelemetry ? 'Live telemetry' : 'Waiting for telemetry'}
+              status={aquarium.hasFreshPhTelemetry ? 'Live telemetry' : aquarium.hasFreshTelemetry ? 'No valid pH supplied by device' : 'Waiting for telemetry'}
             />
             <Reading
               label="Turbidity"
               value={
-                aquarium.hasFreshTurbidityTelemetry && typeof aquarium.turbidity === 'number'
+                aquarium.turbidityState ?? (aquarium.hasFreshTurbidityTelemetry && typeof aquarium.turbidity === 'number'
                   ? `${aquarium.turbidity.toFixed(0)} NTU`
-                  : '--'
+                  : '--')
               }
               status={
-                aquarium.hasFreshTurbidityTelemetry
+                aquarium.turbidityState ? 'Live Clear/Cloudy comparison; not NTU' : aquarium.hasFreshTurbidityTelemetry
                   ? 'Live telemetry'
-                  : 'Waiting for telemetry'
+                  : aquarium.hasFreshTelemetry ? 'No valid turbidity supplied by device' : 'Waiting for telemetry'
               }
             />
             <Reading
               label="Power Status"
               value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
-              status={aquarium.hasFreshPowerTelemetry ? 'Live telemetry' : 'Waiting for telemetry'}
+              status={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus === 'Unknown' ? 'Power detector setup not verified' : 'Live telemetry' : 'Waiting for telemetry'}
             />
             <Reading
               label="Estimated Bioload"
@@ -297,6 +295,9 @@ export function AquariumDetailsView({
               ))}
             </div>
 
+            <p className="mb-4 text-xs text-slate-400">
+              Manual controls work while automation is enabled. Light and filter overrides last until the next scheduled change.
+            </p>
             <div className="space-y-3">
               {(['feeder', 'light', 'filter'] as SystemField[]).map((field) => (
                 <div key={field} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
@@ -308,7 +309,7 @@ export function AquariumDetailsView({
                     size="sm"
                     variant="secondary"
                     disabled={controlsDisabled || manualActions[field].disabled || Boolean(savingSystemKey)}
-                    onClick={() => (systemMode === 'manual' ? onManualAction(field) : onSystemToggle(field))}
+                    onClick={() => onManualAction(field)}
                   >
                     {manualActions[field].buttonLabel}
                   </Button>
@@ -331,6 +332,7 @@ export function AquariumDetailsView({
           <CardContent>
             <div className="space-y-3 text-sm">
               <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
+              <Row label="Schedule time zone" value="UTC+8" />
               <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
               <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
               <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />

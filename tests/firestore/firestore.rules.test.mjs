@@ -402,7 +402,7 @@ test('FS-08 clients cannot read or write trusted workflow collections', async ()
   assert.ok(true);
 });
 
-test('FS-09 owner can create and reload a complete Goldfish profile without invented bioload', async () => {
+test('FS-09 even a complete profile cannot bypass trusted physical-device claiming', async () => {
   const database = userDatabase();
   const aquariumId = 'aquarium-profile-create';
   const { bioload: _legacyBioload, ...profileAquarium } = aquarium;
@@ -418,15 +418,7 @@ test('FS-09 owner can create and reload a complete Goldfish profile without inve
     name: 'Profile Aquarium',
   });
 
-  await assertSucceeds(batch.commit());
-  const saved = await assertSucceeds(getDoc(doc(database, 'aquariums', aquariumId)));
-  assert.equal(saved.data().tankType, 'Freshwater');
-  assert.equal(saved.data().species[0], 'Goldfish');
-  assert.equal(saved.data().fishCount, 2);
-  assert.equal(saved.data().hasFiltrationSystem, true);
-  assert.equal(saved.data().minPh, 6.5);
-  assert.equal(saved.data().maxPh, 7.5);
-  assert.equal(saved.data().bioload, undefined);
+  await assertFails(batch.commit());
 });
 
 test('FS-10 owner can update structural profile fields with a matching directory record', async () => {

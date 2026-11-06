@@ -39,11 +39,17 @@
           "turbidity": {
             ".validate": "newData.isNumber()"
           },
+          "turbidityState": {
+            ".validate": "newData.isString() && (newData.val() == 'Clear' || newData.val() == 'Cloudy' || newData.val() == 'Unknown')"
+          },
           "ammoniaPpm": {
             ".validate": "newData.isNumber()"
           },
           "filterState": {
             ".validate": "newData.isString() && (newData.val() == 'Active' || newData.val() == 'Inactive')"
+          },
+          "lightState": {
+            ".validate": "newData.isString() && (newData.val() == 'On' || newData.val() == 'Off')"
           },
           "equipmentStatus": {
             ".validate": "newData.isString() && (newData.val() == 'Normal' || newData.val() == 'Warning' || newData.val() == 'Fault' || newData.val() == 'Unknown')"
