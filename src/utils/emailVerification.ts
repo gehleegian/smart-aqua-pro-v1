@@ -7,6 +7,18 @@ export type EmailAccessState =
   | 'verification-required'
   | 'access-allowed';
 
+/**
+ * Some deployed projects may not yet have the self-read policy rule. Treat a
+ * denied policy lookup as the secure default (verification required), never
+ * as an exemption. Other failures remain errors so transient outages are not
+ * misreported as an email-verification problem.
+ */
+export function isEmailPolicyReadDenied(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
+}
+
 export function getEmailAccessState(
   user: FirebaseAuthUserLike | null | undefined,
   emailVerificationRequired: boolean

@@ -547,7 +547,9 @@ export function subscribeToDeviceShadow(
         latestCommandUnsubscribe();
       }
     } catch (error) {
-      console.error(error);
+      // The subscription reports handled access/configuration failures to the
+      // UI. Keep these out of Next's development error overlay.
+      console.warn('Device data subscription could not be started.', error);
 
       if (!cancelled) {
         reportSubscriptionError(error);

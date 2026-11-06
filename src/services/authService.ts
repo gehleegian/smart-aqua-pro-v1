@@ -12,6 +12,7 @@ import { auth, db } from '../firebase';
 import type { UserData } from '../types/user';
 import { getAuthErrorCode } from '../utils/authErrors';
 import { registerAuthAttempt, resetAuthRateLimit } from '../utils/authRateLimit';
+import { getCurrentEmailAccessState } from './emailVerificationPolicyService';
 import { getCurrentUserProfile } from './userService';
 
 export class EmailVerificationRequiredError extends Error {
@@ -116,7 +117,14 @@ export async function resolveSessionProfile(firebaseUser: User): Promise<UserDat
     throw error;
   }
 
-  return profile ?? recreateUserProfile(firebaseUser);
+  const resolvedProfile = profile ?? (await recreateUserProfile(firebaseUser));
+  const emailAccessState = await getCurrentEmailAccessState(firebaseUser);
+
+  if (emailAccessState !== 'access-allowed') {
+    throw new EmailVerificationRequiredError();
+  }
+
+  return resolvedProfile;
 }
 
 export async function endUnverifiedSession(): Promise<void> {

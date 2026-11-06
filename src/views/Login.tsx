@@ -79,11 +79,10 @@ export default function Login({
 
       onLogin(await loginUser(email, password));
     } catch (err: unknown) {
-      console.error('Login failed:', err);
-
       if (err instanceof EmailVerificationRequiredError) {
         setNeedsVerification(true);
       } else {
+        console.error('Login failed:', err);
         setError(getAuthErrorMessage(err, 'Login failed.'));
       }
     } finally {

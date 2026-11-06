@@ -138,7 +138,11 @@ export default function Layout() {
           localStorage.setItem('currentPage', 'dashboard');
         }
       } catch (error) {
-        console.error('Failed to load user session:', error);
+        if (error instanceof EmailVerificationRequiredError) {
+          console.warn('Email verification is required before accessing SmartAqua Pro.');
+        } else {
+          console.error('Failed to load user session:', error);
+        }
 
         if (isOutdated()) {
           return;

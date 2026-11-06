@@ -1,7 +1,10 @@
 import type { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { resolveEmailAccessState } from '../utils/emailVerification';
+import {
+  isEmailPolicyReadDenied,
+  resolveEmailAccessState,
+} from '../utils/emailVerification';
 
 export const VERIFICATION_POLICY_UNAVAILABLE_MESSAGE =
   'Your credentials were accepted, but SmartAqua Pro could not load the trusted email-verification policy. Please contact the system administrator.';
@@ -26,10 +29,19 @@ export function isVerificationPolicyUnavailableError(error: unknown) {
 }
 
 export async function getEmailVerificationRequired(uid: string) {
-  const snapshot = await getDoc(doc(db, 'authorization_user_policies', uid));
-  return snapshot.exists() && snapshot.data().emailVerificationRequired === false
-    ? false
-    : true;
+  try {
+    const snapshot = await getDoc(doc(db, 'authorization_user_policies', uid));
+    return snapshot.exists() && snapshot.data().emailVerificationRequired === false
+      ? false
+      : true;
+  } catch (error) {
+    if (!isEmailPolicyReadDenied(error)) throw error;
+
+    console.warn(
+      'Email verification policy is not readable for this account; applying the secure default and requiring email verification.'
+    );
+    return true;
+  }
 }
 
 export async function getCurrentEmailAccessState(user: User) {
