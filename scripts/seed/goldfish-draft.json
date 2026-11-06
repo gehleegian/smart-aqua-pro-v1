@@ -1,0 +1,560 @@
+{
+  "_note": "DRAFT values from common aquarium-keeping ranges. Every value awaits adviser approval; see docs/rule-matrix.md.",
+  "species": {
+    "goldfish": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "name": "Goldfish",
+      "ranges": {
+        "temperatureC": {
+          "min": 20,
+          "max": 24
+        },
+        "ph": {
+          "min": 6.5,
+          "max": 7.5
+        },
+        "tdsPpm": {
+          "min": 100,
+          "max": 400
+        },
+        "turbidity": {
+          "max": 5
+        }
+      },
+      "minWaterLevelPercent": 70,
+      "bioloadBandsGPerL": {
+        "lightMax": 1,
+        "moderateMax": 3
+      },
+      "cleaningIntervalDays": {
+        "light": 14,
+        "moderate": 10,
+        "heavy": 7
+      },
+      "earlyCleaning": {
+        "tdsRisePct": 30,
+        "turbidityWarningCount": 2,
+        "turbidityWindowHours": 24
+      }
+    }
+  },
+  "rules": {
+    "temp_high_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "temperatureC",
+      "severity": "critical",
+      "condition": {
+        "op": "gt",
+        "ref": "max",
+        "marginPct": 10
+      },
+      "priority": 10,
+      "title": "Water temperature far above range",
+      "action": "Act now: move the tank away from heat sources and direct sunlight, increase aeration and room ventilation, and lower the temperature gradually. If you change water, use conditioned water only slightly cooler than the tank; avoid sudden changes.",
+      "basis": "Water much warmer than the configured maximum holds noticeably less dissolved oxygen; the range is for indoor goldfish keeping.",
+      "preCheck": "Confirm the reading with a separate aquarium thermometer.",
+      "enabled": true
+    },
+    "temp_high_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "temperatureC",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "priority": 20,
+      "title": "Water temperature above range",
+      "action": "Check for heat sources (sunlight, lights, room heating) and improve ventilation; let the temperature come down gradually.",
+      "basis": "The temperature is above the configured maximum for indoor goldfish.",
+      "preCheck": "Confirm the reading with a separate aquarium thermometer.",
+      "enabled": true
+    },
+    "temp_low_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "temperatureC",
+      "severity": "critical",
+      "condition": {
+        "op": "lt",
+        "ref": "min",
+        "marginPct": 10
+      },
+      "priority": 10,
+      "title": "Water temperature far below range",
+      "action": "Act now: check the room temperature and any heater, and warm the water gradually; avoid sudden changes.",
+      "basis": "The temperature is well below the configured minimum for indoor goldfish.",
+      "preCheck": "Confirm the reading with a separate aquarium thermometer.",
+      "enabled": true
+    },
+    "temp_low_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "temperatureC",
+      "severity": "warning",
+      "condition": {
+        "op": "lt",
+        "ref": "min"
+      },
+      "priority": 20,
+      "title": "Water temperature below range",
+      "action": "Check the room temperature and any heater; bring the temperature up gradually.",
+      "basis": "The temperature is below the configured minimum for indoor goldfish.",
+      "preCheck": "Confirm the reading with a separate aquarium thermometer.",
+      "enabled": true
+    },
+    "ph_high_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "ph",
+      "severity": "critical",
+      "condition": {
+        "op": "gt",
+        "ref": "max",
+        "marginPct": 10
+      },
+      "priority": 10,
+      "title": "pH far above range",
+      "action": "Test pH with a calibrated kit. Check the source water and decorations or substrate that raise pH. Plan a partial water change with conditioned water of normal pH. Do not dose chemicals automatically.",
+      "basis": "pH well above the configured maximum. SmartAqua Pro never adjusts pH automatically.",
+      "preCheck": "Confirm with a calibrated pH test kit or a freshly calibrated probe.",
+      "enabled": true
+    },
+    "ph_high_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "ph",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "priority": 20,
+      "title": "pH above range",
+      "action": "Test pH with a calibrated kit and check the source water; if confirmed, plan a partial water change with conditioned water. Avoid rapid pH changes.",
+      "basis": "pH is above the configured maximum.",
+      "preCheck": "Confirm with a calibrated pH test kit or a freshly calibrated probe.",
+      "enabled": true
+    },
+    "ph_low_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "ph",
+      "severity": "critical",
+      "condition": {
+        "op": "lt",
+        "ref": "min",
+        "marginPct": 10
+      },
+      "priority": 10,
+      "title": "pH far below range",
+      "action": "Test pH with a calibrated kit. Do a partial water change with conditioned water, remove decaying food or debris, and check filter maintenance. Do not dose chemicals automatically.",
+      "basis": "pH well below the configured minimum; falling pH often accompanies accumulated waste.",
+      "preCheck": "Confirm with a calibrated pH test kit or a freshly calibrated probe.",
+      "enabled": true
+    },
+    "ph_low_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "ph",
+      "severity": "warning",
+      "condition": {
+        "op": "lt",
+        "ref": "min"
+      },
+      "priority": 20,
+      "title": "pH below range",
+      "action": "Test pH with a calibrated kit; remove uneaten food and debris and plan a partial water change with conditioned water.",
+      "basis": "pH is below the configured minimum.",
+      "preCheck": "Confirm with a calibrated pH test kit or a freshly calibrated probe.",
+      "enabled": true
+    },
+    "tds_high_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "tdsPpm",
+      "severity": "critical",
+      "condition": {
+        "op": "gt",
+        "ref": "max",
+        "marginPct": 25
+      },
+      "priority": 10,
+      "title": "TDS far above range",
+      "action": "Do a partial water change with conditioned water soon, remove debris, reduce feeding, and check the cleaning history.",
+      "basis": "Dissolved solids well above the configured maximum indicate accumulated waste or minerals.",
+      "preCheck": "Check the TDS probe calibration and that it is fully submerged.",
+      "enabled": true
+    },
+    "tds_high_warning_heavy_bioload": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "tdsPpm",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "extraChecks": [
+        {
+          "field": "bioloadLevel",
+          "op": "eq",
+          "value": "heavy"
+        }
+      ],
+      "priority": 15,
+      "title": "TDS above range (heavy bioload)",
+      "action": "Heavy bioload: schedule a partial water change soon and reduce feeding; review whether the tank is overstocked for its working volume.",
+      "basis": "TDS is above the configured maximum and the computed bioload is heavy, so waste builds up faster.",
+      "preCheck": "Check the TDS probe calibration and the fish weights in the aquarium profile.",
+      "enabled": true
+    },
+    "tds_high_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "tdsPpm",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "priority": 20,
+      "title": "TDS above range",
+      "action": "Plan a partial water change with conditioned water and review feeding amounts.",
+      "basis": "TDS is above the configured maximum.",
+      "preCheck": "Check the TDS probe calibration and that it is fully submerged.",
+      "enabled": true
+    },
+    "tds_low_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "tdsPpm",
+      "severity": "warning",
+      "condition": {
+        "op": "lt",
+        "ref": "min"
+      },
+      "priority": 20,
+      "title": "TDS below range",
+      "action": "Check the source water and the TDS probe calibration before changing anything.",
+      "basis": "TDS is below the configured minimum; very low readings are often a probe or source-water issue.",
+      "preCheck": "Check the TDS probe calibration and that it is fully submerged.",
+      "enabled": true
+    },
+    "turbidity_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "turbidity",
+      "severity": "critical",
+      "condition": {
+        "op": "gt",
+        "ref": "max",
+        "marginPct": 100
+      },
+      "priority": 10,
+      "title": "Water very cloudy",
+      "action": "Check that the filter is running, remove uneaten food and debris, and do a partial water change with conditioned water.",
+      "basis": "Turbidity is far above the configured maximum.",
+      "preCheck": "Confirm visually and check that the turbidity sensor is clean and calibrated.",
+      "enabled": true
+    },
+    "turbidity_warning_filter_off": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "turbidity",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "extraChecks": [
+        {
+          "field": "filterState",
+          "op": "eq",
+          "value": "Inactive"
+        }
+      ],
+      "priority": 10,
+      "title": "Cloudy water with the filter off",
+      "action": "The filter reports inactive: turn it back on (or find out why it stopped), then recheck turbidity after it has run for a while.",
+      "basis": "Turbidity is above the configured maximum while filtration is not running.",
+      "preCheck": "Confirm visually and check that the turbidity sensor is clean.",
+      "enabled": true
+    },
+    "turbidity_warning_filter_on": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "turbidity",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "extraChecks": [
+        {
+          "field": "filterState",
+          "op": "eq",
+          "value": "Active"
+        }
+      ],
+      "priority": 20,
+      "title": "Cloudy water with the filter running",
+      "action": "The filter is running but the water is cloudy: rinse the filter media in tank water, remove uneaten food, and reduce feeding.",
+      "basis": "Turbidity is above the configured maximum even though filtration is active, which points to clogged media or excess waste.",
+      "preCheck": "Confirm visually and check that the turbidity sensor is clean.",
+      "enabled": true
+    },
+    "turbidity_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "turbidity",
+      "severity": "warning",
+      "condition": {
+        "op": "gt",
+        "ref": "max"
+      },
+      "priority": 30,
+      "title": "Cloudy water",
+      "action": "Remove uneaten food and debris and check the filter.",
+      "basis": "Turbidity is above the configured maximum (filter status unknown).",
+      "preCheck": "Confirm visually and check that the turbidity sensor is clean.",
+      "enabled": true
+    },
+    "water_level_low_critical": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "waterLevelPercent",
+      "severity": "critical",
+      "condition": {
+        "op": "lt",
+        "ref": "min",
+        "marginPct": 15
+      },
+      "priority": 10,
+      "title": "Water level far below minimum",
+      "action": "Check for leaks now, make sure the filter and any heater are not running dry, and top up with conditioned water.",
+      "basis": "The water level is well below the configured minimum.",
+      "preCheck": "Look at the tank and confirm the level sensor is not obstructed.",
+      "enabled": true
+    },
+    "water_level_low_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "waterLevelPercent",
+      "severity": "warning",
+      "condition": {
+        "op": "lt",
+        "ref": "min"
+      },
+      "priority": 20,
+      "title": "Water level below minimum",
+      "action": "Top up with conditioned water and check for evaporation or leaks.",
+      "basis": "The water level is below the configured minimum.",
+      "preCheck": "Look at the tank and confirm the level sensor is not obstructed.",
+      "enabled": true
+    },
+    "power_interruption": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "power",
+      "severity": "critical",
+      "condition": {
+        "op": "eq",
+        "value": "Power Interruption"
+      },
+      "priority": 10,
+      "title": "Mains power interruption",
+      "action": "Mains power is off. Check the outlet and breaker. The device is on backup power; the filter, light and feeder may be off until mains returns.",
+      "basis": "The device reports that mains power is missing (mainsPresent = false) while it is still online.",
+      "preCheck": "Check whether other appliances on the same circuit have power.",
+      "enabled": true
+    },
+    "power_offline": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "power",
+      "severity": "critical",
+      "condition": {
+        "op": "eq",
+        "value": "Offline"
+      },
+      "priority": 10,
+      "title": "Power reported offline",
+      "action": "Check the power supply to the aquarium equipment.",
+      "basis": "The device reports its power status as Offline.",
+      "preCheck": "Check the outlet and the adapter.",
+      "enabled": true
+    },
+    "equipment_fault": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "equipment",
+      "severity": "critical",
+      "condition": {
+        "op": "eq",
+        "value": "Fault"
+      },
+      "priority": 10,
+      "title": "Equipment fault",
+      "action": "Inspect the affected equipment and keep automation off until it is verified to work.",
+      "basis": "The device reports an equipment fault.",
+      "preCheck": "Check the device status details and the equipment by eye.",
+      "enabled": true
+    },
+    "equipment_warning": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "equipment",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "Warning"
+      },
+      "priority": 20,
+      "title": "Equipment warning",
+      "action": "Inspect the equipment the device flags and recheck after correcting it.",
+      "basis": "The device reports an equipment warning.",
+      "preCheck": "Check the device status details.",
+      "enabled": true
+    },
+    "filter_inactive": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "filter",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "Inactive"
+      },
+      "priority": 20,
+      "title": "Filter not running",
+      "action": "Check the filter power, flow and blockage, and the filtration schedule.",
+      "basis": "An installed filtration system reports inactive operation.",
+      "preCheck": "Check whether the filter is intentionally off (manual mode or schedule).",
+      "enabled": true
+    },
+    "device_offline": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "device",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "offline"
+      },
+      "priority": 10,
+      "title": "Device offline",
+      "action": "Check the device power and Wi-Fi. Readings and alerts are paused until it reconnects.",
+      "basis": "No telemetry for longer than the 60 s offline window (3 missed sends).",
+      "preCheck": "Check the router and whether the device LED shows it is powered.",
+      "enabled": true
+    },
+    "sensor_fault": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "device",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "sensor_fault"
+      },
+      "priority": 10,
+      "title": "Sensor fault",
+      "action": "Check the {sensor} probe connection or calibration.",
+      "basis": "The reading is missing, flagged invalid, or physically impossible, so it is treated as a sensor problem and not as a water condition (AGENTS.md §5).",
+      "preCheck": "Confirm the probe is connected and submerged.",
+      "enabled": true
+    },
+    "cleaning_due": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "maintenance",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "cleaning_due"
+      },
+      "priority": 20,
+      "title": "Tank cleaning due",
+      "action": "Clean the tank: do a partial water change with conditioned water, rinse the filter media in tank water, and log the cleaning.",
+      "basis": "The cleaning interval for this aquarium bioload has passed since the last logged cleaning.",
+      "preCheck": "Check when the tank was last cleaned.",
+      "enabled": true
+    },
+    "cleaning_due_early": {
+      "status": "draft",
+      "source": "TBD",
+      "approvedBy": null,
+      "approvedAt": null,
+      "parameter": "maintenance",
+      "severity": "warning",
+      "condition": {
+        "op": "eq",
+        "value": "cleaning_due_early"
+      },
+      "priority": 10,
+      "title": "Tank cleaning due early",
+      "action": "Clean the tank now rather than waiting for the scheduled date: partial water change with conditioned water, rinse the filter media, and log the cleaning.",
+      "basis": "TDS rose by the configured percentage since the first reading after the last cleaning, or turbidity reached WARNING repeatedly within 24 hours.",
+      "preCheck": "Check the TDS and turbidity probes before cleaning.",
+      "enabled": true
+    }
+  }
+}
