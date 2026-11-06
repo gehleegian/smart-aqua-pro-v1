@@ -6,6 +6,7 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onValueWritten } from 'firebase-functions/v2/database';
 import { defineString } from 'firebase-functions/params';
 import {
   reconcileAuthorization,
@@ -23,6 +24,7 @@ import {
   type MutationActor,
   type TrustedMutationDependencies,
 } from './trustedMutations.js';
+import { ingestTelemetry } from './telemetryIngest.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -370,6 +372,24 @@ export const reconcileAuthorizationMirror = onSchedule(
         error,
       });
       throw error;
+    }
+  }
+);
+
+// Device contract decision 6: sampled, validated history from live telemetry.
+// Writes Firestore sensor_readings (flat + nested) with a validity summary.
+export const ingestDeviceTelemetry = onValueWritten(
+  { ref: '/devices/{aquariumId}/telemetry' },
+  async (event) => {
+    if (!event.data.after.exists()) {
+      return;
+    }
+    const aquariumId = event.params.aquariumId;
+    const result = await ingestTelemetry({ firestore: dependencies.firestore }, aquariumId, event.data.after.val());
+    if (result.written) {
+      logger.info('Telemetry history row written.', { aquariumId, docId: result.docId, sampleReason: result.sampleReason });
+    } else if (result.reason !== 'rate_limited') {
+      logger.warn('Telemetry not ingested.', { aquariumId, reason: result.reason });
     }
   }
 );
