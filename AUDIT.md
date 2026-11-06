@@ -117,7 +117,7 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 | Item | Finding |
 |---|---|
 | Live path | `devices/{aquariumId}/telemetry` (RTDB, keyed by Firestore aquarium ID) |
-| Aquarium 1 | Live. `updatedAt` advanced across three reads (23:15:00, 23:16:14, 23:21:26 PST); pH 8.13→8.12→8.12, temperature 26.53→26.5 °C (1/16 °C steps), water level 16.7→15.7 %. Observed gap ~74 s. |
+| Aquarium 1 | Live. `updatedAt` advanced across three reads (23:15:00, 23:16:14, 23:21:26 PST); pH 8.13→8.12→8.12, temperature 26.53→26.5 °C (1/16 °C steps), water level 16.7→15.7 %. Measured send interval **~7.4 s** (28 consecutive writes, 2026-11-06 23:47–23:51). |
 | Payload (Aquarium 1) | `temperatureC, temperatureReadingValid, waterLevelPercent, waterPresent, ph, tdsReadingValid:false, filterState, equipmentStatus:"Unknown", powerStatus:"Unknown", online, updatedAt` (epoch ms, device clock). No `tdsPpm`, `turbidity`, or pH validity flag. |
 | Boyto | Stale since 2026-06-03 12:21:56, `ph: 0`; RTDB history 05-16 to 06-03 (written before the current rules); no `deviceUids` binding. |
 | Halwan | No telemetry; control and commands only. |
@@ -125,8 +125,8 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 | Rules | Deployed RTDB rules are identical to `database.rules.json`. No Cloud Functions are deployed. |
 | Commands | `commands/latest` written by the web (`feed_now`, `set_filter_state`). No acknowledgement exists; devices cannot write under `commands`. |
 | Firestore history | `sensor_readings` 180 docs / nested `readings` 175 docs, newest 2026-05-29; `alert_records` 90 (newest 2026-06-03); `history` 0. Nothing writes history for the live device. |
-| Test data to clean up (not deleted) | May readings with `temperatureC: 0`, `ph: 0`; one `recordedAtEpoch: 853755456` (decodes to 1997-01-20 as seconds). |
-| Freshness mismatch | Web stale window was 30 s vs ~74 s observed send interval, so Aquarium 1 showed as offline most of the time. |
+| Test data to clean up (not deleted) | May readings with `temperatureC: 0`, `ph: 0`; one `recordedAtEpoch: 853755456` (1997-01-20 as seconds, or ~9.9 days as ms, which suggests `millis()` was sent). See `docs/device-contract.md` §7. |
+| Freshness | Correction: an earlier "~74 s" figure was a sampling artifact. The firmware sends every ~7.4 s, inside both the old 30 s and the new 60 s window. |
 | Profile vs readings | Aquarium 1 reads 26.5 °C (max 24), pH 8.1 (max 7.5), level ~16 % (min 70). Needs physical check / calibration. Profile 9×10×9 cm (~0.8 L) but `workingWaterVolumeLiters: 10`. |
 
 ### 4.2 Fixed on `feat/device-pipeline` (Sprint 0)
@@ -135,6 +135,13 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 - Shared sensor-fault rules (`getSensorFault`, `src/utils/monitoringAssessmentCore.ts`): pH 0 / outside 0–14, temperature 0/85/−127 °C, TDS 0 ppm, and 0 % level without `waterPresent: false` are sensor faults with no alert or recommendation.
 - `backfillSensorReadingsFromDeviceHistory` reads `history/{dateKey}` per key instead of the denied history root (`src/services/deviceService.ts`).
 - The mobile parity test skips when `../smart-aqua-mobile` is absent. The mobile copy of `monitoringAssessmentCore.ts` must be re-synced with the web copy.
+
+### 4.3 Sprint 1 (same branch; nothing deployed)
+
+- Contract: `docs/device-contract.md`. Firmware checklist: `docs/firmware-changes.md`. Switchover plan: `docs/migration-live.md`.
+- RTDB rules: `phReadingValid`, `turbidityReadingValid`, `commandAck/latest` (bound device only, matching `commandId`, server `executedAt`), `deviceBindings/{deviceUid}`.
+- Cloud Function `ingestDeviceTelemetry`: validated, sampled history in Firestore `sensor_readings` (emulator-tested only).
+- App: 60 s stale window, "Sensor error" display, command status, Data Logs on the shared assessment.
 
 ### Mocks and simulators found
 
