@@ -151,11 +151,38 @@ Gian's PR #8 is merged, and his handoff (`docs/security/review-handoff-2026-11-0
 Decisions (2026-11-07): our `claimDevice` callable stays the claim path, **claim codes stay required**, and the target plan is **Blaze**. Before 7c:
 - [ ] Back up the live rules that are actually deployed (`firebase firestore:rules:get` or the console), not this repo's file.
 - [ ] Inventory live `device_registry` and `device_uid_registry` (read-only).
-- [ ] **Open item:** convert each of Gian's registry docs to ours. Today `migrate-orgs.ts` skips a registry doc that already exists, so:
-  - a device already claimed through his route keeps his fields;
-  - an unclaimed one (Aquarium 2) has no claim code and can never be claimed through `claimDevice`.
+- [ ] **Convert his registry** with `scripts/convert-pr8-registry.ts` (Sprint 5, emulator-tested: `npm run test:convert-pr8`, 5 tests on his schema seeded exactly as live). The exact order is in **7·0a** below.
 
-  It needs a small converter (plan only, then `--apply`) that adds `claimCodeHash`, `status`, `orgId` and `claimedBy`, and prints a new label for each unclaimed device. Not written yet.
+### 7·0a. Order relative to Gian's live rules
+
+His `firestore.claiming.rules` deny every client read and write on `device_registry` and `device_uid_registry` (the final `match /{document=**}` rule). Only Admin SDK scripts touch them, so the converter can run while his rules are still deployed. What matters is the order against **our** rules (7d): they list aquariums by `orgId`, so Aquarium 2 needs its org before 7d.
+
+1. **With Gian:** confirm no claim is in progress (no registry doc in state `claiming` or `activating`). Confirm that nobody will use his `/api/devices/claim` route during the switchover; better, remove its server credentials from the hosting environment. The converter skips in-progress claims and tells you which.
+2. Back up, read-only (keep out of git):
+   ```bash
+   firebase firestore:rules:get --project practice-smartaqua > rollback-firestore.claiming.rules   # or copy from the console
+   # export device_registry, device_uid_registry, aquariums, aquarium_directory, users (console or gcloud export)
+   firebase database:get /authorization --project practice-smartaqua > backup-authorization-$(date +%F).json
+   firebase database:get /deviceBindings --project practice-smartaqua > backup-deviceBindings-$(date +%F).json
+   ```
+3. **7b**: deploy the functions. `claimDevice` must already know `reservedAquariumId` before a converted device is claimed.
+4. **7c**: run `migrate-orgs.ts`. It gives Aquarium 2's owner a personal org and adds `orgId` to the tank. It leaves his registry docs alone, because they already exist.
+5. Run the converter, in the same session:
+   ```bash
+   npm run build:functions
+   CLAIM_CODE_PEPPER=… node --experimental-strip-types scripts/convert-pr8-registry.ts --project practice-smartaqua --database-url <RTDB URL> --dry-run
+   CLAIM_CODE_PEPPER=… node --experimental-strip-types scripts/convert-pr8-registry.ts --project practice-smartaqua --database-url <RTDB URL>
+   ```
+   The pepper must be the same value as the deployed `CLAIM_CODE_PEPPER` secret. Pass it in the environment of your own terminal only; never paste it into a shared log or commit it. The script asks you to type the project ID before it writes.
+   - **Aquarium 2 (claimed):** becomes `status: claimed` with `orgId`, `claimedBy` = his `ownerUid`, `claimedAtMs` and `claimCodeHash: null`. It gets `deviceBindings/<his device UID>` if that is missing, and the mirror is re-synced (adds `orgId`; `ownerUid`, `state`, `deviceUids` and `claimOperationId` are kept). No code is needed.
+   - **Unclaimed devices he provisioned:** each gets a new claim code (stored only as an HMAC). The QR label goes to `provisioning-output/pr8-conversion/<SAQ-…>/` (gitignored). His pre-reserved `aquariumId` becomes `reservedAquariumId`, and `claimDevice` creates the tank under that ID: the ID his firmware already writes to (`AQUARIUM_ID` in `DeviceIdentity.h`). So **no reflash is needed**. `state` becomes `converted`, so his ID-only route can no longer claim it.
+   - Every one of his fields stays, and a full copy is kept in `pr8Original`. Re-running plans 0 steps and never issues a second code.
+   - **Check:** a second `--dry-run` says `0 step(s)`. Aquarium 2's `updatedAt` keeps advancing, and its owner still sees it.
+6. **7d** (our rules), then **7e** (the app), back to back as before.
+7. Print the new label(s) and attach them to the device(s). Gian keeps the `claim.json` private.
+
+**Rollback of the converter:** each converted doc carries `pr8Original` (his exact doc) and `convertedFromPr8At`. Restore with an admin script that sets the doc back to `pr8Original`. Delete `deviceBindings/<uid>` only if it was missing in your backup. Re-deploy his rules from `rollback-firestore.claiming.rules`. Nothing on the device changes in either direction.
+
 - [ ] Do not configure the `/api/devices/claim` route's server credentials (`.env.claiming.example`) in production. It is superseded and would create aquariums without an organization.
 
 ### 7a. Prerequisites
@@ -224,6 +251,25 @@ Deploy together with 7b. They are emulator-tested only (`npm run test:sprint4-fu
 
 **Expected after deploy:** the live firmware does not ack commands yet, so every command shows **No response** (grey) in the command log until Gian's firmware update (`docs/firmware-changes.md` §4, §11).
 
+### 7g. Sprint 5: reports, Storage and indexes
+
+Emulator-tested only (`npm run test:reports`, `test:report-summary`, `test:storage-rules`, `test:firestore-org-rules`, `test:smoke`).
+
+1. **Storage:** make sure the default bucket exists (Console → Storage → Get started; on Blaze). Then deploy the rules:
+   ```bash
+   firebase deploy --only storage --project practice-smartaqua
+   ```
+   `storage.rules` opens only `reports/{orgId}/{aquariumId}/*` (read: the tank's owners and assigned caretakers, plus platform admins) and closes everything else. Report files are written only by the functions.
+2. **Indexes:** included in 7d (`sensor_readings` by `aquariumId` + `recordedAtEpoch` asc and desc, `alert_records` by `aquarium_id` + `triggered_at`, `monitoring_reports` by `aquarium_id` + `generated_at`). Wait for **Enabled**.
+3. **Functions:**
+   ```bash
+   firebase deploy --only functions:generateMonitoringReport,functions:weeklyMonitoringReports,functions:monthlyMonitoringReports,functions:setOrganizationStatus,functions:ingestDeviceTelemetry --project practice-smartaqua
+   ```
+   - `ingestDeviceTelemetry` now also stores `parameterStatus` on each history row. This is additive; older rows show as "Not recorded" in the per-parameter time.
+   - `setOrganizationStatus` now copies the org status onto member docs, for the Storage rules.
+   - The schedules run Monday 07:00 and on the 1st at 07:00, Asia/Manila (Cloud Scheduler). Each report reads one period of `sensor_readings` (at most about 2,000 rows a week per tank), so the cost is small.
+4. **Check:** generate a daily report for Aquarium 1 in the app. Open the PDF and the CSV. A caretaker of another tank cannot open them (a "You do not have access" message).
+
 ### Rollback (reverse order)
 1. Redeploy the previous rules: `git show <previous commit>:firestore.rules` and `database.rules.json`, then `firebase deploy --only firestore:rules,database`.
 2. Redeploy the previous web build.
@@ -232,6 +278,29 @@ Deploy together with 7b. They are emulator-tested only (`npm run test:sprint4-fu
    Co-owners added in the app would lose owner access with the old rules. Maintenance logs, command logs and FCM tokens are kept and are harmless.
 
 The live device is never touched by either direction. Its `deviceUids` binding stays as it is.
+
+## 8. MFA: Identity Platform with TOTP (Sprint 5, at go-live)
+
+Status: built behind a flag and tested with mocks only. The Auth emulator cannot run TOTP (`docs/access-model.md`, MFA section).
+
+1. **Upgrade Firebase Auth to Identity Platform:** Console → Authentication → Settings → "Upgrade to Firebase Authentication with Identity Platform". The project is already on Blaze. At this scale it is free: Identity Platform's free tier covers the first ~50,000 monthly active users for email/password sign-in (check the current pricing page before upgrading), and TOTP adds no per-use charge. SMS would cost per message, which is why it is not used. Existing users and passwords carry over unchanged.
+2. **Enable TOTP** (there is no console switch at the time of writing; use the REST API with an owner's gcloud login, never a committed key):
+   ```bash
+   curl -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/practice-smartaqua/config?updateMask=mfa" \
+     -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "Content-Type: application/json" -H "X-Goog-User-Project: practice-smartaqua" \
+     -d '{"mfa":{"providerConfigs":[{"state":"ENABLED","totpProviderConfig":{"adjacentIntervals":1}}]}}'
+   ```
+   Leave SMS (`enabledProviders: PHONE_SMS`) off.
+3. **Web build:** set `NEXT_PUBLIC_MFA_TOTP_ENABLED=true` and redeploy (step 4/7e). Never set `NEXT_PUBLIC_MFA_TOTP_MOCK` in a deployed build. It only works together with `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true`, which a deployed build never sets either.
+4. **Manual verification (real phone):** follow `docs/access-model.md`, MFA section, "Verify after deploy". Do it with a test owner account first, then with each platform admin.
+5. **Enforce for admins on the server:** once every platform admin has enrolled, set the functions parameter and redeploy the callables:
+   ```bash
+   # functions/.env.practice-smartaqua (gitignored): REQUIRE_PLATFORM_ADMIN_MFA=true
+   firebase deploy --only functions --project practice-smartaqua   # or the callables only
+   ```
+   Platform-admin callables (suspend an org, rules editor, role changes) then refuse a token without a TOTP second factor. Firestore reads by admins are still gated only in the app; a rules change (`request.auth.token.firebase.sign_in_second_factor == 'totp'` in `isPlatformAdmin()`) is the follow-up, listed in `docs/access-model.md`.
+
+**Rollback:** set `NEXT_PUBLIC_MFA_TOTP_ENABLED=false` and `REQUIRE_PLATFORM_ADMIN_MFA=false`, then redeploy. Users who enrolled still get the code prompt at sign-in (the Firebase SDK asks for it); remove a factor in Console → Authentication → Users → the user → Multi-factor. Do not downgrade from Identity Platform (it is not needed, and not reversible from the console).
 
 ## 6. Afterwards
 
