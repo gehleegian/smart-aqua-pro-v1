@@ -209,10 +209,13 @@ export function UserDashboardView({
   onSelectTank,
 }: UserDashboardViewProps) {
   const equipmentStatus = getManualSystemStatus(selectedTank);
+  // Without live telemetry the stored states are only the last values set in
+  // the app, not what the equipment is doing, so they are not shown as fact.
+  const live = selectedTank.hasFreshTelemetry;
   const equipment = [
-    { label: 'Filter', state: equipmentStatus.filter, icon: Filter },
-    { label: 'Light', state: equipmentStatus.light, icon: Lightbulb },
-    { label: 'Feeder', state: equipmentStatus.feeder, icon: Utensils },
+    { label: 'Filter', state: live ? equipmentStatus.filter : 'Unknown', icon: Filter },
+    { label: 'Light', state: live ? equipmentStatus.light : 'Unknown', icon: Lightbulb },
+    { label: 'Feeder', state: live ? equipmentStatus.feeder : 'Unknown', icon: Utensils },
   ];
   const readings = stats.filter((stat) => stat.title !== SYSTEM_STATUS_TITLE);
 

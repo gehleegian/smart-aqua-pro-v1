@@ -58,6 +58,8 @@ export interface ManualSystemStatus {
 }
 
 export interface Aquarium {
+  /** false when the doc has no legacy temp/level fields (show '--', not 0). */
+  hasStoredReadings?: boolean;
   id: string;
   name: string;
   species: string[];

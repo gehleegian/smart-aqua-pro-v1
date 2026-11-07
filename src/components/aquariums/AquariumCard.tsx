@@ -24,8 +24,9 @@ export function AquariumCard({
   onEdit,
   onDelete,
 }: AquariumCardProps) {
+  const known = aquarium.hasStoredReadings !== false;
   const qualityLabel =
-    typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : `${aquarium.quality}%`;
+    typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : known ? `${aquarium.quality}%` : '--';
   const dimensions =
     typeof aquarium.tankLengthCm === 'number' &&
     typeof aquarium.tankWidthCm === 'number' &&
@@ -54,12 +55,12 @@ export function AquariumCard({
           <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
             <Thermometer className="mb-2 h-4 w-4 text-orange-400" />
             <p className="text-xs text-slate-400">Temperature</p>
-            <p className="text-sm font-medium text-white">{aquarium.temp}°C</p>
+            <p className="text-sm font-medium text-white">{known ? `${aquarium.temp}°C` : '--'}</p>
           </div>
           <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
             <Droplets className="mb-2 h-4 w-4 text-blue-400" />
             <p className="text-xs text-slate-400">Level</p>
-            <p className="text-sm font-medium text-white">{aquarium.level}%</p>
+            <p className="text-sm font-medium text-white">{known ? `${aquarium.level}%` : '--'}</p>
           </div>
           <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
             <Waves className="mb-2 h-4 w-4 text-emerald-400" />

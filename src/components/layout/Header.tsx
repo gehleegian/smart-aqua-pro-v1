@@ -1,8 +1,9 @@
-import { Search, Bell, Wifi, LogOut, Menu, X, AlertCircle, AlertTriangle, Info, Sun, Moon } from 'lucide-react';
+import { Search, Bell, Wifi, LogOut, Menu, X, AlertCircle, AlertTriangle, Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
-import Badge from '../ui/Badge';
 import OrgSwitcher from '../org/OrgSwitcher';
 import RoleBadge from '../org/RoleBadge';
+import { getInitials } from '../../utils/monitoringHelpers';
+import { useHeaderAlerts } from '../../hooks/useHeaderAlerts';
 
 interface HeaderProps {
   currentPage: string;
@@ -11,6 +12,7 @@ interface HeaderProps {
   onMenuClick: () => void;
   theme: 'dark' | 'light';
   onThemeToggle: () => void;
+  onNavigate?: (page: string) => void;
 }
 
 const pageNames: Record<string, string> = {
@@ -29,15 +31,6 @@ const pageNames: Record<string, string> = {
   invite: 'Accept Invite',
 };
 
-const notifications = [
-  { id: 1, type: 'critical', message: 'Power outage detected - running on backup', time: '2 min ago', read: false },
-  { id: 2, type: 'warning', message: 'Water level below threshold in Tank D', time: '15 min ago', read: false },
-  { id: 3, type: 'critical', message: 'Temperature spike detected in Tank A', time: '1 hr ago', read: false },
-  { id: 4, type: 'info', message: 'Feeding completed for Tank A', time: '2 hrs ago', read: true },
-  { id: 5, type: 'info', message: 'Filtration cycle completed', time: '3 hrs ago', read: true },
-  { id: 6, type: 'warning', message: 'Water quality dropping in Tank D', time: '4 hrs ago', read: true },
-];
-
 export default function Header({
   currentPage,
   user,
@@ -45,21 +38,15 @@ export default function Header({
   onMenuClick,
   theme,
   onThemeToggle,
+  onNavigate,
 }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifList, setNotifList] = useState(notifications);
-
-  const unreadCount = notifList.filter((n) => !n.read).length;
   const isAdmin = user.role === 'Admin';
+  const headerAlerts = useHeaderAlerts(!isAdmin);
+  const unreadCount = headerAlerts.unread.length;
 
-  const markAsRead = (id: number) => {
-    setNotifList(notifList.map((n) => n.id === id ? { ...n, read: true } : n));
-  };
-
-  const markAllRead = () => {
-    setNotifList(notifList.map((n) => ({ ...n, read: true })));
-  };
+  const markAllRead = () => headerAlerts.unread.forEach((alert) => void headerAlerts.markRead(alert.id));
 
   return (
     <>
@@ -120,7 +107,7 @@ export default function Header({
 
           <div className="hidden items-center gap-3 border-l border-slate-600/40 pl-4 md:flex">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500/20 ring-1 ring-teal-300/30">
-              <span className="text-xs font-bold text-white">{user.name.split(' ').map((n) => n[0]).join('')}</span>
+              <span className="text-xs font-bold text-white">{getInitials(user.name)}</span>
             </div>
             <div className="text-left">
               <p className="text-sm text-white font-medium">{user.name}</p>
@@ -149,7 +136,6 @@ export default function Header({
               <div className="flex items-center justify-between border-b border-slate-600/30 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-white">Notifications</h3>
-                  <Badge>Sample data</Badge>
                 </div>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
@@ -162,31 +148,35 @@ export default function Header({
               </div>
 
               <div className="overflow-y-auto" style={{ maxHeight: '288px' }}>
-                {notifList.map((notif) => {
-                  const TypeIcon = notif.type === 'critical' ? AlertCircle : notif.type === 'warning' ? AlertTriangle : Info;
-                  const iconColor = notif.type === 'critical' ? 'text-rose-300' : notif.type === 'warning' ? 'text-amber-300' : 'text-teal-200';
-                  const bgColor = notif.type === 'critical' ? 'bg-rose-500/10' : notif.type === 'warning' ? 'bg-amber-500/10' : 'bg-teal-500/10';
-
+                {headerAlerts.alerts.length === 0 && (
+                  <p className="px-4 py-6 text-center text-sm text-slate-400">No active alerts.</p>
+                )}
+                {headerAlerts.alerts.map((alert) => {
+                  const TypeIcon = alert.type === 'critical' ? AlertCircle : AlertTriangle;
+                  const iconColor = alert.type === 'critical' ? 'text-rose-300' : 'text-amber-300';
+                  const bgColor = alert.type === 'critical' ? 'bg-rose-500/10' : 'bg-amber-500/10';
+                  const unread = alert.acknowledgedAt === null;
                   return (
-                    <div
-                      key={notif.id}
-                      onClick={() => markAsRead(notif.id)}
-                      className={`flex cursor-pointer items-start gap-3 border-b border-slate-600/25 px-4 py-3 transition-all hover:bg-slate-800/60 ${!notif.read ? bgColor : ''}`}
+                    <button
+                      type="button"
+                      key={alert.id}
+                      onClick={() => { if (unread) void headerAlerts.markRead(alert.id); }}
+                      className={`flex w-full items-start gap-3 border-b border-slate-600/25 px-4 py-3 text-left transition-all hover:bg-slate-800/60 ${unread ? bgColor : ''}`}
                     >
-                      <TypeIcon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${iconColor}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-slate-400'}`}>{notif.message}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{notif.time}</p>
+                      <TypeIcon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${iconColor}`} aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm ${unread ? 'font-medium text-white' : 'text-slate-400'}`}>{alert.tankName}: {alert.title ?? alert.message}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">{new Date(alert.lastDetectedAt).toLocaleString()}</p>
                       </div>
-                      {!notif.read && <div className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-teal-300" />}
-                    </div>
+                      {unread && <div className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-teal-300" />}
+                    </button>
                   );
                 })}
               </div>
 
               <div className="border-t border-slate-600/30 px-4 py-3">
-                <button onClick={() => setShowNotifications(false)} className="w-full text-center text-xs font-medium text-teal-200 hover:text-teal-100">
-                  View All Notifications
+                <button onClick={() => { setShowNotifications(false); onNavigate?.('alerts'); }} className="w-full text-center text-xs font-medium text-teal-200 hover:text-teal-100">
+                  View all alerts
                 </button>
               </div>
             </div>

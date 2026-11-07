@@ -89,7 +89,8 @@ export function mergeDashboardAquariums(
       ...aquarium,
       temp: snapshot ? snapshot.temperatureC : aquarium.temp,
       level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
-      tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+      // TDS ppm stands on its own: firmware may send tdsPpm without the legacy purity %.
+      tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
       ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
       turbidity: snapshot?.hasFreshTurbidityTelemetry
         ? snapshot.turbidity ?? aquarium.turbidity
@@ -412,7 +413,7 @@ export function buildUserAlerts(aquariums: DashboardAquarium[]) {
     (tank) =>
       tank.hasFreshTelemetry
         ? `${tank.name} needs attention based on current monitoring values.`
-        : `${tank.name} is ${getDeviceTelemetryStatusText(tank.telemetryState).toLowerCase()}.`
+        : `${tank.name}: ${tank.telemetryState === 'offline' ? 'device offline' : 'no live data yet'}.`
   );
 }
 

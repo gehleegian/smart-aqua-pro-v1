@@ -198,8 +198,8 @@ export function buildMonitoringOwners(
 export function getInitials(name: string) {
   return (
     name
-      .split(' ')
-      .map((part) => part[0])
+      .split(/\s+/)
+      .map((part) => part.replace(/[^\p{L}\p{N}]/gu, '')[0] ?? '')
       .join('')
       .slice(0, 2)
       .toUpperCase() || 'U'

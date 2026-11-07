@@ -215,6 +215,8 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
       data.bioload === 'low' || data.bioload === 'medium' || data.bioload === 'high'
         ? data.bioload
         : undefined,
+    // Legacy stored readings; claimed (Sprint 3+) tanks have none, live values come from RTDB.
+    hasStoredReadings: typeof data.temp === 'number' && typeof data.level === 'number',
     temp: Number(data.temp ?? 0),
     level: Number(data.level ?? 0),
     quality: readNumber(data.quality, 100),

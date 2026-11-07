@@ -365,6 +365,7 @@ export default function Layout() {
           onMenuClick={() => setSidebarOpen(true)}
           theme={theme}
           onThemeToggle={handleThemeToggle}
+          onNavigate={handleNavigate}
         />
         <main className="p-4 md:p-6">
           {pageContent}
