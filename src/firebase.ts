@@ -41,7 +41,7 @@ export const rtdb = getDatabase(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(
   app,
-  process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1'
+  process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-southeast1'
 );
 
 // Local development only: NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true points the

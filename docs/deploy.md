@@ -39,7 +39,7 @@
 | Name | What | Default when unset |
 |---|---|---|
 | `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | Analytics ID (the app does not start Analytics) | — |
-| `NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION` | Callable region | `us-central1` (the functions' default region) |
+| `NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION` | Callable region | `asia-southeast1` (set for every function in `functions/src/region.ts`) |
 | `NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY` | reCAPTCHA Enterprise key for App Check | App Check off |
 | `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | Web push public key (`docs/migration-live.md` 7f) | "Turn on alerts" says push is not configured |
 | `NEXT_PUBLIC_MFA_TOTP_ENABLED` | `true` after Identity Platform + TOTP are enabled (`migration-live.md` §8) | MFA hidden, not enforced |

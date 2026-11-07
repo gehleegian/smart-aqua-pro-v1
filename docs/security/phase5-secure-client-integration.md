@@ -16,7 +16,7 @@ Both repositories contained unrelated uncommitted work before Phase 5. It was pr
 
 ## Trusted callable integration
 
-The web Firebase initialization uses the existing Firebase app and explicitly selects `us-central1`, matching the current Function exports. `src/services/trustedMutationContracts.ts` defines the exact callable names, request payload builders, response status validation, and idempotency-key generation. `src/services/trustedMutationService.ts` invokes:
+The web Firebase initialization uses the existing Firebase app and selects `NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION` (default `asia-southeast1`), matching the region every Function is deployed to (`functions/src/region.ts`). `src/services/trustedMutationContracts.ts` defines the exact callable names, request payload builders, response status validation, and idempotency-key generation. `src/services/trustedMutationService.ts` invokes:
 
 - `transferAquariumOwnership`
 - `prepareAquariumDeletion`

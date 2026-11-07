@@ -55,7 +55,7 @@ function client(name) {
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   const rtdb = getClientDatabase(app);
   connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
-  const fns = getFunctions(app);
+  const fns = getFunctions(app, 'asia-southeast1');
   connectFunctionsEmulator(fns, '127.0.0.1', 5001);
   const handle = { app, auth, db, rtdb, call: (fn, data) => httpsCallable(fns, fn)(data).then((result) => result.data) };
   clients.push(handle);
