@@ -4,6 +4,7 @@
 //   npm run demo                                   # http://localhost:3000
 //   node scripts/demo.mjs --port 3100 --project demo-smartaqua-ui   # Playwright
 //   --no-live   do not run the demo devices (tanks then go offline after 60 s)
+//   --mfa-mock  emulator-only TOTP mock (src/utils/mfaMock.ts; code 123456): the Auth emulator cannot run TOTP
 //
 // Ctrl+C stops everything. See docs/demo.md.
 import { spawn, execFileSync } from 'node:child_process';
@@ -82,7 +83,7 @@ execFileSync('node', ['tests/helpers/ensureEmulatorPepper.mjs'], { cwd: root, st
 
 // DATABASE_URL makes the functions' Admin SDK use the default RTDB instance,
 // the same one the RTDB triggers watch and firebase.json's rules apply to.
-run('firebase', ['emulators:start', '--only', 'auth,firestore,database,functions', '--project', projectId], {
+run('firebase', ['emulators:start', '--only', 'auth,firestore,database,functions,storage', '--project', projectId], {
   DATABASE_URL: `https://${projectId}-default-rtdb.firebaseio.com`,
   FUNCTIONS_DISCOVERY_TIMEOUT: '60',
 });
@@ -108,6 +109,7 @@ run('npx', ['next', 'dev', '--port', port], {
   NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: '',
   NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY: '',
   NEXT_PUBLIC_FIREBASE_VAPID_KEY: '',
+  NEXT_PUBLIC_MFA_TOTP_MOCK: args.includes('--mfa-mock') ? 'true' : 'false',
   NEXT_DIST_DIR: '.next-demo',
 });
 console.log(`\nSmartAqua Pro demo: http://localhost:${port}  (accounts above; Ctrl+C stops everything)\n`);

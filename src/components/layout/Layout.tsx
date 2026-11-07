@@ -32,6 +32,9 @@ import { refreshOrgContext } from '../../services/orgService';
 import { clearOrgContext, readPendingInvite } from '../../services/orgContext';
 import { captureTankFromUrl } from '../../services/tankFocus';
 import { refreshPushToken } from '../../services/pushService';
+import { currentUserFactors, mfaEnabled } from '../../services/mfaService';
+import { mfaRequirement } from '../../utils/mfa';
+import MfaSettings from '../settings/MfaSettings';
 
 import {
   EmailVerificationRequiredError,
@@ -116,6 +119,8 @@ export default function Layout() {
   const [loginNotice, setLoginNotice] = useState('');
   const [verificationRequired, setVerificationRequired] = useState(false);
   const [orgReadyFor, setOrgReadyFor] = useState<string | null>(null);
+  // Bumped after an enrollment so the platform-admin MFA gate re-checks.
+  const [, setMfaVersion] = useState(0);
   const org = useOrg();
   const navRole = navRoleFor(user?.role, org.role);
 
@@ -344,7 +349,18 @@ export default function Layout() {
       : Dashboard;
   const suspended = org.active?.org.status === 'suspended' && navRole !== 'Admin';
   const pageId = allowedPages.includes(currentPage) ? currentPage : 'dashboard';
-  const pageContent =
+  // Sprint 5: platform admins must enroll a TOTP factor before using the app
+  // once MFA is switched on (the callables enforce it too: REQUIRE_PLATFORM_ADMIN_MFA).
+  const adminMfaMissing = navRole === 'Admin'
+    && mfaRequirement({ enabled: mfaEnabled, platformRole: user?.role, factors: currentUserFactors() }) === 'required_missing';
+  const pageContent = adminMfaMissing ? (
+    <div className="space-y-4">
+      <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        Platform administrators must turn on two-step verification before using SmartAqua Pro.
+      </div>
+      <MfaSettings required onEnrolled={() => setMfaVersion((value) => value + 1)} />
+    </div>
+  ) :
     suspended && (orgDataPages.has(pageId) || pageId === 'dashboard') ? (
       <SuspendedOrgState orgName={org.active?.org.name ?? 'This organization'} />
     ) : navRole === 'none' && pageId === 'dashboard' ? (

@@ -9,7 +9,8 @@ import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onValueWritten } from 'firebase-functions/v2/database';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineBoolean, defineSecret, defineString } from 'firebase-functions/params';
+import { ADMIN_MFA_MESSAGE, adminMfaSatisfied } from './mfaPolicy.js';
 import {
   reconcileAuthorization,
   ensureUserVerificationPolicy,
@@ -73,10 +74,23 @@ const supportEmail = defineString('SMARTAQUA_SUPPORT_EMAIL', {
 
 type CallableData = Record<string, unknown>;
 
+// Sprint 5: false until every platform admin has enrolled TOTP (docs/migration-live.md §8).
+const requirePlatformAdminMfa = defineBoolean('REQUIRE_PLATFORM_ADMIN_MFA', {
+  default: false,
+  description: 'Refuse platform-admin callable requests whose sign-in did not use a TOTP second factor.',
+});
+
+function assertAdminMfa(request: CallableRequest<CallableData>) {
+  if (request.auth && !adminMfaSatisfied(request.auth.token as Parameters<typeof adminMfaSatisfied>[0], requirePlatformAdminMfa.value())) {
+    throw new HttpsError('permission-denied', ADMIN_MFA_MESSAGE);
+  }
+}
+
 function requireCallableActor(request: CallableRequest<CallableData>): MutationActor {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Authentication is required.');
   }
+  assertAdminMfa(request);
 
   return {
     uid: request.auth.uid,
@@ -232,6 +246,7 @@ function requireOrgActor(request: CallableRequest<CallableData>): OrgActor {
   if (token.principalType === 'device') {
     throw new HttpsError('permission-denied', 'Devices cannot call this operation.');
   }
+  assertAdminMfa(request);
   return {
     uid: request.auth.uid,
     email: typeof token.email === 'string' ? token.email : null,

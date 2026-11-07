@@ -19,6 +19,7 @@ import { getCurrentUserProfile, updateCurrentUserProfile } from '../services/use
 import type { UserData } from '../types/user';
 import StatusMessage from '../components/ui/StatusMessage';
 import { NotificationSettings } from '../components/settings/NotificationSettings';
+import MfaSettings from '../components/settings/MfaSettings';
 
 export default function Settings() {
   const [profile, setProfile] = useState<UserData | null>(null);
@@ -171,6 +172,7 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
+        {profile ? <MfaSettings required={profile.role === 'Admin'} /> : null}
         {profile?.role !== 'Admin' ? <NotificationSettings /> : null}
       </div>
 

@@ -56,7 +56,8 @@
     "test:mobile-parity": "node --experimental-strip-types --test tests/unit/automation-controls.test.mjs tests/unit/telemetry-stability.test.mjs tests/integration/device-claim-parity.test.mjs",
     "test:report-summary": "npm run build:functions && node --test functions/lib/test/reportSummary.test.js",
     "test:reports": "npm run build:functions && firebase emulators:exec --only auth,firestore,database,storage --project demo-smartaqua-reports \"node --test --test-force-exit functions/lib/test/reports.test.js\"",
-    "test:storage-rules": "firebase emulators:exec --only firestore,storage --project demo-smartaqua-storage \"node --test tests/storage/storage.rules.test.mjs\""
+    "test:storage-rules": "firebase emulators:exec --only firestore,storage --project demo-smartaqua-storage \"node --test tests/storage/storage.rules.test.mjs\"",
+    "test:mfa": "npm run build:functions && node --test functions/lib/test/mfaPolicy.test.js && node --experimental-strip-types --no-warnings --test tests/unit/mfa.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -65,6 +66,7 @@
     "html5-qrcode": "2.3.8",
     "lucide-react": "^1.8.0",
     "next": "^16.4.4",
+    "qrcode": "1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "server-only": "^0.0.1",
@@ -76,6 +78,7 @@
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^24.12.2",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "cross-env": "^10.1.0",
@@ -83,7 +86,6 @@
     "eslint-config-next": "^16.4.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
-    "qrcode": "1.5.4",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0"
