@@ -59,7 +59,10 @@
     "test:storage-rules": "firebase emulators:exec --only firestore,storage --project demo-smartaqua-storage \"node --test tests/storage/storage.rules.test.mjs\"",
     "test:mfa": "npm run build:functions && node --test functions/lib/test/mfaPolicy.test.js && node --experimental-strip-types --no-warnings --test tests/unit/mfa.test.mjs",
     "convert:pr8-registry": "node --experimental-strip-types scripts/convert-pr8-registry.ts",
-    "test:convert-pr8": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-convert-pr8 \"node --test tests/integration/convert-pr8-registry.test.mjs\""
+    "test:convert-pr8": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-convert-pr8 \"node --test tests/integration/convert-pr8-registry.test.mjs\"",
+    "cleanup:test-data": "node --experimental-strip-types scripts/cleanup-test-data.ts",
+    "test:cleanup": "firebase emulators:exec --only firestore,database --project demo-smartaqua-cleanup \"node --test tests/integration/cleanup-test-data.test.mjs\"",
+    "clean:emulator-secrets": "node scripts/clean-emulator-secrets.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
