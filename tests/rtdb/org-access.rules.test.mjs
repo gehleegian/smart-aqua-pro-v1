@@ -173,3 +173,19 @@ test('RORG-09 a co-owner (coOwnerUids) reads, commands and edits schedules on ev
   await readsNone(db, TANK_1);
   await assertFails(set(ref(db, `devices/${TANK_1}/control`), CONTROL));
 });
+
+test('RORG-10 command acks: additive source/type/state for scheduled actions; validated', async () => {
+  const db = device('esp32-SAQ-AAAA-1111');
+  const ack = (extra) => set(ref(db, `devices/${TANK_1}/commandAck/latest`), { commandId: 'c1', status: 'done', executedAt: serverTimestamp(), ...extra });
+  await assertSucceeds(ack({ commandId: 'feed_now-owner-a' }));
+  await assertSucceeds(ack({ commandId: 'feed_now-owner-a', source: 'app' }));
+  await assertFails(ack({ commandId: 'not-the-latest' }), 'an app ack must match commands/latest');
+  await assertFails(ack({ commandId: 'free-form', source: 'schedule', type: 'feed_now' }), 'scheduled ids start with schedule-');
+  await assertSucceeds(ack({ commandId: 'schedule-feed_now-1794000000', source: 'schedule', type: 'feed_now' }));
+  await assertSucceeds(ack({ commandId: 'schedule-light-1794000000', source: 'schedule', type: 'set_light_state', state: 'Off' }));
+  await assertFails(ack({ commandId: 'schedule-x', source: 'schedule' }), 'a scheduled ack must name its type');
+  await assertFails(ack({ commandId: 'schedule-x', source: 'cron', type: 'feed_now' }));
+  await assertFails(ack({ commandId: 'schedule-x', source: 'schedule', type: 'sync_control' }));
+  await assertFails(ack({ commandId: 'schedule-x', source: 'schedule', type: 'feed_now', state: 'Dim' }));
+  await assertFails(set(ref(human('owner-a'), `devices/${TANK_1}/commandAck/latest`), { commandId: 'c1', status: 'done', executedAt: serverTimestamp() }), 'only the device acks');
+});

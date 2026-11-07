@@ -651,6 +651,41 @@ service cloud.firestore {
         && request.auth.uid == uid
         && validSelfProfileUpdate();
       allow delete: if false;
+
+      // Sprint 4 push notifications (docs/notifications.md): each browser's
+      // FCM token, written by its own user; doc id = sha256(token)[:40].
+      // Functions read them to send and delete invalid ones.
+      match /fcmTokens/{tokenId} {
+        allow read, delete: if hasProtectedAccess() && request.auth.uid == uid;
+        allow create, update: if hasProtectedAccess()
+          && request.auth.uid == uid
+          && tokenId.matches('^[a-f0-9]{40}$')
+          && request.resource.data.keys().hasOnly(['token', 'platform', 'userAgent', 'createdAt', 'lastSeenAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 4096
+          && request.resource.data.platform in ['web', 'ios-pwa', 'android']
+          && request.resource.data.userAgent is string
+          && request.resource.data.userAgent.size() <= 120
+          && request.resource.data.createdAt is int
+          && request.resource.data.lastSeenAt is int;
+      }
+
+      // One doc, `default`: minimum severity, muted tanks, device and cleaning toggles.
+      match /notificationPrefs/{prefsId} {
+        allow read: if hasProtectedAccess() && request.auth.uid == uid;
+        allow create, update: if hasProtectedAccess()
+          && request.auth.uid == uid
+          && prefsId == 'default'
+          && request.resource.data.keys().hasOnly(['minSeverity', 'mutedAquariumIds', 'deviceAlerts', 'cleaningReminders', 'updatedAt'])
+          && request.resource.data.minSeverity in ['warning', 'critical']
+          && request.resource.data.mutedAquariumIds is list
+          && request.resource.data.mutedAquariumIds.size() <= 100
+          && request.resource.data.deviceAlerts is bool
+          && request.resource.data.cleaningReminders is bool
+          && request.resource.data.updatedAt is int;
+        allow delete: if false;
+      }
     }
 
     match /aquariums/{aquariumId} {
@@ -756,8 +791,15 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // Maintenance log (Sprint 4 adds the logging UI). Read-only for owners for now.
+    // Maintenance log (FR20): written only by the logMaintenance callable.
     match /maintenance_actions/{actionId} {
+      allow read: if canReadAquariumData(resource.data.aquariumId);
+      allow write: if false;
+    }
+
+    // Command log (FR19): written only by Cloud Functions from the RTDB
+    // latest command / acknowledgement; the tank's members read it.
+    match /command_logs/{logId} {
       allow read: if canReadAquariumData(resource.data.aquariumId);
       allow write: if false;
     }

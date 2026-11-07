@@ -152,8 +152,8 @@
         "commandAck": {
           "latest": {
             ".read": "(auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
-            ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists() && newData.child('commandId').val() == root.child('devices').child($aquariumId).child('commands/latest/commandId').val()",
-            ".validate": "newData.hasChildren(['commandId', 'status', 'executedAt'])",
+            ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists() && (newData.child('commandId').val() == root.child('devices').child($aquariumId).child('commands/latest/commandId').val() || (newData.child('source').val() == 'schedule' && newData.child('commandId').isString() && newData.child('commandId').val().beginsWith('schedule-')))",
+            ".validate": "newData.hasChildren(['commandId', 'status', 'executedAt']) && (!newData.child('source').exists() || newData.child('source').val() == 'app' || newData.hasChildren(['type']))",
             "commandId": {
               ".validate": "newData.isString()"
             },
@@ -165,6 +165,15 @@
             },
             "error": {
               ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "source": {
+              ".validate": "newData.isString() && (newData.val() == 'app' || newData.val() == 'schedule')"
+            },
+            "type": {
+              ".validate": "newData.isString() && (newData.val() == 'feed_now' || newData.val() == 'set_filter_state' || newData.val() == 'set_light_state')"
+            },
+            "state": {
+              ".validate": "newData.isString() && (newData.val() == 'Active' || newData.val() == 'Inactive' || newData.val() == 'On' || newData.val() == 'Off')"
             },
             "$other": {
               ".validate": false

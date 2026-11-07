@@ -91,7 +91,11 @@ async function seed() {
       put(`aquariums/${id}/sensor_readings/2026-11-07`, { aquariumId: id });
       put(`maintenance_actions/clean-${id}`, { aquariumId: id, actionType: 'cleaning', performedAt: 1 });
       put(`monitoring_reports/report-${id}`, { aquarium_id: id, report_type: 'daily' });
+      put(`command_logs/${id}_cmd-1`, { aquariumId: id, commandId: 'cmd-1', type: 'feed_now', status: 'pending', requestedAt: 1 });
     }
+    put('organizations/org-owner-a/members/co-owner', { uid: 'co-owner', role: 'owner', joinedAt: 3, invitedBy: 'owner-a' });
+    put('users/co-owner', { name: 'co-owner', email: 'co-owner@example.test', role: 'User' });
+    put('authorization_user_policies/co-owner', { emailVerificationRequired: true });
     put('invites/invite-a', { orgId: ORG_A, email: 'care-y@example.test', role: 'caretaker', aquariumIds: [TANK_2], tokenHash: 'h', expiresAt: 9e15, usedAt: null, usedBy: null, revokedAt: null, createdBy: 'owner-a', createdAt: 1 });
     put('audit_logs/log-a', { actor: 'owner-a', action: 'device.claim', target: 'device_registry/SAQ-AAAA-1111', orgId: ORG_A, details: {}, at: 1 });
     put('audit_logs/log-b', { actor: 'owner-b', action: 'device.claim', target: 'device_registry/SAQ-BBBB-2222', orgId: ORG_B, details: {}, at: 1 });
@@ -236,7 +240,7 @@ test('ORG-09 members: self-lookup by collection group; the owner lists the team;
   await assertFails(getDocs(query(collection(caretaker, 'invites'), where('orgId', '==', ORG_A))));
   const owner = context('owner-a');
   const team = await assertSucceeds(getDocs(collection(owner, 'organizations', ORG_A, 'members')));
-  assert.deepEqual(team.docs.map((entry) => entry.id).sort(), ['care-x', 'owner-a']);
+  assert.deepEqual(team.docs.map((entry) => entry.id).sort(), ['care-x', 'co-owner', 'owner-a']);
   await assertSucceeds(getDocs(query(collection(owner, 'invites'), where('orgId', '==', ORG_A))));
   await assertSucceeds(getDocs(query(collection(owner, 'audit_logs'), where('orgId', '==', ORG_A))));
 });
@@ -278,4 +282,41 @@ test('ORG-12 the migrated live Aquarium 1 stays readable and editable by its own
   await canReadTankData(db, LIVE);
   await assertSucceeds(profileUpdate(db, LIVE, { name: 'Aquarium 1 (migrated)' }));
   await cannotReadTankData(context('owner-a'), LIVE);
+});
+
+const TOKEN_ID = 'a'.repeat(40);
+const tokenDoc = (extra = {}) => ({ token: 'fcm-token', platform: 'web', userAgent: 'Chrome on macOS', createdAt: 1, lastSeenAt: 1, ...extra });
+const prefsDoc = (extra = {}) => ({ minSeverity: 'warning', mutedAquariumIds: [], deviceAlerts: true, cleaningReminders: true, updatedAt: 1, ...extra });
+
+test('ORG-13 FCM tokens and notification prefs: only the user themself, valid shapes only', async () => {
+  const me = context('care-x');
+  await assertSucceeds(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc()));
+  await assertSucceeds(getDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID)));
+  await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', 'not-a-hash'), tokenDoc()));
+  await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ extra: true })));
+  await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ platform: 'desktop' })));
+  await assertFails(setDoc(doc(me, 'users/owner-a/fcmTokens', TOKEN_ID), tokenDoc()), 'not someone else\'s');
+  await assertFails(getDoc(doc(context('owner-a'), 'users/care-x/fcmTokens', TOKEN_ID)), 'an owner cannot read a caretaker\'s tokens');
+  await assertFails(getDoc(doc(context('admin-p', { platformAdmin: true }), 'users/care-x/fcmTokens', TOKEN_ID)));
+
+  await assertSucceeds(setDoc(doc(me, 'users/care-x/notificationPrefs/default'), prefsDoc({ mutedAquariumIds: [TANK_1] })));
+  await assertFails(setDoc(doc(me, 'users/care-x/notificationPrefs/other'), prefsDoc()));
+  await assertFails(setDoc(doc(me, 'users/care-x/notificationPrefs/default'), prefsDoc({ minSeverity: 'info' })));
+  await assertFails(setDoc(doc(context('owner-a'), 'users/care-x/notificationPrefs/default'), prefsDoc()));
+});
+
+test('ORG-14 command logs: members of the tank read, nobody writes; a co-owner (owner member) reads every tank', async () => {
+  await assertSucceeds(getDoc(doc(context('care-x'), 'command_logs', `${TANK_1}_cmd-1`)));
+  await assertFails(getDoc(doc(context('care-x'), 'command_logs', `${TANK_2}_cmd-1`)));
+  await assertSucceeds(getDocs(query(collection(context('care-x'), 'command_logs'), where('aquariumId', '==', TANK_1))));
+  await assertFails(getDoc(doc(context('owner-b'), 'command_logs', `${TANK_1}_cmd-1`)));
+  for (const id of [TANK_1, TANK_2]) {
+    await assertSucceeds(getDoc(doc(context('co-owner'), 'command_logs', `${id}_cmd-1`)));
+    await assertSucceeds(getDoc(doc(context('co-owner'), 'aquariums', id)));
+  }
+  await assertSucceeds(getDocs(query(collection(context('co-owner'), 'audit_logs'), where('orgId', '==', ORG_A))));
+  await assertSucceeds(getDoc(doc(context('admin-p', { platformAdmin: true }), 'command_logs', `${TANK_1}_cmd-1`)));
+  await assertFails(setDoc(doc(context('owner-a'), 'command_logs', 'forged'), { aquariumId: TANK_1, status: 'done' }));
+  await assertFails(updateDoc(doc(context('owner-a'), 'command_logs', `${TANK_1}_cmd-1`), { status: 'done' }));
+  await assertFails(setDoc(doc(context('owner-a'), 'maintenance_actions', 'forged'), { aquariumId: TANK_1, actionType: 'cleaning', performedAt: 2 }));
 });
