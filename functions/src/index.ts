@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getDatabase } from 'firebase-admin/database';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
+import { getStorage } from 'firebase-admin/storage';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
@@ -49,6 +50,7 @@ import {
   notifyCleaningRecommendation,
   type NotificationSender,
 } from './notifications.js';
+import { generateReportForMember, generateScheduledReports, type ReportDependencies } from './reports/generate.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -694,3 +696,48 @@ export const approveRuleConfig = onCall<CallableData>(callableOptions, async (re
     return callableFailure(error);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Sprint 5: monitoring reports with PDF and CSV export (FR21)
+// ---------------------------------------------------------------------------
+function reportDependencies(): ReportDependencies {
+  return { firestore: dependencies.firestore, bucket: getStorage().bucket() };
+}
+
+// On demand: owners and assigned caretakers of the tank (requireAquariumMember).
+export const generateMonitoringReport = onCall<CallableData>(
+  { ...callableOptions, timeoutSeconds: 120, memory: '512MiB' },
+  async (request) => {
+    const actor = requireOrgActor(request);
+    try {
+      const data = request.data ?? {};
+      const result = await generateReportForMember(reportDependencies(), actor, {
+        aquariumId: data.aquariumId,
+        reportType: data.reportType,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      logger.info('Monitoring report generated.', { actorUid: actor.uid, aquariumId: result.aquariumId, reportId: result.reportId });
+      return result;
+    } catch (error) {
+      return callableFailure(error);
+    }
+  }
+);
+
+// Weekly (Monday 07:00) and monthly (1st, 07:00) reports, Asia/Manila time.
+export const weeklyMonitoringReports = onSchedule(
+  { schedule: '0 7 * * 1', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 540, memory: '512MiB' },
+  async () => {
+    const result = await generateScheduledReports(reportDependencies(), 'weekly');
+    logger.info('Weekly monitoring reports.', result);
+  }
+);
+
+export const monthlyMonitoringReports = onSchedule(
+  { schedule: '0 7 1 * *', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 540, memory: '512MiB' },
+  async () => {
+    const result = await generateScheduledReports(reportDependencies(), 'monthly');
+    logger.info('Monthly monitoring reports.', result);
+  }
+);

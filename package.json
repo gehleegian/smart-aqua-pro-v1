@@ -53,7 +53,10 @@
     "test:claim-origin": "node --experimental-strip-types --test tests/unit/claim-origin.test.mjs",
     "test:aquarium2-firmware": "node --experimental-strip-types --test tests/unit/aquarium2-firmware.test.mjs",
     "test:firmware-contract": "node firmware/Aquarium1Device/verify-contract.mjs && node firmware/Aquarium2Device/verify-contract.mjs",
-    "test:mobile-parity": "node --experimental-strip-types --test tests/unit/automation-controls.test.mjs tests/unit/telemetry-stability.test.mjs tests/integration/device-claim-parity.test.mjs"
+    "test:mobile-parity": "node --experimental-strip-types --test tests/unit/automation-controls.test.mjs tests/unit/telemetry-stability.test.mjs tests/integration/device-claim-parity.test.mjs",
+    "test:report-summary": "npm run build:functions && node --test functions/lib/test/reportSummary.test.js",
+    "test:reports": "npm run build:functions && firebase emulators:exec --only auth,firestore,database,storage --project demo-smartaqua-reports \"node --test --test-force-exit functions/lib/test/reports.test.js\"",
+    "test:storage-rules": "firebase emulators:exec --only firestore,storage --project demo-smartaqua-storage \"node --test tests/storage/storage.rules.test.mjs\""
   },
   "dependencies": {
     "clsx": "^2.1.1",

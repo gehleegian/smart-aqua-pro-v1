@@ -264,6 +264,10 @@ export async function ingestTelemetry(
         ingestedAtEpoch: now,
         sampleReason,
         classification,
+        // Per-parameter status at ingest time (FR21 reports: time in condition per parameter).
+        parameterStatus: Object.fromEntries(result.perParameter
+          .filter((item) => item.parameter !== 'device' && item.parameter !== 'maintenance')
+          .map((item) => [item.parameter, item.status])),
         validity: summarizeValidity(validity),
         reading_id: docId,
       };

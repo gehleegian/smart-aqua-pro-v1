@@ -147,6 +147,62 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "sensor_readings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aquariumId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recordedAtEpoch",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sensor_readings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aquariumId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recordedAtEpoch",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "alert_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aquarium_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "triggered_at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "monitoring_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aquarium_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "generated_at",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
