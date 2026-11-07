@@ -66,6 +66,8 @@ If a parameter is classified abnormal but no enabled rule's `extraChecks` pass, 
 
 Power: when the device sends `mainsPresent` (new, additive), it decides `powerStatus`. `mainsPresent: false` while the device is still online is a **Power Interruption**, evaluated by the normal rule `power_interruption`.
 
+**Only the sensed signal is evaluated.** The engine reads power from `mainsPresent` alone (`evaluatedPowerStatus`): `false` → Power Interruption, `true` → Online. Until a device sends `mainsPresent`, the `powerStatus` it reports itself is **informational**: it is stored and shown, but power is "Not monitored" and raises no alert, because the current firmware sends a placeholder (Aquarium 1 reports "Power Interruption" while online). So `power_offline` is not reached from telemetry today; a device that stops sending is covered by `device_offline` (heartbeat). Displays still use `derivePowerStatus` (`mainsPresent` first, then the reported value).
+
 ## 4. Data model (Firestore, camelCase)
 
 | Collection | Contents | Who writes |

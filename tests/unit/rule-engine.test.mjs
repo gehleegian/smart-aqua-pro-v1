@@ -12,6 +12,7 @@ import {
   conditionSignature,
   derivePowerStatus,
   evaluateAquarium,
+  evaluatedPowerStatus,
   normalizeRuleConfig,
   normalizeSpeciesConfig,
   planAlertChanges,
@@ -86,7 +87,6 @@ const RULE_CASES = [
   ['water_level_low_warning', { waterLevelPercent: 65 }, {}, 'warning'],
   ['water_level_low_critical', { waterLevelPercent: 16 }, {}, 'critical'],
   ['power_interruption', { mainsPresent: false }, {}, 'critical'],
-  ['power_offline', { powerStatus: 'Offline' }, {}, 'critical'],
   ['equipment_fault', { equipmentStatus: 'Fault' }, {}, 'critical'],
   ['equipment_warning', { equipmentStatus: 'Warning' }, {}, 'warning'],
   ['filter_inactive', { filterState: 'Inactive' }, {}, 'warning'],
@@ -104,7 +104,9 @@ for (const [ruleId, overrides, profile, severity] of RULE_CASES) {
 }
 
 test('every seeded rule is covered by a test case', () => {
-  const covered = new Set([...RULE_CASES.map(([id]) => id), 'device_offline', 'sensor_fault', 'cleaning_due', 'cleaning_due_early']);
+  // power_offline is covered by the "placeholder powerStatus" test below: it is not
+  // reached from telemetry until a device sends mainsPresent (docs/rule-engine.md §3).
+  const covered = new Set([...RULE_CASES.map(([id]) => id), 'power_offline', 'device_offline', 'sensor_fault', 'cleaning_due', 'cleaning_due_early']);
   assert.deepEqual(ruleIds.filter((id) => !covered.has(id)), []);
 });
 
@@ -196,6 +198,39 @@ test('mainsPresent derives powerStatus (new, additive) and falls back to the rep
   assert.equal(derivePowerStatus({}), undefined);
 });
 
+test('only the sensed mainsPresent signal is evaluated; the device-reported powerStatus is informational', () => {
+  assert.equal(evaluatedPowerStatus({ mainsPresent: false, powerStatus: 'Online' }), 'Power Interruption');
+  assert.equal(evaluatedPowerStatus({ mainsPresent: true, powerStatus: 'Power Interruption' }), 'Online');
+  for (const powerStatus of ['Power Interruption', 'Offline', 'Online', 'Unknown', undefined]) {
+    assert.equal(evaluatedPowerStatus({ powerStatus }), undefined);
+  }
+});
+
+test('placeholder powerStatus without mainsPresent raises no power rule and is shown as not monitored', () => {
+  // Aquarium 1's current firmware reports "Power Interruption" while online and
+  // sends no mainsPresent; that must not become a CRITICAL Power Interruption.
+  for (const powerStatus of ['Power Interruption', 'Offline']) {
+    const result = evaluate({ powerStatus });
+    const power = param(result, 'power');
+    assert.equal(power.status, 'not_monitored');
+    assert.equal(power.value, powerStatus);
+    assert.match(power.reason, /informational until the device sends mainsPresent/);
+    assert.equal(result.matchedRules.some((rule) => rule.parameter === 'power'), false);
+    assert.equal(result.overall, 'normal');
+  }
+  const unreported = param(evaluate({ powerStatus: undefined }), 'power');
+  assert.deepEqual([unreported.status, unreported.value, unreported.reason], ['not_monitored', null, 'status not reported']);
+});
+
+test('once mainsPresent is sent it decides power, whatever powerStatus says', () => {
+  const interrupted = evaluate({ mainsPresent: false, powerStatus: 'Online' });
+  assert.equal(param(interrupted, 'power').status, 'critical');
+  assert.equal(param(interrupted, 'power').ruleId, 'power_interruption');
+  const restored = evaluate({ mainsPresent: true, powerStatus: 'Power Interruption' });
+  assert.equal(param(restored, 'power').status, 'normal');
+  assert.equal(restored.overall, 'normal');
+});
+
 test('thresholds: species defaults, then per-aquarium overrides; no species means no thresholds', () => {
   const overridden = resolveThresholds(goldfish, { temperatureC: { max: 26 }, ph: { min: 9 } });
   assert.deepEqual(overridden.values.temperatureC, { min: 20, max: 26 });
@@ -207,7 +242,7 @@ test('thresholds: species defaults, then per-aquarium overrides; no species mean
   const result = evaluateAquarium(reading(), none, rules, {});
   assert.equal(param(result, 'temperatureC').reason, 'threshold missing');
   assert.equal(result.overall, 'unavailable', 'no water parameter can be assessed without thresholds');
-  assert.equal(param(result, 'power').status, 'normal', 'status parameters still assess');
+  assert.equal(param(result, 'equipment').status, 'normal', 'status parameters still assess');
   assert.equal(selectSpeciesConfig({ species: ['Goldfish'] }, { goldfish }), goldfish);
   assert.equal(selectSpeciesConfig({ species: ['Koi'] }, { goldfish }), null);
 });
