@@ -61,3 +61,4 @@ playwright-report/
 docs/screens/*
 !docs/screens/README.md
 !docs/screens/doc-*.png
+.vercel
