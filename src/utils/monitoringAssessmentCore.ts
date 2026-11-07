@@ -1194,3 +1194,177 @@ export type CleaningSummary = {
   bioloadLevel: BioloadLevel | null;
   evaluatedAt: number;
 };
+
+// ---------------------------------------------------------------------------
+// Sprint 4 rules & species editor (FR13 admin side). Strict validation of an
+// edit before it is stored: the engine's normalizers above quietly ignore what
+// they cannot use, so the editor must refuse it instead. Shared by the admin
+// page (live errors, preview) and the saveRuleConfig callable (authoritative).
+// ---------------------------------------------------------------------------
+export const RULE_CONFIG_ID_PATTERN = /^[a-z0-9][a-z0-9_]{1,63}$/;
+export type ConfigValidation = { ok: true; value: Record<string, unknown> } | { ok: false; errors: string[] };
+
+/** A citation is required to approve: anything but empty or "TBD". */
+export function isCitedSource(source: unknown) {
+  return typeof source === 'string' && source.trim().length >= 3 && source.trim().toUpperCase() !== 'TBD';
+}
+
+function textField(errors: string[], data: Record<string, unknown>, field: string, max: number, required: boolean) {
+  const value = data[field];
+  if (value === undefined || value === null || value === '') {
+    if (required) errors.push(`${field} is required.`);
+    return '';
+  }
+  if (typeof value !== 'string' || value.trim().length > max) {
+    errors.push(`${field} must be text of at most ${max} characters.`);
+    return '';
+  }
+  return value.trim();
+}
+
+export function validateRuleDraft(ruleId: string, data: unknown): ConfigValidation {
+  const errors: string[] = [];
+  if (!RULE_CONFIG_ID_PATTERN.test(ruleId)) errors.push('Rule ID: 2–64 lower-case letters, digits or _.');
+  if (!isPlainObject(data)) return { ok: false, errors: [...errors, 'The rule must be an object.'] };
+  if (!RULE_PARAMETERS.includes(data.parameter as RuleParameter)) errors.push(`parameter must be one of ${RULE_PARAMETERS.join(', ')}.`);
+  if (data.severity !== 'warning' && data.severity !== 'critical') errors.push('severity must be warning or critical (NORMAL is never a rule).');
+  const condition = isPlainObject(data.condition) ? data.condition : null;
+  if (!condition || !COMPARE_OPS.includes(condition.op as CompareOp)) errors.push(`condition.op must be one of ${COMPARE_OPS.join(', ')}.`);
+  if (condition) {
+    const hasRef = condition.ref === 'min' || condition.ref === 'max';
+    const hasValue = ['number', 'string', 'boolean'].includes(typeof condition.value);
+    if (condition.ref !== undefined && !hasRef) errors.push('condition.ref must be min or max.');
+    if (hasRef === hasValue) errors.push('condition needs exactly one of ref (min/max) or value.');
+    for (const key of ['marginPct', 'margin'] as const) {
+      if (condition[key] !== undefined && !bounded(condition[key], 0, 1000)) errors.push(`condition.${key} must be a number ≥ 0.`);
+    }
+    if (hasRef && !(WATER_PARAMETERS as readonly string[]).includes(String(data.parameter))) errors.push('ref (min/max) only works for a water parameter.');
+  }
+  const extraChecks = data.extraChecks === undefined ? [] : data.extraChecks;
+  if (!Array.isArray(extraChecks) || extraChecks.length > 5) errors.push('extraChecks must be a list of at most 5 checks.');
+  const checks = Array.isArray(extraChecks) ? extraChecks.map((check, index) => {
+    if (!isPlainObject(check) || !readText(check.field) || !COMPARE_OPS.includes(check.op as CompareOp) ||
+      !['number', 'string', 'boolean'].includes(typeof check.value)) {
+      errors.push(`extraChecks[${index}] needs field, op and value.`);
+      return null;
+    }
+    return { field: readText(check.field), op: check.op, value: check.value };
+  }) : [];
+  if (data.priority !== undefined && !(Number.isInteger(data.priority) && bounded(data.priority, 0, 1000))) errors.push('priority must be a whole number 0–1000.');
+  if (data.enabled !== undefined && typeof data.enabled !== 'boolean') errors.push('enabled must be true or false.');
+  const title = textField(errors, data, 'title', 120, true);
+  const action = textField(errors, data, 'action', 1000, true);
+  const basis = textField(errors, data, 'basis', 1000, true);
+  const preCheck = textField(errors, data, 'preCheck', 500, false);
+  const source = textField(errors, data, 'source', 300, false) || 'TBD';
+  if (errors.length) return { ok: false, errors };
+  const cond = condition as Record<string, unknown>;
+  return {
+    ok: true,
+    value: {
+      parameter: data.parameter,
+      severity: data.severity,
+      condition: Object.fromEntries(['op', 'ref', 'value', 'marginPct', 'margin'].filter((key) => cond[key] !== undefined).map((key) => [key, cond[key]])),
+      ...(checks.length ? { extraChecks: checks } : {}),
+      priority: data.priority ?? 100,
+      title, action, basis, preCheck, source,
+      enabled: data.enabled !== false,
+    },
+  };
+}
+
+export function validateSpeciesDraft(speciesId: string, data: unknown): ConfigValidation {
+  const errors: string[] = [];
+  if (!RULE_CONFIG_ID_PATTERN.test(speciesId)) errors.push('Species ID: 2–64 lower-case letters, digits or _.');
+  if (!isPlainObject(data)) return { ok: false, errors: [...errors, 'The species must be an object.'] };
+  const name = textField(errors, data, 'name', 80, true);
+  const source = textField(errors, data, 'source', 300, false) || 'TBD';
+  const rangesIn = isPlainObject(data.ranges) ? data.ranges : {};
+  const ranges: Record<string, RangeThreshold> = {};
+  const limits: Record<string, [number, number]> = { temperatureC: [0, 45], ph: [0, 14], tdsPpm: [0, 5000], turbidity: [0, 4000] };
+  for (const [key, [low, high]] of Object.entries(limits)) {
+    const range = rangesIn[key];
+    if (range === undefined) continue;
+    if (!isPlainObject(range)) { errors.push(`ranges.${key} must have min and/or max.`); continue; }
+    const out: RangeThreshold = {};
+    for (const bound of ['min', 'max'] as const) {
+      if (range[bound] === undefined || range[bound] === null) continue;
+      if (!bounded(range[bound], low, high)) errors.push(`ranges.${key}.${bound} must be ${low}–${high}.`);
+      else out[bound] = range[bound] as number;
+    }
+    if (out.min !== undefined && out.max !== undefined && out.min >= out.max) errors.push(`ranges.${key}: min must be below max.`);
+    if (out.min !== undefined || out.max !== undefined) ranges[key] = out;
+  }
+  const value: Record<string, unknown> = { name, source, ranges };
+  if (data.minWaterLevelPercent !== undefined) {
+    if (!bounded(data.minWaterLevelPercent, 0, 100)) errors.push('minWaterLevelPercent must be 0–100.');
+    else value.minWaterLevelPercent = data.minWaterLevelPercent;
+  }
+  if (data.bioloadBandsGPerL !== undefined) {
+    const bands = isPlainObject(data.bioloadBandsGPerL) ? data.bioloadBandsGPerL : {};
+    if (!bounded(bands.lightMax, 0, 100) || !bounded(bands.moderateMax, 0, 100) || (bands.lightMax as number) >= (bands.moderateMax as number)) {
+      errors.push('bioloadBandsGPerL needs 0 < lightMax < moderateMax (g/L).');
+    } else value.bioloadBandsGPerL = { lightMax: bands.lightMax, moderateMax: bands.moderateMax };
+  }
+  if (data.cleaningIntervalDays !== undefined) {
+    const intervals = isPlainObject(data.cleaningIntervalDays) ? data.cleaningIntervalDays : {};
+    const out: Record<string, number> = {};
+    for (const level of BIOLOAD_LEVELS) {
+      if (intervals[level] === undefined) continue;
+      if (!(Number.isInteger(intervals[level]) && bounded(intervals[level], 1, 365))) errors.push(`cleaningIntervalDays.${level} must be 1–365 days.`);
+      else out[level] = intervals[level] as number;
+    }
+    value.cleaningIntervalDays = out;
+  }
+  if (data.earlyCleaning !== undefined) {
+    const early = isPlainObject(data.earlyCleaning) ? data.earlyCleaning : {};
+    if (!bounded(early.tdsRisePct, 1, 500) || !(Number.isInteger(early.turbidityWarningCount) && bounded(early.turbidityWarningCount, 1, 50)) ||
+      !bounded(early.turbidityWindowHours, 1, 720)) {
+      errors.push('earlyCleaning needs tdsRisePct (1–500), turbidityWarningCount (1–50) and turbidityWindowHours (1–720).');
+    } else value.earlyCleaning = { tdsRisePct: early.tdsRisePct, turbidityWarningCount: early.turbidityWarningCount, turbidityWindowHours: early.turbidityWindowHours };
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, value };
+}
+
+const MATRIX_ORDER: readonly RuleParameter[] = ['temperatureC', 'ph', 'tdsPpm', 'turbidity', 'waterLevelPercent', 'power', 'equipment', 'filter', 'device', 'maintenance'];
+
+/** docs/rule-matrix.md-style markdown of the CURRENT stored config, for the adviser sign-off. */
+export function ruleMatrixMarkdown(species: SpeciesConfig[], rules: RuleConfig[], generatedAt: string) {
+  const cell = (text: unknown) => String(text ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
+  const range = (r?: RangeThreshold) => (r && (r.min !== undefined || r.max !== undefined)
+    ? [r.min !== undefined ? `min ${r.min}` : '', r.max !== undefined ? `max ${r.max}` : ''].filter(Boolean).join(', ') : '—');
+  const condition = (c: RuleCondition) => {
+    const target = c.ref ?? JSON.stringify(c.value);
+    const margin = c.marginPct ? ` ${c.op.startsWith('g') ? '+' : '−'}${c.marginPct}%` : c.margin ? ` ${c.op.startsWith('g') ? '+' : '−'}${c.margin}` : '';
+    return `${c.op} ${target}${margin}`;
+  };
+  const approval = (item: ApprovalMeta) => `${item.status}${item.approvedBy ? ` (${cell(item.approvedBy)}${item.approvedAt ? `, ${new Date(item.approvedAt).toISOString().slice(0, 10)}` : ''})` : ''}`;
+  const sorted = [...rules].sort((a, b) => MATRIX_ORDER.indexOf(a.parameter) - MATRIX_ORDER.indexOf(b.parameter) ||
+    (a.severity === b.severity ? 0 : a.severity === 'critical' ? -1 : 1) || a.priority - b.priority || a.ruleId.localeCompare(b.ruleId));
+  const lines = [
+    '# Rule matrix (for adviser sign-off)',
+    '',
+    `Exported from the live rules configuration (Firestore \`species\` and \`rules\`) on ${generatedAt} by the admin rules editor. Values marked \`draft\` are not yet approved.`,
+    '',
+  ];
+  for (const item of species) {
+    lines.push(`## ${cell(item.name)} thresholds (\`species/${item.speciesId}\`): ${approval(item)}, source: ${cell(item.source)}`, '',
+      '| Parameter | Range |', '|---|---|',
+      `| Temperature (°C) | ${range(item.ranges.temperatureC)} |`,
+      `| pH | ${range(item.ranges.ph)} |`,
+      `| TDS (ppm) | ${range(item.ranges.tdsPpm)} |`,
+      `| Turbidity (NTU) | ${range(item.ranges.turbidity)} |`,
+      `| Water level (%) | ${item.minWaterLevelPercent !== undefined ? `min ${item.minWaterLevelPercent}` : '—'} |`,
+      `| Bioload bands (g/L) | ${item.bioloadBandsGPerL ? `light ≤ ${item.bioloadBandsGPerL.lightMax}, moderate ≤ ${item.bioloadBandsGPerL.moderateMax}, heavy above` : '—'} |`,
+      `| Cleaning interval (days) | ${item.cleaningIntervalDays ? BIOLOAD_LEVELS.map((level) => `${level} ${item.cleaningIntervalDays?.[level] ?? '—'}`).join(', ') : '—'} |`,
+      '');
+  }
+  lines.push(`## Rules (${sorted.length})`, '',
+    '| # | Rule ID | Parameter | Condition | Extra checks | Severity | Priority | Enabled | Action | Basis | Check first | Status | Source |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...sorted.map((r, i) => `| ${i + 1} | \`${r.ruleId}\` | ${r.parameter} | \`${condition(r.condition)}\` | ${r.extraChecks.map((c) => `\`${c.field} ${c.op} ${c.value}\``).join(', ') || '—'} | ${r.severity} | ${r.priority} | ${r.enabled ? 'yes' : 'no'} | ${cell(r.action)} | ${cell(r.basis)} | ${cell(r.preCheck)} | ${approval(r)} | ${cell(r.source)} |`),
+    '', '## Sign-off', '', '| Item | Approved value (if changed) | Citation | Approved by | Date |', '|---|---|---|---|---|',
+    ...species.map((item) => `| \`species/${item.speciesId}\` | | | | |`),
+    ...sorted.map((r) => `| \`${r.ruleId}\` | | | | |`), '');
+  return lines.join('\n');
+}

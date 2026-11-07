@@ -40,6 +40,7 @@ import {
 } from './orgAccess.js';
 import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
 import { logMaintenance as logMaintenanceCore } from './maintenance.js';
+import { approveRuleConfig as approveRuleConfigCore, saveRuleConfig as saveRuleConfigCore } from './ruleAdmin.js';
 import { markUnansweredCommands, recordAck, recordCommand } from './commandLog.js';
 import {
   createFcmSender,
@@ -672,3 +673,24 @@ export const notifyCleaningReminder = onDocumentCreated(
     await notifyCleaningRecommendation({ firestore: dependencies.firestore, sender: sender() }, event.params.recommendationId);
   }
 );
+
+// FR13 admin side: rules & species editor (platform admin only, audited).
+export const saveRuleConfig = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    return await saveRuleConfigCore({ firestore: dependencies.firestore }, actor, { kind: data.kind, id: data.id, data: data.data });
+  } catch (error) {
+    return callableFailure(error);
+  }
+});
+
+export const approveRuleConfig = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    return await approveRuleConfigCore({ firestore: dependencies.firestore }, actor, { kind: data.kind, id: data.id });
+  } catch (error) {
+    return callableFailure(error);
+  }
+});

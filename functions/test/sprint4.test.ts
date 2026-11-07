@@ -13,7 +13,8 @@ import { acceptInvite, claimDevice, createInvite, hashClaimCode, setMemberRole, 
 import { logMaintenance } from '../src/maintenance.js';
 import { commandLogId, markUnansweredCommands, recordAck, recordCommand } from '../src/commandLog.js';
 import { notifyAlert, notifyCleaningRecommendation, tokenIdFor, type NotificationSender, type PushMessage } from '../src/notifications.js';
-import { clearRuleConfigCache } from '../src/ruleEngine.js';
+import { clearRuleConfigCache, loadRuleConfig, RULE_CONFIG_CACHE_MS } from '../src/ruleEngine.js';
+import { approveRuleConfig, saveRuleConfig } from '../src/ruleAdmin.js';
 import { refreshCleaningSchedule } from '../src/scheduledChecks.js';
 import { ingestTelemetry } from '../src/telemetryIngest.js';
 import { MutationError } from '../src/trustedMutations.js';
@@ -361,4 +362,61 @@ test('CMD-02 a scheduled action acked with source "schedule" gets its own entry;
   assert.equal((await firestore.doc(`command_logs/${commandLogId(tank1, 'same')}`).get()).get('status'), 'pending');
   assert.equal((await firestore.doc(`command_logs/${commandLogId(tank2, 'same')}`).get()).get('status'), 'done');
   assert.equal((await recordCommand(fs, 'no-such-tank', { commandId: 'x', type: 'feed_now' })).recorded, false);
+});
+
+// ---------------------------------------------------------------------------
+// Rules & species editor (FR13 admin side)
+// ---------------------------------------------------------------------------
+
+test('RULES-01 the admin edits and approves a rule; the engine uses it after the 5-minute cache', async () => {
+  const fs = { firestore, now: () => clockMs };
+  const current = (await firestore.doc('rules/ph_high_warning').get()).data()!;
+  // Rules engine before: pH 7.6 (max 7.5) is a WARNING via ph_high_warning.
+  await ingestTelemetry({ firestore, now: () => clockMs }, tank1, reading({ ph: 7.6 }));
+  assert.equal((await firestore.collection('alert_records').where('aquarium_id', '==', tank1).get()).docs[0].get('ruleId'), 'ph_high_warning');
+
+  await rejects(saveRuleConfig(fs, OWNER_A, { kind: 'rule', id: 'ph_high_warning', data: current }), 'permission-denied');
+  await rejects(saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning', data: { ...current, severity: 'normal' } }), 'invalid-argument', /severity/);
+  await rejects(saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'Bad ID', data: current }), 'invalid-argument', /Rule ID/);
+  await rejects(saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning', data: { ...current, condition: { op: 'gt' } } }), 'invalid-argument', /exactly one/);
+
+  const newTitle = 'pH above the goldfish range (edited)';
+  const saved = await saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning', data: { ...current, title: newTitle, source: 'TBD' } });
+  assert.deepEqual(saved, { id: 'ph_high_warning', kind: 'rule', changed: true, status: 'draft' });
+  await rejects(approveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning' }), 'failed-precondition', /citation/);
+  await saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning', data: { ...current, title: newTitle, source: 'Adviser memo 2026-11-07, Table 3' } });
+  await rejects(approveRuleConfig(fs, OWNER_A, { kind: 'rule', id: 'ph_high_warning' }), 'permission-denied');
+  await approveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning' });
+  const stored = (await firestore.doc('rules/ph_high_warning').get()).data()!;
+  assert.equal(stored.status, 'approved');
+  assert.equal(stored.approvedBy, ADMIN.uid);
+  assert.equal(stored.approvedAt, clockMs);
+
+  // Within the cache window the old copy is still used; after it, the edit applies.
+  assert.notEqual((await loadRuleConfig(firestore, clockMs)).rules.find((rule) => rule.ruleId === 'ph_high_warning')?.title, newTitle);
+  clockMs += RULE_CONFIG_CACHE_MS + 1;
+  const reloaded = (await loadRuleConfig(firestore, clockMs)).rules.find((rule) => rule.ruleId === 'ph_high_warning')!;
+  assert.equal(reloaded.title, newTitle);
+  assert.equal(reloaded.status, 'approved');
+  await ingestTelemetry({ firestore, now: () => clockMs }, tank2, reading({ ph: 7.6, updatedAt: clockMs }));
+  const rec = (await firestore.collection('recommendations').where('aquariumId', '==', tank2).where('ruleId', '==', 'ph_high_warning').get()).docs[0].data();
+  assert.equal(rec.title, newTitle);
+  assert.equal(rec.ruleStatus, 'approved');
+
+  // Editing an approved rule sends it back to draft; every step is audited.
+  await saveRuleConfig(fs, ADMIN, { kind: 'rule', id: 'ph_high_warning', data: { ...current, title: 'pH high', source: 'Adviser memo 2026-11-07, Table 3' } });
+  assert.equal((await firestore.doc('rules/ph_high_warning').get()).get('status'), 'draft');
+  const actions = (await firestore.collection('audit_logs').where('target', '==', 'rules/ph_high_warning').get()).docs.map((doc) => doc.get('action')).sort();
+  assert.deepEqual(actions, ['rule.approve', 'rule.update', 'rule.update', 'rule.update']);
+});
+
+test('RULES-02 species defaults: validated, created, approved with a citation', async () => {
+  const fs = { firestore, now: () => clockMs };
+  await rejects(saveRuleConfig(fs, ADMIN, { kind: 'species', id: 'koi', data: { name: 'Koi', ranges: { temperatureC: { min: 25, max: 20 } } } }), 'invalid-argument', /min must be below max/);
+  const created = await saveRuleConfig(fs, ADMIN, { kind: 'species', id: 'koi', data: { name: 'Koi', source: 'Book p. 12', ranges: { temperatureC: { min: 15, max: 25 } }, minWaterLevelPercent: 70 } });
+  assert.equal(created.changed, true);
+  assert.equal((await saveRuleConfig(fs, ADMIN, { kind: 'species', id: 'koi', data: { name: 'Koi', source: 'Book p. 12', ranges: { temperatureC: { min: 15, max: 25 } }, minWaterLevelPercent: 70 } })).changed, false, 'no-op save');
+  await approveRuleConfig(fs, ADMIN, { kind: 'species', id: 'koi' });
+  assert.equal((await firestore.doc('species/koi').get()).get('status'), 'approved');
+  assert.equal((await firestore.collection('audit_logs').where('action', '==', 'species.create').get()).size, 1);
 });
