@@ -38,7 +38,9 @@ import type { UserData, UserRole } from '../types/user';
 import {
   buildMonitoringOwners,
   defaultAutomationSettings,
+  deviceProfileSettings,
   getAutomationSettings,
+  hasSavedSchedule,
   getManualActionDisplay,
   getManualActionKey,
   getManualSystemStatus,
@@ -551,7 +553,7 @@ export function useMonitoringController() {
 
       const profile = buildDeviceControlProfile({
         aquarium,
-        automationSettings: nextSettings || getAutomationSettings(aquarium),
+        automationSettings: deviceProfileSettings(aquarium, nextSettings),
         mode: nextMode,
       });
 
@@ -908,7 +910,7 @@ export function useMonitoringController() {
   return {
     aquariums: liveAquariums,
     automationDraft,
-    automationEnabled: Boolean(automationSettings?.enabled),
+    automationEnabled: hasSavedSchedule(selectedAquarium) && Boolean(automationSettings?.enabled),
     automationError,
     automationSettings,
     error,

@@ -270,3 +270,18 @@ test('Sprint 5: MFA (emulator mock): an owner enrolls optionally; a platform adm
   await expect(admin.getByRole('heading', { name: /Organizations/ }).first()).toBeVisible();
   await admin.close();
 });
+
+test('Sprint 5: a tank with no saved schedule shows "No schedule set" and no default times', async ({ page }) => {
+  const demo = summary();
+  await login(page, demo.accounts.ownerA.email, demo.password);
+  await nav(page, 'Monitoring');
+  await page.getByRole('button', { name: /Front Counter Tank/ }).click();
+  await expect(page.getByRole('heading', { name: 'Automation', exact: true })).toBeVisible();
+  await expect(page.getByText('No schedule set', { exact: true })).toBeVisible();
+  await expect(page.getByText('Nothing runs automatically. Use Edit to set feeding, light and filter times.')).toBeVisible();
+  // The rows that used to show the built-in default times are gone.
+  await expect(page.getByText('Light On', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Schedule time zone', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Enable Automation|Disable Automation/ })).toHaveCount(0);
+  await shot(page, 'monitoring-no-schedule');
+});

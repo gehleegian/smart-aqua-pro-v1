@@ -323,23 +323,32 @@ export function AquariumDetailsView({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 text-sm">
-              <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
-              <Row label="Schedule time zone" value="UTC+8" />
-              <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
-              <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
-              <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
-              <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
-            </div>
+            {aquarium.automationSettings ? (
+              <div className="space-y-3 text-sm">
+                <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
+                <Row label="Schedule time zone" value="UTC+8" />
+                <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
+                <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
+                <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
+                <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <Row label="Status" value="No schedule set" />
+                <p className="text-slate-400">
+                  {canManage ? 'Nothing runs automatically. Use Edit to set feeding, light and filter times.' : 'Nothing runs automatically. An owner can set a schedule.'}
+                </p>
+              </div>
+            )}
             {aquarium.automationSettings && automationEnabled && nextScheduledText(automationSettings, now) ? (
               <p className="mt-4 text-sm text-teal-100">{nextScheduledText(automationSettings, now)}</p>
             ) : null}
             <p className="mt-2 text-xs text-slate-400">Times are Asia/Manila. The device runs the schedule on its own clock, even if Wi-Fi drops.</p>
-            {canManage && (
+            {canManage && aquarium.automationSettings ? (
               <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
                 {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
               </Button>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </div>

@@ -70,6 +70,24 @@ export function getAutomationSettings(
   };
 }
 
+/** True when the owner has saved a schedule for this tank (Sprint 5: no implied default schedule). */
+export function hasSavedSchedule(aquarium: Pick<Aquarium, 'automationSettings'> | null) {
+  return Boolean(aquarium?.automationSettings);
+}
+
+/**
+ * The schedule sent to the device's control profile. A tank with no saved
+ * schedule sends automation OFF: the RTDB rules need well-formed times, so
+ * the default times go along, but the device must not run them.
+ */
+export function deviceProfileSettings(
+  aquarium: Pick<Aquarium, 'automationSettings'>,
+  nextSettings?: AutomationSettings
+): AutomationSettings {
+  if (nextSettings) return nextSettings;
+  return hasSavedSchedule(aquarium) ? getAutomationSettings(aquarium) : { ...defaultAutomationSettings, enabled: false };
+}
+
 export function getManualSystemStatus(
   aquarium: Pick<Aquarium, SystemField | 'manualStatus'>
 ): ManualSystemStatus {
