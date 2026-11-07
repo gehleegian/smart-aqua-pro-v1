@@ -58,7 +58,6 @@ const outDir = path.resolve(root, flag('--out') ?? 'provisioning-output/pr8-conv
 
 type Data = Record<string, unknown>;
 type Step = { label: string; apply: () => Promise<void> };
-const isRecord = (value: unknown): value is Data => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
 const millis = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;

@@ -194,6 +194,12 @@ const manilaDate = (offsetDays = 0) => new Date(Date.now() + 8 * 3_600_000 + off
 test('Sprint 5: generate a report, read the summary, open the PDF and CSV; a caretaker sees only assigned tanks', async ({ browser }) => {
   const demo = summary();
   const page = await browser.newPage();
+  // The dev server sends the same security headers as production (security-headers.mjs).
+  const cspViolations: string[] = [];
+  page.on('console', (message) => { if (/Content Security Policy/i.test(message.text())) cspViolations.push(message.text()); });
+  const home = await page.goto('/');
+  expect(home?.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(home?.headers()['strict-transport-security']).toContain('max-age=63072000');
   await login(page, demo.accounts.ownerA.email, demo.password);
   await nav(page, 'Reports');
   await expect(page.getByRole('heading', { name: 'Monitoring reports' })).toBeVisible();
@@ -225,6 +231,7 @@ test('Sprint 5: generate a report, read the summary, open the PDF and CSV; a car
   expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe('%PDF-');
   const csv = await (await fileFrom(/^Download CSV/)).text();
   expect(csv.split('\n')[0]).toContain('recorded_at_manila');
+  expect(cspViolations, 'no CSP violations while using reports').toEqual([]);
   await page.close();
 
   const caretaker = await browser.newPage();
