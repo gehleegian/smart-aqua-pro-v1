@@ -877,6 +877,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Sprint 4 audit viewer: trusted-mutation events (role changes, account
+    // revocation, ownership transfer) are visible to the platform admin only.
+    match /security_audit_events/{eventId} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+    }
+
     match /authorization_user_policies/{uid} {
       allow get: if isSignedIn() && request.auth.uid == uid;
       allow list, create, update, delete: if false;

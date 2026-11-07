@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, Link2, Pencil, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Copy, Link2, Pencil, Trash2, UserPlus, X } from 'lucide-react';
+import { auth } from '../firebase';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import ConfirmModal from '../components/ui/ConfirmModal';
@@ -15,7 +16,9 @@ import {
   listPendingInvites,
   listTeam,
   removeMember,
+  refreshOrgContext,
   revokeInvite,
+  setMemberRole,
   updateCaretakerAssignments,
   type OrgAquariumOption,
   type PendingInvite,
@@ -65,6 +68,8 @@ export default function Team() {
   const [editing, setEditing] = useState<TeamMember | null>(null);
   const [editTanks, setEditTanks] = useState<string[]>([]);
   const [removing, setRemoving] = useState<TeamMember | null>(null);
+  const [roleChange, setRoleChange] = useState<{ member: TeamMember; role: 'owner' | 'caretaker' } | null>(null);
+  const me = auth.currentUser?.uid ?? '';
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -88,6 +93,7 @@ export default function Team() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const ownerCount = members.filter((member) => member.role === 'owner').length;
   const tankName = (id: string) => aquariums.find((aquarium) => aquarium.id === id)?.name ?? 'Removed tank';
 
   const run = async (key: string, action: () => Promise<void>, success: string) => {
@@ -165,16 +171,29 @@ export default function Team() {
                   {member.role === 'owner' ? 'All tanks' : member.aquariumIds.length ? member.aquariumIds.map(tankName).join(', ') : 'No tanks assigned'}
                 </p>
               </div>
-              {member.role === 'caretaker' && (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => { setEditing(member); setEditTanks(member.aquariumIds); }}>
-                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Tanks
+              <div className="flex flex-wrap gap-2">
+                {member.role === 'caretaker' ? (
+                  <>
+                    <Button size="sm" variant="secondary" onClick={() => { setEditing(member); setEditTanks(member.aquariumIds); }}>
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Tanks
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setRoleChange({ member, role: 'owner' })}>
+                      <ArrowUpCircle className="h-3.5 w-3.5" aria-hidden="true" /> Make owner
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="secondary" disabled={ownerCount <= 1}
+                    title={ownerCount <= 1 ? 'An organization must keep at least one owner.' : undefined}
+                    onClick={() => setRoleChange({ member, role: 'caretaker' })}>
+                    <ArrowDownCircle className="h-3.5 w-3.5" aria-hidden="true" /> Make caretaker
                   </Button>
-                  <Button size="sm" variant="danger" onClick={() => setRemoving(member)}>
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
-                  </Button>
-                </div>
-              )}
+                )}
+                <Button size="sm" variant="danger" disabled={member.role === 'owner' && ownerCount <= 1}
+                  title={member.role === 'owner' && ownerCount <= 1 ? 'An organization must keep at least one owner.' : undefined}
+                  onClick={() => setRemoving(member)}>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> {member.uid === me ? 'Leave' : 'Remove'}
+                </Button>
+              </div>
             </div>
           ))}
         </CardContent>
@@ -214,16 +233,36 @@ export default function Team() {
 
       {removing && (
         <ConfirmModal
-          title={`Remove ${removing.displayName}?`}
-          description="Their access to every tank ends immediately. Their past actions stay in the logs."
-          confirmLabel="Remove"
+          title={removing.uid === me ? 'Leave this organization?' : `Remove ${removing.displayName}?`}
+          description={removing.role === 'owner'
+            ? 'Their owner access to every tank ends immediately. Tanks they were primary owner of move to you. Their past actions stay in the logs.'
+            : 'Their access to every tank ends immediately. Their past actions stay in the logs.'}
+          confirmLabel={removing.uid === me ? 'Leave' : 'Remove'}
           danger
           onConfirm={() => {
             const target = removing;
             setRemoving(null);
-            void run(target.uid, async () => { await removeMember(orgId, target.uid); }, `${target.displayName} was removed. Their access ended now; their past actions stay in the logs.`);
+            void run(target.uid, async () => { await removeMember(orgId, target.uid); if (target.uid === me) await refreshOrgContext(me); }, `${target.displayName} was removed. Their access ended now; their past actions stay in the logs.`);
           }}
           onCancel={() => setRemoving(null)}
+        />
+      )}
+
+      {roleChange && (
+        <ConfirmModal
+          title={roleChange.role === 'owner' ? `Make ${roleChange.member.displayName} an owner?` : `Make ${roleChange.member.displayName} a caretaker?`}
+          description={roleChange.role === 'owner'
+            ? 'Owners see and manage every tank, edit profiles, thresholds and schedules, and manage the team (including other owners).'
+            : 'They keep access only to the tanks you assign them afterwards (none at first). Tanks they were primary owner of move to you.'}
+          confirmLabel={roleChange.role === 'owner' ? 'Make owner' : 'Make caretaker'}
+          danger={roleChange.role === 'caretaker'}
+          onConfirm={() => {
+            const change = roleChange;
+            setRoleChange(null);
+            void run(`role-${change.member.uid}`, async () => { await setMemberRole(orgId, change.member.uid, change.role); if (change.member.uid === me) await refreshOrgContext(me); },
+              change.role === 'owner' ? `${change.member.displayName} is now an owner.` : `${change.member.displayName} is now a caretaker.`);
+          }}
+          onCancel={() => setRoleChange(null)}
         />
       )}
     </div>

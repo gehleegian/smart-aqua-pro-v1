@@ -28,6 +28,9 @@ const pageNames: Record<string, string> = {
   setup: 'Aquarium Setup',
   team: 'Team',
   organizations: 'Organizations',
+  audit: 'Audit Log',
+  'admin-audit': 'Audit Log',
+  rules: 'Rules & Species Editor',
   invite: 'Accept Invite',
 };
 

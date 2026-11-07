@@ -16,6 +16,8 @@ import {
   PlusCircle,
   UserPlus,
   Building2,
+  ScrollText,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 /** Sprint 3: navigation follows the access role, not only the platform role. */
@@ -52,12 +54,15 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
     label: 'Manage',
     items: [
       { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['owner'] },
-      { id: 'add-device', label: 'Add Device', icon: PlusCircle, roles: ['owner', 'none'] },
+      { id: 'add-device', label: 'Add Device', icon: PlusCircle, roles: ['owner', 'caretaker', 'none'] },
       { id: 'team', label: 'Team', icon: UserPlus, roles: ['owner'] },
+      { id: 'audit', label: 'Audit Log', icon: ScrollText, roles: ['owner'] },
       { id: 'automation', label: 'Automation', icon: Cpu, roles: ['owner'] },
       { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['owner', 'caretaker'] },
       { id: 'organizations', label: 'Organizations', icon: Building2, roles: ['Admin'] },
       { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
+      { id: 'rules', label: 'Rules Editor', icon: SlidersHorizontal, roles: ['Admin'] },
+      { id: 'admin-audit', label: 'Audit Log', icon: ScrollText, roles: ['Admin'] },
     ],
   },
   {

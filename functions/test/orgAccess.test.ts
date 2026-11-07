@@ -358,3 +358,15 @@ test('co-owners: an owner can remove another owner; the removed owner loses acce
   const log = (await firestore.collection('audit_logs').where('action', '==', 'member.remove').get()).docs[0];
   assert.deepEqual([...log.get('details.movedAquariumIds')].sort(), [tank1, tank2].sort());
 });
+
+test('a caretaker may claim a device of their own: it creates their own org, never touching the org they care for', async () => {
+  const { orgId, tank1 } = await setupOrgA();
+  await inviteAndAccept(orgId, [tank1]);
+  const own = await claimDevice(dependencies, CARE_X, { deviceId: DEVICE_3, claimCode: CODE_3, aquariumName: 'My tank' });
+  assert.equal(own.orgCreated, true);
+  assert.equal(own.orgId, `org-${CARE_X.uid}`);
+  assert.equal((await firestore.doc(`organizations/${own.orgId}/members/${CARE_X.uid}`).get()).get('role'), 'owner');
+  assert.equal((await firestore.doc(`organizations/${orgId}/members/${CARE_X.uid}`).get()).get('role'), 'caretaker', 'still a caretaker in org A');
+  assert.equal((await firestore.doc(`aquariums/${own.aquariumId}`).get()).get('orgId'), own.orgId);
+  assert.equal((await firestore.collection('aquariums').where('orgId', '==', orgId).get()).size, 2, 'org A gained nothing');
+});

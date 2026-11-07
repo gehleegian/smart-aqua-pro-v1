@@ -176,6 +176,11 @@ export function removeMember(orgId: string, uid: string) {
   return call<{ removed: boolean }>('removeMember', { orgId, uid });
 }
 
+/** Sprint 4 co-owners: promote a caretaker to owner or demote an owner (≥1 owner always). */
+export function setMemberRole(orgId: string, uid: string, role: OrgRole) {
+  return call<{ changed: boolean; primaryOwnerMoved: string[] }>('setMemberRole', { orgId, uid, role });
+}
+
 export function updateCaretakerAssignments(orgId: string, uid: string, aquariumIds: string[]) {
   return call<{ changed: string[] }>('updateCaretakerAssignments', { orgId, uid, aquariumIds });
 }

@@ -21,12 +21,16 @@ import SetupWizard from '../../views/SetupWizard';
 import Team from '../../views/Team';
 import Organizations from '../../views/Organizations';
 import AcceptInvite from '../../views/AcceptInvite';
+import AuditLog, { AdminAuditLog } from '../../views/AuditLog';
+import RulesEditor from '../../views/RulesEditor';
 import ConfirmModal from '../ui/ConfirmModal';
 import NoOrgState, { SuspendedOrgState } from '../org/NoOrgState';
 import type { NavRole } from './Sidebar';
 import { useOrg } from '../../hooks/useOrg';
 import { refreshOrgContext } from '../../services/orgService';
 import { clearOrgContext, readPendingInvite } from '../../services/orgContext';
+import { captureTankFromUrl } from '../../services/tankFocus';
+import { refreshPushToken } from '../../services/pushService';
 
 import {
   EmailVerificationRequiredError,
@@ -52,6 +56,9 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   team: Team,
   organizations: Organizations,
   invite: AcceptInvite,
+  audit: AuditLog,
+  'admin-audit': AdminAuditLog,
+  rules: RulesEditor,
 };
 
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
@@ -71,13 +78,13 @@ const getInitialTheme = (): ThemeMode => {
 // Sprint 3: pages follow the access role (docs/access-model.md). The rules
 // enforce the same boundaries; this only decides what is shown.
 const rolePermissions: Record<NavRole, string[]> = {
-  Admin: ['dashboard', 'organizations', 'users', 'settings', 'support'],
-  owner: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'add-device', 'setup', 'team', 'settings', 'support', 'invite'],
-  caretaker: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'settings', 'support', 'invite'],
+  Admin: ['dashboard', 'organizations', 'users', 'rules', 'admin-audit', 'settings', 'support'],
+  owner: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
+  caretaker: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'add-device', 'setup', 'settings', 'support', 'invite'],
   none: ['dashboard', 'add-device', 'setup', 'settings', 'support', 'invite'],
 };
 // Pages that need an active (not suspended) organization's data.
-const orgDataPages = new Set(['monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'team', 'setup']);
+const orgDataPages = new Set(['monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'team', 'setup', 'audit']);
 
 function navRoleFor(platformRole: UserRole | undefined, orgRole: 'owner' | 'caretaker' | null): NavRole {
   if (platformRole === 'Admin') return 'Admin';
@@ -90,6 +97,11 @@ export default function Layout() {
       return 'dashboard';
     }
 
+    // A notification click opens /?tank=<id>: show that tank's dashboard.
+    if (captureTankFromUrl()) {
+      localStorage.setItem('currentPage', 'dashboard');
+      return 'dashboard';
+    }
     return localStorage.getItem('currentPage') || 'dashboard';
   });
   const [appPage, setAppPage] = useState<AppPage>('landing');
@@ -118,6 +130,8 @@ export default function Layout() {
       return;
     }
     let cancelled = false;
+    // Alerts already turned on in this browser: keep the token fresh (no prompt).
+    void refreshPushToken().catch((error) => console.warn('Push token refresh failed.', error));
     refreshOrgContext(uid)
       .catch((error) => {
         console.error('Failed to load organizations:', error);
