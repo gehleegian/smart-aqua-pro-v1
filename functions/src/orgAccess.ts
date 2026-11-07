@@ -813,8 +813,12 @@ export async function setOrganizationStatus(
     const org = await transaction.get(orgRef(firestore, orgId));
     if (!org.exists) throw new MutationError('not-found', 'Organization not found.');
     const aquariums = await readOrgAquariums(firestore, orgId, transaction);
+    const members = await transaction.get(firestore.collection(`organizations/${orgId}/members`));
     if (org.get('status') === status) return aquariums.map((doc) => doc.id);
     transaction.update(org.ref, { status, statusChangedAt: now, statusChangedBy: actor.uid });
+    // Storage rules can read only two documents (aquarium + member), so the
+    // org status is copied onto each member doc for them (storage.rules).
+    for (const member of members.docs) transaction.update(member.ref, { orgStatus: status });
     writeAuditLog(transaction, firestore, {
       actor: actor.uid,
       action: status === 'suspended' ? 'org.suspend' : 'org.reactivate',
