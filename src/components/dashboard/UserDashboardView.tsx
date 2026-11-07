@@ -260,7 +260,7 @@ export function UserDashboardView({
       <ConditionPanel assessment={selectedTank.assessment} />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <RecommendationsPanel aquariumId={selectedTank.id} />
+        <RecommendationsPanel aquariumId={selectedTank.id} aquariumName={selectedTank.name} />
         <NextCleaningCard cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow} />
       </div>
 

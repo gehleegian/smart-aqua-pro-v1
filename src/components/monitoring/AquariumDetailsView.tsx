@@ -1,7 +1,12 @@
-import { ArrowLeft, RefreshCw, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, RefreshCw, Settings, Wrench } from 'lucide-react';
+import { CommandHistory, CommandStatusBadge } from './CommandHistory';
+import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
+import { MaintenanceHistory } from '../maintenance/MaintenanceHistory';
+import { nextScheduledText } from '../../utils/schedule';
+import { useNow } from '../../hooks/useNow';
 import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
 import { getSensorDisplay } from '../../utils/sensorDisplay';
-import { getCommandStatusText } from '../../types/device';
 import type { AutomationSettings } from '../../types/aquarium';
 import type {
   AssessmentSeverity,
@@ -68,6 +73,8 @@ export function AquariumDetailsView({
   onRefresh,
   onSystemToggle,
 }: AquariumDetailsViewProps) {
+  const [logging, setLogging] = useState(false);
+  const now = useNow();
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -113,7 +120,7 @@ export function AquariumDetailsView({
                 { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
                 { label: 'Water Level', display: getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
                 {
-                  label: 'TDS Quality',
+                  label: 'TDS',
                   display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
                     typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
                 },
@@ -190,7 +197,7 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
-      {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} /> : null}
+      {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} aquariumName={aquarium.name} /> : null}
 
       <Card>
         <CardHeader>
@@ -272,17 +279,8 @@ export function AquariumDetailsView({
             </div>
 
             {aquarium.commandStatus !== 'none' ? (
-              <p
-                className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
-                  aquarium.commandStatus === 'done'
-                    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
-                    : aquarium.commandStatus === 'pending'
-                      ? 'border-slate-500/30 bg-slate-800/40 text-slate-200'
-                      : 'border-amber-400/30 bg-amber-400/10 text-amber-100'
-                }`}
-                role="status"
-              >
-                Last command: {getCommandStatusText(aquarium.commandStatus)}
+              <p className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-300" role="status">
+                Last command: <CommandStatusBadge status={aquarium.commandStatus} />
               </p>
             ) : null}
             <div className="space-y-3">
@@ -328,6 +326,10 @@ export function AquariumDetailsView({
               <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
               <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
             </div>
+            {aquarium.automationSettings && automationEnabled && nextScheduledText(automationSettings, now) ? (
+              <p className="mt-4 text-sm text-teal-100">{nextScheduledText(automationSettings, now)}</p>
+            ) : null}
+            <p className="mt-2 text-xs text-slate-400">Times are Asia/Manila. The device runs the schedule on its own clock, even if Wi-Fi drops.</p>
             {canManage && (
               <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
                 {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
@@ -336,6 +338,17 @@ export function AquariumDetailsView({
           </CardContent>
         </Card>
       </div>
+
+      {aquarium.telemetrySource !== 'simulated' ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <MaintenanceHistory
+            aquariumId={aquarium.id}
+            action={<Button size="sm" onClick={() => setLogging(true)}><Wrench className="h-4 w-4" aria-hidden="true" /> Log maintenance</Button>}
+          />
+          <CommandHistory aquariumId={aquarium.id} />
+        </div>
+      ) : null}
+      {logging ? <LogMaintenanceModal aquariumId={aquarium.id} aquariumName={aquarium.name} recommendation={null} onClose={() => setLogging(false)} /> : null}
     </div>
   );
 }

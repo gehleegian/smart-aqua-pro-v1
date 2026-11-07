@@ -1,3 +1,4 @@
+import { validateSchedule } from './schedule';
 import type {
   Aquarium,
   AutomationSettings,
@@ -328,10 +329,16 @@ export function prepareAutomationSettings(draft: AutomationSettings):
     };
   }
 
+  // Sprint 4 (FR18): HH:mm, feeding times at least 30 min apart, light pair.
+  const problems = validateSchedule({ ...draft, feedingTimes, filtrationRuntimeHours: runtimeHours });
+  if (problems.length > 0) {
+    return { settings: null, error: problems.join(' ') };
+  }
+
   return {
     settings: {
       ...draft,
-      feedingTimes,
+      feedingTimes: [...feedingTimes].sort(),
       filtrationRuntimeHours: runtimeHours,
     },
     error: '',

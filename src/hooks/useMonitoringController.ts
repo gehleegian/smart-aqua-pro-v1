@@ -1,3 +1,4 @@
+import { consumeTankFocus } from '../services/tankFocus';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '../firebase';
 import {
@@ -65,7 +66,7 @@ export function useMonitoringController() {
   >({});
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] = useState('');
-  const [selectedAquariumId, setSelectedAquariumId] = useState('');
+  const [selectedAquariumId, setSelectedAquariumId] = useState(() => consumeTankFocus());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [systemError, setSystemError] = useState('');
@@ -319,7 +320,8 @@ export function useMonitoringController() {
         ...aquarium,
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
-        tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+        // TDS ppm stands on its own (firmware may send ppm without the legacy purity %).
+        tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
         ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
         turbidity: snapshot?.hasFreshTurbidityTelemetry
           ? snapshot.turbidity ?? aquarium.turbidity

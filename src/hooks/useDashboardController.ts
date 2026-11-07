@@ -1,3 +1,4 @@
+import { consumeTankFocus } from '../services/tankFocus';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import {
@@ -27,7 +28,7 @@ export function useDashboardController() {
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [adminUsers, setAdminUsers] = useState<UserData[]>([]);
   const [aquariumDirectory, setAquariumDirectory] = useState<AquariumDirectoryEntry[]>([]);
-  const [selectedTankId, setSelectedTankId] = useState('');
+  const [selectedTankId, setSelectedTankId] = useState(() => consumeTankFocus());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [telemetryNow, setTelemetryNow] = useState(() => Date.now());

@@ -1,13 +1,20 @@
+import { useState } from 'react';
 import { useRecommendations } from '../../hooks/useRecommendations';
+import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
+import StatusMessage from '../ui/StatusMessage';
+import type { Recommendation } from '../../types/recommendation';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
-// Pending recommendations from the rules engine. Applied / Dismiss only change
-// the recommendation's status; full maintenance logging comes in Sprint 4.
-export function RecommendationsPanel({ aquariumId }: { aquariumId: string }) {
+// Pending recommendations from the rules engine. Applied opens the
+// maintenance log form (FR20): logging marks the recommendation applied.
+// Dismiss only changes the status.
+export function RecommendationsPanel({ aquariumId, aquariumName }: { aquariumId: string; aquariumName?: string }) {
   const { recommendations, error, savingId, setStatus } = useRecommendations(aquariumId);
   const pending = recommendations.filter((item) => item.status === 'pending');
+  const [applying, setApplying] = useState<Recommendation | null>(null);
+  const [notice, setNotice] = useState('');
 
   return (
     <Card>
@@ -17,6 +24,7 @@ export function RecommendationsPanel({ aquariumId }: { aquariumId: string }) {
       </CardHeader>
       <CardContent>
         {error ? <p className="mb-3 text-sm text-amber-300">{error}</p> : null}
+        {notice ? <div className="mb-3"><StatusMessage variant="success">{notice}</StatusMessage></div> : null}
         {pending.length === 0 ? (
           <p className="text-sm text-slate-400">No pending recommendations.</p>
         ) : (
@@ -46,7 +54,7 @@ export function RecommendationsPanel({ aquariumId }: { aquariumId: string }) {
                   </div>
                 </dl>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" disabled={savingId === item.id} onClick={() => void setStatus(item.id, 'applied')}>
+                  <Button size="sm" disabled={savingId === item.id} onClick={() => { setNotice(''); setApplying(item); }}>
                     Applied
                   </Button>
                   <Button size="sm" variant="secondary" disabled={savingId === item.id} onClick={() => void setStatus(item.id, 'dismissed')}>
@@ -58,6 +66,15 @@ export function RecommendationsPanel({ aquariumId }: { aquariumId: string }) {
           </ul>
         )}
       </CardContent>
+      {applying ? (
+        <LogMaintenanceModal
+          aquariumId={aquariumId}
+          aquariumName={aquariumName}
+          recommendation={applying}
+          onClose={() => setApplying(null)}
+          onLogged={setNotice}
+        />
+      ) : null}
     </Card>
   );
 }
