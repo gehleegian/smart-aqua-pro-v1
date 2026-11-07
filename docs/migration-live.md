@@ -76,6 +76,8 @@ Writes `species/goldfish` and the 27 `rules/*` docs, all `status: draft`. The ap
 
 ## 2. Deploy the rules-engine functions
 
+**Region.** Every function deploys to **asia-southeast1**, next to Firestore and the RTDB (`setGlobalOptions` with `functions/src/region.ts`; 2nd-gen database triggers must be in their database's region). The web app (`NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION`) and the mobile app (`EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION`) default to the same region. A client built for `us-central1` cannot reach these callables.
+
 ```bash
 npm run build:functions
 firebase deploy --only functions:ingestDeviceTelemetry,functions:checkDeviceHeartbeat,functions:checkCleaningSchedule,functions:onMaintenanceActionLogged --project practice-smartaqua
@@ -173,7 +175,7 @@ His `firestore.claiming.rules` deny every client read and write on `device_regis
    CLAIM_CODE_PEPPER=… node --experimental-strip-types scripts/convert-pr8-registry.ts --project practice-smartaqua --database-url <RTDB URL> --dry-run
    CLAIM_CODE_PEPPER=… node --experimental-strip-types scripts/convert-pr8-registry.ts --project practice-smartaqua --database-url <RTDB URL>
    ```
-   The pepper must be the same value as the deployed `CLAIM_CODE_PEPPER` secret. Pass it in the environment of your own terminal only; never paste it into a shared log or commit it. The script asks you to type the project ID before it writes.
+   The pepper must be the same value as the deployed `CLAIM_CODE_PEPPER` secret. Pass it in the environment of your own terminal only; never paste it into a shared log or commit it. The script asks you to type the project ID before it writes. Against a real project it **refuses to start** if `CLAIM_CODE_PEPPER` is not in the environment, and never falls back to `functions/.secret.local` (the emulator pepper).
    - **Aquarium 2 (claimed):** becomes `status: claimed` with `orgId`, `claimedBy` = his `ownerUid`, `claimedAtMs` and `claimCodeHash: null`. It gets `deviceBindings/<his device UID>` if that is missing, and the mirror is re-synced (adds `orgId`; `ownerUid`, `state`, `deviceUids` and `claimOperationId` are kept). No code is needed.
    - **Unclaimed devices he provisioned:** each gets a new claim code (stored only as an HMAC). The QR label goes to `provisioning-output/pr8-conversion/<SAQ-…>/` (gitignored). His pre-reserved `aquariumId` becomes `reservedAquariumId`, and `claimDevice` creates the tank under that ID: the ID his firmware already writes to (`AQUARIUM_ID` in `DeviceIdentity.h`). So **no reflash is needed**. `state` becomes `converted`, so his ID-only route can no longer claim it.
    - Every one of his fields stays, and a full copy is kept in `pr8Original`. Re-running plans 0 steps and never issues a second code.
