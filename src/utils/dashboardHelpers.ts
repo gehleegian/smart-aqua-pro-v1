@@ -71,7 +71,7 @@ export function mergeDashboardAquariums(
   return aquariums.map((aquarium) => {
     const telemetry = deviceShadows[aquarium.id]?.telemetry;
     const telemetryState = getDeviceTelemetryState(telemetry, now);
-    const snapshot = getFreshTelemetrySnapshot(telemetry, now);
+    const snapshot = getFreshTelemetrySnapshot(telemetry, now, aquarium);
 
     const nextAquarium: Aquarium = {
       ...aquarium,
@@ -96,7 +96,7 @@ export function mergeDashboardAquariums(
           temperatureC: snapshot.temperatureC,
           temperatureValid: snapshot.hasFreshTemperatureTelemetry,
           waterLevelPercent: snapshot.waterLevelPercent,
-          waterLevelValid: true,
+          waterLevelValid: snapshot.hasFreshWaterLevelTelemetry,
           tdsPpm: snapshot.tdsPpm,
           tdsPurityPercent: snapshot.tdsPercent,
           tdsValid: snapshot.hasFreshPurityTelemetry,
@@ -124,6 +124,8 @@ export function mergeDashboardAquariums(
       telemetrySource: snapshot ? 'live' : 'unavailable',
       fishCount: nextAquarium.fishCount ?? 0,
       hasFreshTelemetry: Boolean(snapshot),
+      hasFreshWaterLevelTelemetry: Boolean(snapshot?.hasFreshWaterLevelTelemetry),
+      waterLevelMessage: snapshot?.waterLevelMessage,
       hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
       hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
       hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
@@ -242,9 +244,9 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
     },
     {
       title: 'Water Level',
-      value: formatWaterLevel(tank.level, tank.hasFreshTelemetry),
+      value: formatWaterLevel(tank.level, tank.hasFreshWaterLevelTelemetry ?? tank.hasFreshTelemetry),
       icon: Droplets,
-      change: condition('waterLevel')?.message || 'Assessment unavailable',
+      change: tank.waterLevelMessage || condition('waterLevel')?.message || 'Assessment unavailable',
       trend: trend('waterLevel'),
       sparkline: [],
     },

@@ -15,6 +15,8 @@ export type DashboardAquarium = Aquarium & {
   telemetrySource: TelemetrySource;
   fishCount: number;
   hasFreshTelemetry: boolean;
+  hasFreshWaterLevelTelemetry?: boolean;
+  waterLevelMessage?: string;
   hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;
   hasFreshPhTelemetry: boolean;

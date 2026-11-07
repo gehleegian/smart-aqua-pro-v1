@@ -15,6 +15,7 @@
 #include "ScheduleLogicTests.h"
 #include "EchoFilter.h"
 #include "PowerSignal.h"
+#include "WaterLevel.h"
 
 // Aquarium 1 supervised integration-test firmware. No fabricated telemetry.
 constexpr uint8_t PH_PIN = 34, TDS_PIN = 32, TURB_PIN = 35;
@@ -40,6 +41,7 @@ float powerSignalV = NAN, supplyV = NAN;
 PowerSignal::State measuredPower = PowerSignal::State::Unknown;
 float t18 = NAN, t19 = NAN, distanceCm = NAN, levelPct = NAN;
 bool temperaturesValid = false, levelValid = false;
+float profileTargetHeightCm = 0;
 uint32_t sampleAt = 0, lastSample = 0, lastCloud = 0, lastWifi = 0;
 String idToken, refreshToken, lastCommand, serialLine;
 bool serialOverflow = false, commandBaseline = false;
@@ -251,6 +253,11 @@ void sampleSensors() {
   levelValid = isfinite(distanceCm) && distanceCm >= 20.0f && distanceCm <= 800.0f;
   levelPct = levelValid ? constrain((EMPTY_CM - distanceCm) * 100.0f /
                                      (EMPTY_CM - FULL_CM), 0.0f, 100.0f) : NAN;
+  if (PROFILE_LEVEL_ENABLED) {
+    const float result = WaterLevel::percent(distanceCm, profileTargetHeightCm);
+    levelValid = result >= 0;
+    levelPct = levelValid ? result : NAN;
+  }
   sampleAt = millis();
   Serial.println("\n--- AQUARIUM 1 REAL SENSOR SAMPLE ---");
   Serial.printf("Temp GPIO18: %.2f C | GPIO19: %.2f C | mean: %.2f C\n",
@@ -258,8 +265,10 @@ void sampleSensors() {
   Serial.printf("pH: %.2f | input %.3f V (nan = invalid/outside buffer range)\n", phValue, phV);
   Serial.printf("Turbidity: %s | GPIO35 %.3f V | module approx %.3f V\n",
                 turbKnown ? (cloudy ? "CLOUDY" : "CLEAR") : "UNKNOWN", turbV, turbV * 2);
-  Serial.printf("Distance: %.1f cm | level %.1f %% (27.0 empty / 20.2 chosen full)\n",
-                distanceCm, levelPct);
+  if (PROFILE_LEVEL_ENABLED)
+    Serial.printf("Distance: %.1f cm | level %.1f %% | empty 27.0 cm | profile target height %.3f cm\n",
+                  distanceCm, levelPct, profileTargetHeightCm);
+  else Serial.printf("Distance: %.1f cm | level %.1f %% (27.0 empty / 20.2 chosen full)\n", distanceCm, levelPct);
   Serial.printf("Ultrasonic: %u/5 valid echoes; current-batch median only\n", validEchoes);
   if (tdsV >= TDS_BASE_V && tdsV <= TDS_REF_V) {
     const float estimate = (tdsV - TDS_BASE_V) * SALT_EQ_REF_PPM / (TDS_REF_V - TDS_BASE_V);
@@ -483,6 +492,16 @@ bool cloudCycle() {
     return false;
   }
   const bool scheduleValid = validAutomation(control);
+  if (PROFILE_LEVEL_ENABLED) {
+    JsonObject geometry = control["waterLevelProfile"].as<JsonObject>();
+    profileTargetHeightCm = geometry["tankLengthCm"].is<double>() && geometry["tankWidthCm"].is<double>() &&
+      geometry["tankHeightCm"].is<double>() && geometry["workingWaterVolumeLiters"].is<double>()
+      ? WaterLevel::targetHeight(geometry["tankLengthCm"].as<float>(), geometry["tankWidthCm"].as<float>(),
+          geometry["tankHeightCm"].as<float>(), geometry["workingWaterVolumeLiters"].as<float>()) : 0;
+    const float result = WaterLevel::percent(distanceCm, profileTargetHeightCm);
+    levelValid = result >= 0;
+    levelPct = levelValid ? result : NAN;
+  }
   if (!scheduleValid) {
     // Incomplete legacy schedules must not disable otherwise valid manual actions.
     lightSchedule.reset();
@@ -545,15 +564,21 @@ bool cloudCycle() {
   if (!establishingBaseline && scheduleValid) applyScheduledFeed(control);
 
   // Mandatory fields cannot be fabricated. Skip entire snapshot if either fails.
-  if (!temperaturesValid || !levelValid || millis() - sampleAt > 15000) {
+  if (!temperaturesValid || (!PROFILE_LEVEL_ENABLED && !levelValid) || millis() - sampleAt > 15000) {
     Serial.println("Telemetry withheld: missing valid temperature pair/water level/fresh sample.");
     return true;
   }
   JsonDocument telemetry;
   telemetry["temperatureC"] = (t18 + t19) / 2.0f;
   telemetry["temperatureReadingValid"] = true;
-  telemetry["waterLevelPercent"] = levelPct;
-  telemetry["waterPresent"] = levelPct > 0;
+  if (PROFILE_LEVEL_ENABLED) {
+    telemetry["waterLevelReadingValid"] = levelValid;
+    if (profileTargetHeightCm > 0) telemetry["waterLevelTargetHeightCm"] = profileTargetHeightCm;
+  }
+  if (levelValid) {
+    telemetry["waterLevelPercent"] = levelPct;
+    telemetry["waterPresent"] = levelPct > 0;
+  }
   if (isfinite(phValue)) telemetry["ph"] = phValue;
   // Homemade salt equivalent is NOT calibrated TDS; do not feed it into alerts.
   telemetry["tdsReadingValid"] = false;

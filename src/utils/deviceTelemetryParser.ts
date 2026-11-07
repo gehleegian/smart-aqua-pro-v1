@@ -23,7 +23,7 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
 
   if (
     temperatureC === undefined ||
-    waterLevelPercent === undefined ||
+    (waterLevelPercent === undefined && telemetry.waterLevelReadingValid !== false) ||
     updatedAt === undefined
   ) {
     return null;
@@ -36,6 +36,8 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
         ? telemetry.temperatureReadingValid
         : true,
     waterLevelPercent,
+    waterLevelReadingValid: typeof telemetry.waterLevelReadingValid === 'boolean' ? telemetry.waterLevelReadingValid : undefined,
+    waterLevelTargetHeightCm: readTelemetryNumber(telemetry.waterLevelTargetHeightCm),
     waterPresent: typeof telemetry.waterPresent === 'boolean' ? telemetry.waterPresent : true,
     tdsPpm: hasTdsPpm ? tdsPpm : undefined,
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,

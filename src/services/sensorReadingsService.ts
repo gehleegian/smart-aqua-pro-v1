@@ -146,6 +146,10 @@ export function buildSensorReadingDocument(options: {
   telemetry: DeviceTelemetry;
   source?: SensorReadingSource;
 }): SensorReadingDocument {
+  if (options.telemetry.waterLevelReadingValid === false || typeof options.telemetry.waterLevelPercent !== 'number' ||
+      !Number.isFinite(options.telemetry.waterLevelPercent)) {
+    throw new Error('Cannot store a complete sensor reading without a valid water level.');
+  }
   const recordedAtEpoch = Number.isFinite(options.telemetry.updatedAt)
     ? options.telemetry.updatedAt
     : Date.now();

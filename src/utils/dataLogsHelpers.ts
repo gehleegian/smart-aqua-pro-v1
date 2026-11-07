@@ -85,7 +85,7 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
   const telemetry = shadow?.telemetry;
 
   if (
-    !telemetry ||
+    !telemetry || telemetry.waterLevelReadingValid === false ||
     typeof telemetry.temperatureC !== 'number' ||
     typeof telemetry.waterLevelPercent !== 'number'
   ) {

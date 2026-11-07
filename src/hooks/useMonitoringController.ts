@@ -292,7 +292,7 @@ export function useMonitoringController() {
     return aquariums.map((aquarium) => {
       const telemetry = deviceShadows[aquarium.id]?.telemetry;
       const telemetryState = getDeviceTelemetryState(telemetry, telemetryNow);
-      const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow);
+      const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow, aquarium);
       const manualStatus = getReportedManualStatus(getManualSystemStatus(aquarium), telemetry, telemetryNow);
       const telemetrySource: TelemetrySource = snapshot ? 'live' : 'unavailable';
       const assessmentTelemetry: AssessmentTelemetry | null = snapshot
@@ -300,7 +300,7 @@ export function useMonitoringController() {
             temperatureC: snapshot.temperatureC,
             temperatureValid: snapshot.hasFreshTemperatureTelemetry,
             waterLevelPercent: snapshot.waterLevelPercent,
-            waterLevelValid: true,
+            waterLevelValid: snapshot.hasFreshWaterLevelTelemetry,
             tdsPpm: snapshot.tdsPpm,
             tdsPurityPercent: snapshot.tdsPercent,
             tdsValid: snapshot.hasFreshPurityTelemetry,
@@ -340,6 +340,8 @@ export function useMonitoringController() {
         assessment,
         telemetrySource,
         hasFreshTelemetry: Boolean(snapshot),
+        hasFreshWaterLevelTelemetry: Boolean(snapshot?.hasFreshWaterLevelTelemetry),
+        waterLevelMessage: snapshot?.waterLevelMessage,
         hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
         hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
         hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),

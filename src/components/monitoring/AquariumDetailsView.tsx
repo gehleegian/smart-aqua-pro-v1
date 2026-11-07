@@ -114,8 +114,8 @@ export function AquariumDetailsView({
             />
             <Reading
               label="Water Level"
-              value={formatWaterLevel(aquarium.level, aquarium.hasFreshTelemetry)}
-              status={!aquarium.hasFreshTelemetry ? 'Waiting for telemetry' : formatWaterLevel(aquarium.level) === '--' ? 'Invalid reading' : 'Live telemetry'}
+              value={formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry ?? aquarium.hasFreshTelemetry)}
+              status={!aquarium.hasFreshTelemetry ? 'Waiting for telemetry' : aquarium.waterLevelMessage || 'Live telemetry'}
             />
             <Reading
               label="TDS Quality"

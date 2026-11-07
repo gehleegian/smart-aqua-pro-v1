@@ -240,7 +240,7 @@ export function mergeLiveAquariums(
   now = Date.now()
 ) {
   return aquariums.map((aquarium) => {
-    const snapshot = getFreshTelemetrySnapshot(deviceShadows[aquarium.id]?.telemetry, now);
+    const snapshot = getFreshTelemetrySnapshot(deviceShadows[aquarium.id]?.telemetry, now, aquarium);
 
     if (!snapshot) {
       return aquarium;
@@ -264,7 +264,7 @@ export function buildAlertCandidates(
 ) {
   return aquariums.flatMap((aquarium) => {
     const shadow = deviceShadows[aquarium.id];
-    const snapshot = getFreshTelemetrySnapshot(shadow?.telemetry, now);
+    const snapshot = getFreshTelemetrySnapshot(shadow?.telemetry, now, aquarium);
     const sensorAquarium = snapshot
       ? {
           ...aquarium,
@@ -277,7 +277,7 @@ export function buildAlertCandidates(
 
     return [
       ...(sensorAquarium ? buildTemperatureAlerts(sensorAquarium) : []),
-      ...(sensorAquarium ? buildLevelAlert(sensorAquarium) : []),
+      ...(sensorAquarium && snapshot?.hasFreshWaterLevelTelemetry ? buildLevelAlert(sensorAquarium) : []),
       ...(sensorAquarium && snapshot?.hasFreshPurityTelemetry
         ? buildQualityAlert(sensorAquarium)
         : []),

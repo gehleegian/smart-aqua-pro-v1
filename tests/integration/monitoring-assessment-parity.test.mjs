@@ -53,7 +53,7 @@ function webFrom(device) {
     profile, source: snapshot ? 'live' : 'unavailable', assessedAt: now,
     telemetry: snapshot ? {
       temperatureC: snapshot.temperatureC, temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-      waterLevelPercent: snapshot.waterLevelPercent, waterLevelValid: true,
+      waterLevelPercent: snapshot.waterLevelPercent, waterLevelValid: snapshot.hasFreshWaterLevelTelemetry,
       tdsPpm: snapshot.tdsPpm, tdsPurityPercent: snapshot.tdsPercent, tdsValid: snapshot.hasFreshPurityTelemetry,
       ph: snapshot.ph, phValid: snapshot.hasFreshPhTelemetry,
       turbidity: snapshot.turbidity, turbidityValid: snapshot.hasFreshTurbidityTelemetry,
@@ -69,6 +69,7 @@ test('web and mobile adapters produce identical assessments', () => {
     { temperatureReadingValid: false }, { tdsReadingValid: false },
     { updatedAt: now - 30_000 }, { updatedAt: now - 30_001 },
     { online: false }, { updatedAt: undefined }, { updatedAt: NaN },
+    { waterLevelReadingValid: false, waterLevelPercent: undefined },
     { powerStatus: 'Power Interruption' }, { temperatureC: NaN }, { waterLevelPercent: undefined },
   ]) {
     const device = deviceFrom(patch);

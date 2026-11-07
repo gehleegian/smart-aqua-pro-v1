@@ -11,7 +11,7 @@
         "telemetry": {
           ".read": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid",
           ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists()",
-          ".validate": "newData.hasChildren(['temperatureC', 'waterLevelPercent', 'updatedAt', 'online'])",
+          ".validate": "newData.hasChildren(['temperatureC', 'updatedAt', 'online']) && ((newData.child('waterLevelReadingValid').val() == false && !newData.child('waterLevelPercent').exists() && !newData.child('waterPresent').exists()) || (newData.child('waterLevelReadingValid').val() != false && newData.child('waterLevelPercent').isNumber()))",
           "temperatureC": {
             ".validate": "newData.isNumber()"
           },
@@ -20,6 +20,12 @@
           },
           "waterLevelPercent": {
             ".validate": "newData.isNumber()"
+          },
+          "waterLevelReadingValid": {
+            ".validate": "newData.isBoolean()"
+          },
+          "waterLevelTargetHeightCm": {
+            ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 7"
           },
           "waterPresent": {
             ".validate": "newData.isBoolean()"
@@ -76,6 +82,14 @@
           ".validate": "newData.hasChildren(['mode', 'automationEnabled', 'feedingTimes', 'filtrationStartTime', 'filtrationRuntimeHours', 'manualLightState', 'manualFilterState', 'updatedAt'])",
           "mode": {
             ".validate": "newData.isString() && (newData.val() == 'manual' || newData.val() == 'automation')"
+          },
+          "waterLevelProfile": {
+            ".validate": "newData.hasChildren(['tankLengthCm','tankWidthCm','tankHeightCm','workingWaterVolumeLiters']) && newData.child('workingWaterVolumeLiters').val()*1000 <= newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*newData.child('tankHeightCm').val() && newData.child('workingWaterVolumeLiters').val()*1000 <= newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*7",
+            "tankLengthCm": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "tankWidthCm": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "tankHeightCm": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "workingWaterVolumeLiters": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "$other": { ".validate": false }
           },
           "automationEnabled": {
             ".validate": "newData.isBoolean()"

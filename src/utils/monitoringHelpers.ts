@@ -157,10 +157,13 @@ export function buildOwnerStats(ownerAquariums: MonitoringAquarium[]): OwnerStat
   const totalTanks = ownerAquariums.length;
   const liveDataAquariums = ownerAquariums.filter((aquarium) => aquarium.hasFreshTelemetry);
   const livePurityAquariums = ownerAquariums.filter((aquarium) => aquarium.hasFreshPurityTelemetry);
-  const average = (field: 'temp' | 'level' | 'quality') =>
-    liveDataAquariums.length === 0
+  const average = (field: 'temp' | 'level' | 'quality') => {
+    const readings = liveDataAquariums.filter(aquarium => Number.isFinite(aquarium[field]) &&
+      (field !== 'level' || aquarium.hasFreshWaterLevelTelemetry !== false));
+    return readings.length === 0
       ? 0
-      : liveDataAquariums.reduce((sum, aquarium) => sum + aquarium[field], 0) / liveDataAquariums.length;
+      : readings.reduce((sum, aquarium) => sum + aquarium[field], 0) / readings.length;
+  };
   const averagePurity =
     livePurityAquariums.length === 0
       ? 0

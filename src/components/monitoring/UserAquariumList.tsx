@@ -59,7 +59,7 @@ export function UserAquariumList({
               </div>
               <p className="mt-2 text-sm text-slate-400">
                 {aquarium.hasFreshTelemetry
-                  ? `${aquarium.temp.toFixed(1)} C · ${formatWaterLevel(aquarium.level)} level · ${aquarium.quality}% TDS purity`
+                  ? `${aquarium.temp.toFixed(1)} C · ${formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry ?? true)} level · ${aquarium.quality}% TDS purity`
                   : 'Waiting for valid telemetry'}
               </p>
             </button>

@@ -2,6 +2,7 @@ import { collection, doc, getDoc, getDocs, query, where, writeBatch } from 'fire
 import { auth, db } from '../firebase';
 import type { AquariumUpdatePayload } from '../types/aquariumManagement';
 import { normalizeDeviceId, validateDeviceId } from './deviceClaimContracts';
+import { syncWaterLevelProfile } from './deviceService';
 import type {
   Aquarium,
   AquariumDirectoryEntry,
@@ -532,6 +533,10 @@ export async function updateAquarium(
     buildAquariumDirectoryDocument(updatedAquariumData, updatedAt)
   );
   await batch.commit();
+  if (aquariumData.deviceId === 'SAQ-7K3M-9R2X') {
+    try { await syncWaterLevelProfile(aquariumId); }
+    catch { throw new Error('Aquarium profile saved, but water-level device synchronization failed. Reopen and save the profile to retry.'); }
+  }
 }
 
 export async function updateAquariumManualStatus(
