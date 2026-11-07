@@ -66,7 +66,7 @@ function run(command, commandArgs, env) {
 
 async function waitForFunctions() {
   // A callable answers 400/401 (not 404) once the functions are loaded.
-  const url = `http://127.0.0.1:5001/${projectId}/us-central1/claimDevice`;
+  const url = `http://127.0.0.1:5001/${projectId}/asia-southeast1/claimDevice`;
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {

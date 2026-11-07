@@ -14,7 +14,7 @@ const USER_D = 'callable-user-d';
 const AQUARIUM_ID = 'callable-aquarium';
 const DELETION_AQUARIUM_ID = 'callable-deletion-aquarium';
 const PASSWORD = 'SmartAqua-Test-123!';
-const FUNCTIONS_BASE = `http://127.0.0.1:5001/${PROJECT_ID}/us-central1`;
+const FUNCTIONS_BASE = `http://127.0.0.1:5001/${PROJECT_ID}/asia-southeast1`;
 
 let app: App;
 let auth: Auth;

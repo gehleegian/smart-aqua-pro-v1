@@ -143,7 +143,7 @@ async function main() {
     clientAuth.connectAuthEmulator(authClient, 'http://127.0.0.1:9099', { disableWarnings: true });
     const db = clientFirestore.getFirestore(instance);
     clientFirestore.connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    const fns = clientFunctions.getFunctions(instance);
+    const fns = clientFunctions.getFunctions(instance, 'asia-southeast1');
     clientFunctions.connectFunctionsEmulator(fns, '127.0.0.1', 5001);
     await clientAuth.signInWithEmailAndPassword(authClient, account.email, DEMO_PASSWORD);
     clients.push({ app: instance });

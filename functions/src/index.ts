@@ -10,6 +10,8 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onValueWritten } from 'firebase-functions/v2/database';
 import { defineBoolean, defineSecret, defineString } from 'firebase-functions/params';
+import { setGlobalOptions } from 'firebase-functions/v2';
+import { FUNCTIONS_REGION, RTDB_TRIGGER_REGION } from './region.js';
 import { ADMIN_MFA_MESSAGE, adminMfaSatisfied } from './mfaPolicy.js';
 import {
   reconcileAuthorization,
@@ -52,6 +54,9 @@ import {
   type NotificationSender,
 } from './notifications.js';
 import { generateReportForMember, generateScheduledReports, type ReportDependencies } from './reports/generate.js';
+
+// Must run before any function below is defined (docs/migration-live.md §2).
+setGlobalOptions({ region: FUNCTIONS_REGION });
 
 if (getApps().length === 0) {
   initializeApp();
@@ -547,7 +552,7 @@ export const reconcileAuthorizationMirror = onSchedule(
 // reconcile alerts/recommendations, sampled history, condition summary.
 // See docs/rule-engine.md. Firestore is written only when something changes.
 export const ingestDeviceTelemetry = onValueWritten(
-  { ref: '/devices/{aquariumId}/telemetry' },
+  { ref: '/devices/{aquariumId}/telemetry', region: RTDB_TRIGGER_REGION },
   async (event) => {
     if (!event.data.after.exists()) {
       return;
@@ -629,7 +634,7 @@ export const logMaintenance = onCall<CallableData>(callableOptions, async (reque
 
 // FR17/FR19: command_logs from the RTDB latest command and acknowledgement.
 export const logDeviceCommand = onValueWritten(
-  { ref: '/devices/{aquariumId}/commands/latest' },
+  { ref: '/devices/{aquariumId}/commands/latest', region: RTDB_TRIGGER_REGION },
   async (event) => {
     if (!event.data.after.exists()) return;
     const result = await recordCommand({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
@@ -638,7 +643,7 @@ export const logDeviceCommand = onValueWritten(
 );
 
 export const logDeviceCommandAck = onValueWritten(
-  { ref: '/devices/{aquariumId}/commandAck/latest' },
+  { ref: '/devices/{aquariumId}/commandAck/latest', region: RTDB_TRIGGER_REGION },
   async (event) => {
     if (!event.data.after.exists()) return;
     const result = await recordAck({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());

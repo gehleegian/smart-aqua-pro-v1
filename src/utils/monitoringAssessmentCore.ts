@@ -614,11 +614,23 @@ export function readAquariumOverrides(aquarium: Record<string, unknown>): Partia
   return overrides;
 }
 
-/** mainsPresent (new, additive) wins over the device-reported powerStatus. */
+/** mainsPresent (new, additive) wins over the device-reported powerStatus. Display only. */
 export function derivePowerStatus(raw: Record<string, unknown>): 'Online' | 'Offline' | 'Power Interruption' | 'Unknown' | undefined {
   if (raw.mainsPresent === false) return 'Power Interruption';
   if (raw.mainsPresent === true) return 'Online';
   return normalizeDevicePowerStatus(raw.powerStatus);
+}
+
+/**
+ * The power status the rule engine may evaluate (and so alert on). Only the
+ * sensed mains signal counts: until a device sends mainsPresent, its
+ * self-reported powerStatus is informational (current firmware sends a
+ * placeholder), so power is "not monitored" rather than a Power Interruption.
+ */
+export function evaluatedPowerStatus(raw: Record<string, unknown>): 'Online' | 'Power Interruption' | undefined {
+  if (raw.mainsPresent === false) return 'Power Interruption';
+  if (raw.mainsPresent === true) return 'Online';
+  return undefined;
 }
 
 function compare(op: CompareOp, left: unknown, right: unknown): boolean {
@@ -749,7 +761,8 @@ export function evaluateAquarium(
   const missingRules: string[] = [];
   const raw = reading ?? {};
   const validity = evaluateTelemetryValidity(raw);
-  const powerStatus = derivePowerStatus(raw);
+  const powerStatus = evaluatedPowerStatus(raw);
+  const reportedPowerStatus = normalizeDevicePowerStatus(raw.powerStatus);
   const filterState = raw.filterState === 'Active' || raw.filterState === 'Inactive' ? raw.filterState : undefined;
   const equipmentStatus = raw.equipmentStatus === 'Normal' || raw.equipmentStatus === 'Warning' ||
     raw.equipmentStatus === 'Fault' ? raw.equipmentStatus : undefined;
@@ -813,13 +826,22 @@ export function evaluateAquarium(
     }
 
     const statusValues: Record<'power' | 'equipment' | 'filter', unknown> = {
-      power: powerStatus === 'Unknown' ? undefined : powerStatus,
+      power: powerStatus,
       equipment: equipmentStatus,
       filter: profile.hasFiltrationSystem === false ? undefined : filterState,
     };
     for (const parameter of STATUS_PARAMETERS) {
       const value = statusValues[parameter];
       if (value === undefined) {
+        if (parameter === 'power' && reportedPowerStatus !== undefined && reportedPowerStatus !== 'Unknown') {
+          perParameter.push({
+            parameter,
+            status: 'not_monitored',
+            value: reportedPowerStatus,
+            reason: 'device-reported power status is informational until the device sends mainsPresent',
+          });
+          continue;
+        }
         perParameter.push({
           parameter,
           status: 'not_monitored',

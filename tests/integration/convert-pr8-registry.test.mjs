@@ -4,7 +4,7 @@
 // src/server/deviceClaim.ts). Emulator only.
 // Run: npm run test:convert-pr8
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -204,4 +204,18 @@ test('CONVERT-05 the converted spare is claimable through claimDevice with the n
   assert.equal((await database.ref(`deviceBindings/${SPARE_DEVICE_UID}`).get()).val(), SPARE);
   const registry = (await firestore.doc(`device_registry/${SPARE_DEVICE}`).get()).data();
   assert.deepEqual([registry.status, registry.aquariumId, registry.claimedBy], ['claimed', SPARE, USER1]);
+});
+
+test('CONVERT-06 a real-project run refuses to start without CLAIM_CODE_PEPPER in the environment (never the emulator .secret.local)', async () => {
+  const before = await snapshot();
+  const env = { ...process.env };
+  for (const name of ['CLAIM_CODE_PEPPER', 'FIRESTORE_EMULATOR_HOST', 'FIREBASE_DATABASE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST']) delete env[name];
+  const result = spawnSync('node', ['--experimental-strip-types', '--no-warnings', 'scripts/convert-pr8-registry.ts',
+    '--project', 'demo-not-a-real-project', '--database-url', 'http://127.0.0.1:9/?ns=none', '--out', OUT], {
+    cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /CLAIM_CODE_PEPPER is not set.*Nothing was written/s);
+  assert.doesNotMatch(result.stdout, /Type the project id/, 'fails before the confirmation prompt');
+  assert.deepEqual(await snapshot(), before);
 });

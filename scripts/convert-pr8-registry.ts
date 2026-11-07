@@ -70,6 +70,10 @@ const millis = (value: unknown) => {
 
 function readPepper() {
   if (process.env.CLAIM_CODE_PEPPER) return process.env.CLAIM_CODE_PEPPER;
+  // A real project must use the deployed functions secret, typed into the
+  // environment. functions/.secret.local holds the emulator pepper: claim codes
+  // hashed with it would never verify in production.
+  if (project) return '';
   const file = path.join(root, 'functions/.secret.local');
   if (existsSync(file)) {
     const line = readFileSync(file, 'utf8').split('\n').find((entry) => entry.startsWith('CLAIM_CODE_PEPPER='));
@@ -92,6 +96,10 @@ async function connect() {
     }
     projectId = project;
     databaseURL = databaseUrlFlag;
+    if (!dryRun && !process.env.CLAIM_CODE_PEPPER) {
+      console.error('CLAIM_CODE_PEPPER is not set. A real-project run needs the production pepper (the deployed functions secret) in the environment; functions/.secret.local is never used here. Nothing was written.');
+      process.exit(1);
+    }
     if (!dryRun) {
       console.log(`About to convert the PR #8 device registry on the REAL project "${projectId}".`);
       const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -210,8 +218,16 @@ async function plan(services: Awaited<ReturnType<typeof connect>>, now: number) 
         continue;
       }
       pepper ??= readPepper();
+      if (!pepper && project && dryRun) {
+        // Dry run on a real project: show the step; a real run refuses to start without the pepper.
+        steps.push({
+          label: `unclaimed ${deviceId} -> status unclaimed with a new claim code, reservedAquariumId ${aquariumId}; label in ${path.relative(root, outDir)}/${deviceId}/ (a real run needs CLAIM_CODE_PEPPER in the environment)`,
+          apply: async () => { throw new Error('CLAIM_CODE_PEPPER is not set'); },
+        });
+        continue;
+      }
       if (!pepper) {
-        warnings.push(`skip device_registry/${deviceId}: CLAIM_CODE_PEPPER is not set (env, or functions/.secret.local); it must equal the deployed functions secret`);
+        warnings.push(`skip device_registry/${deviceId}: CLAIM_CODE_PEPPER is not set (env${project ? '' : ', or functions/.secret.local'}); it must equal the deployed functions secret`);
         continue;
       }
       const usedPepper = pepper;

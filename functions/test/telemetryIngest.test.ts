@@ -307,6 +307,18 @@ test('RULES-06 mainsPresent=false while online is a Power Interruption through t
   assert.equal(row.mainsPresent, false);
 });
 
+test('RULES-06b a device-reported "Power Interruption" without mainsPresent is informational: no alert', async () => {
+  const result = await send({ powerStatus: 'Power Interruption' });
+  assert.ok(result.ingested);
+  assert.equal(result.classification, 'normal');
+  assert.equal((await alerts()).some((alert) => alert.parameter === 'power'), false);
+  const aquarium = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!;
+  const power = aquarium.condition.perParameter.find((item: FirebaseFirestore.DocumentData) => item.parameter === 'power');
+  assert.deepEqual([power.status, power.value], ['not_monitored', 'Power Interruption']);
+  const [row] = await flatRows();
+  assert.equal(row.powerStatus, 'Power Interruption');
+});
+
 test('RULES-07 Unknown power and equipment are "not monitored" and do not block NORMAL', async () => {
   const result = await send({ powerStatus: 'Unknown', equipmentStatus: 'Unknown' });
   assert.ok(result.ingested);
