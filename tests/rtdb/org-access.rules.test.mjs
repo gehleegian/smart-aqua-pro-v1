@@ -46,7 +46,7 @@ function fixture() {
   return {
     authorization: {
       users: Object.fromEntries(
-        ['owner-a', 'owner-b', 'owner-s', 'care-x', 'care-z', 'newbie', 'live-owner'].map((uid) => [uid, { role: 'User', emailVerificationRequired: true }])
+        ['owner-a', 'owner-b', 'owner-s', 'care-x', 'care-z', 'newbie', 'live-owner', 'co-owner'].map((uid) => [uid, { role: 'User', emailVerificationRequired: true }])
           .concat([['admin-p', { role: 'Admin', emailVerificationRequired: true }]])
       ),
       aquariums: {
@@ -157,4 +157,19 @@ test('RORG-08 the migrated live Aquarium 1 accepts live-format telemetry from it
   await assertFails(set(ref(deviceDb, `devices/${TANK_1}/telemetry`), LIVE_TELEMETRY), 'the live device stays bound to Aquarium 1 only');
   await readsAll(human('live-owner'), LIVE);
   await assertSucceeds(set(ref(human('live-owner'), `devices/${LIVE}/commands/latest`), command(LIVE, 'live-owner')));
+});
+
+test('RORG-09 a co-owner (coOwnerUids) reads, commands and edits schedules on every tank; demoting them ends it at once', async () => {
+  await environment.withSecurityRulesDisabled((ctx) => Promise.all([TANK_1, TANK_2].map((id) =>
+    set(ref(ctx.database(), `authorization/aquariums/${id}/coOwnerUids`), { 'co-owner': true }))));
+  const db = human('co-owner');
+  for (const id of [TANK_1, TANK_2]) {
+    await readsAll(db, id);
+    await assertSucceeds(set(ref(db, `devices/${id}/commands/latest`), command(id, 'co-owner')));
+    await assertSucceeds(set(ref(db, `devices/${id}/control`), { ...CONTROL, feedingTimes: ['10:00'] }));
+  }
+  await readsNone(db, LIVE);
+  await environment.withSecurityRulesDisabled((ctx) => remove(ref(ctx.database(), `authorization/aquariums/${TANK_1}/coOwnerUids`)));
+  await readsNone(db, TANK_1);
+  await assertFails(set(ref(db, `devices/${TANK_1}/control`), CONTROL));
 });

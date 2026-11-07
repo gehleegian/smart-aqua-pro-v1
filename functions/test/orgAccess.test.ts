@@ -14,6 +14,7 @@ import {
   hashClaimCode,
   removeMember,
   revokeInvite,
+  setMemberRole,
   setOrganizationStatus,
   updateCaretakerAssignments,
   type OrgActor,
@@ -308,4 +309,52 @@ test('platform admin suspends and reactivates an org; the mirror follows; others
   // Fallback: an Admin whose claim is not set yet is recognised by role.
   await setOrganizationStatus(dependencies, { ...ADMIN, platformAdmin: false }, { orgId, status: 'suspended' });
   assert.equal((await mirror(tank1))?.state, 'suspended');
+});
+
+test('co-owners: promote a caretaker; the mirror grants every tank at once; the last owner can never be demoted or removed', async () => {
+  const { orgId, tank1, tank2 } = await setupOrgA();
+  await inviteAndAccept(orgId, [tank1]);
+  await rejects(setMemberRole(dependencies, CARE_X, { orgId, uid: CARE_X.uid, role: 'owner' }), 'permission-denied');
+  await rejects(setMemberRole(dependencies, OWNER_A, { orgId, uid: OWNER_A.uid, role: 'caretaker' }), 'failed-precondition', /at least one owner/);
+  await rejects(setMemberRole(dependencies, OWNER_A, { orgId, uid: CARE_X.uid, role: 'admin' }), 'invalid-argument');
+
+  await setMemberRole(dependencies, OWNER_A, { orgId, uid: CARE_X.uid, role: 'owner' });
+  assert.equal((await firestore.doc(`organizations/${orgId}/members/${CARE_X.uid}`).get()).get('role'), 'owner');
+  for (const tank of [tank1, tank2]) {
+    const entry = await mirror(tank);
+    assert.deepEqual(entry?.coOwnerUids, { [CARE_X.uid]: true }, 'a co-owner reaches every tank');
+    assert.equal(entry?.caretakerUids, undefined, 'owners are not also caretakers');
+    assert.equal(entry?.ownerUid, OWNER_A.uid);
+  }
+
+  // The new co-owner demotes the original owner: tanks move to the co-owner.
+  await setMemberRole(dependencies, CARE_X, { orgId, uid: OWNER_A.uid, role: 'caretaker' });
+  assert.equal((await firestore.doc(`aquariums/${tank1}`).get()).get('ownerId'), CARE_X.uid);
+  assert.equal((await firestore.doc(`aquarium_directory/${tank1}`).get()).get('ownerId'), CARE_X.uid);
+  const entry = await mirror(tank1);
+  assert.equal(entry?.ownerUid, CARE_X.uid);
+  assert.equal(entry?.coOwnerUids, undefined, 'the demoted owner loses access immediately');
+  assert.equal(entry?.state, 'active');
+
+  // Now CARE_X is the only owner: neither demotion nor removal is possible.
+  await rejects(setMemberRole(dependencies, CARE_X, { orgId, uid: CARE_X.uid, role: 'caretaker' }), 'failed-precondition', /at least one owner/);
+  await rejects(removeMember(dependencies, CARE_X, { orgId, uid: CARE_X.uid }), 'failed-precondition', /at least one owner/);
+  const actions = (await firestore.collection('audit_logs').where('orgId', '==', orgId).get()).docs.map((doc) => doc.get('action'));
+  assert.ok(actions.includes('member.promote') && actions.includes('member.demote'));
+});
+
+test('co-owners: an owner can remove another owner; the removed owner loses access and their tanks move', async () => {
+  const { orgId, tank1, tank2 } = await setupOrgA();
+  await inviteAndAccept(orgId, [tank2], CARE_Y);
+  await setMemberRole(dependencies, OWNER_A, { orgId, uid: CARE_Y.uid, role: 'owner' });
+  await removeMember(dependencies, CARE_Y, { orgId, uid: OWNER_A.uid });
+  assert.equal((await firestore.doc(`organizations/${orgId}/members/${OWNER_A.uid}`).get()).exists, false);
+  for (const tank of [tank1, tank2]) {
+    assert.equal((await firestore.doc(`aquariums/${tank}`).get()).get('ownerId'), CARE_Y.uid);
+    const entry = await mirror(tank);
+    assert.equal(entry?.ownerUid, CARE_Y.uid);
+    assert.equal(entry?.coOwnerUids, undefined);
+  }
+  const log = (await firestore.collection('audit_logs').where('action', '==', 'member.remove').get()).docs[0];
+  assert.deepEqual([...log.get('details.movedAquariumIds')].sort(), [tank1, tank2].sort());
 });

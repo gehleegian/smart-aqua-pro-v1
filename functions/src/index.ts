@@ -31,6 +31,7 @@ import {
   createInvite as createInviteCore,
   removeMember as removeMemberCore,
   revokeInvite as revokeInviteCore,
+  setMemberRole as setMemberRoleCore,
   setOrganizationStatus as setOrganizationStatusCore,
   updateCaretakerAssignments as updateCaretakerAssignmentsCore,
   type OrgActor,
@@ -272,6 +273,10 @@ export const removeMember = orgCallable('removeMember', (deps, actor, data) =>
   removeMemberCore(deps, actor, { orgId: data.orgId, uid: data.uid })
 );
 
+export const setMemberRole = orgCallable('setMemberRole', (deps, actor, data) =>
+  setMemberRoleCore(deps, actor, { orgId: data.orgId, uid: data.uid, role: data.role })
+);
+
 export const updateCaretakerAssignments = orgCallable('updateCaretakerAssignments', (deps, actor, data) =>
   updateCaretakerAssignmentsCore(deps, actor, { orgId: data.orgId, uid: data.uid, aquariumIds: data.aquariumIds })
 );
@@ -299,12 +304,15 @@ export const syncOrganizationAuthorizationMirror = onDocumentWritten(
 export const syncMemberAuthorizationMirror = onDocumentWritten(
   { document: 'organizations/{orgId}/members/{uid}', retry: true },
   async (event) => {
-    if (event.data?.before.get('role') === event.data?.after.get('role')) return;
-    const aquariums = await dependencies.firestore
-      .collection('aquariums')
-      .where('orgId', '==', event.params.orgId)
-      .where('caretakerIds', 'array-contains', event.params.uid)
-      .get();
+    const before = event.data?.before.get('role');
+    const after = event.data?.after.get('role');
+    if (before === after) return;
+    // An owner change touches every tank's coOwnerUids (Sprint 4 co-owners).
+    const byOrg = dependencies.firestore.collection('aquariums').where('orgId', '==', event.params.orgId);
+    const aquariums = await (before === 'owner' || after === 'owner'
+      ? byOrg
+      : byOrg.where('caretakerIds', 'array-contains', event.params.uid)
+    ).get();
     for (const aquarium of aquariums.docs) {
       await syncAquariumAuthorization(dependencies, aquarium.id);
     }

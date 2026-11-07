@@ -562,12 +562,56 @@ export async function revokeInvite(dependencies: OrgDependencies, actor: OrgActo
 // Members
 // ---------------------------------------------------------------------------
 
+/**
+ * Sprint 4 co-owners. Reads every owner of the org in the transaction and
+ * refuses a change that would leave none. When the member losing owner rights
+ * is an aquarium's primary `ownerId` (the legacy single-owner field the RTDB
+ * mirror and older clients use), the aquarium moves to the acting owner, or to
+ * another remaining owner when owners change their own role.
+ */
+async function planOwnerLoss(
+  transaction: Transaction,
+  firestore: Firestore,
+  orgId: string,
+  losingUid: string,
+  actorUid: string
+) {
+  const owners = await transaction.get(firestore.collection(`organizations/${orgId}/members`).where('role', '==', 'owner'));
+  const remaining = owners.docs.map((doc) => doc.id).filter((uid) => uid !== losingUid);
+  if (remaining.length === 0) {
+    throw new MutationError('failed-precondition', 'An organization must keep at least one owner.');
+  }
+  const heir = remaining.includes(actorUid) ? actorUid : remaining.sort()[0];
+  const aquariums = await readOrgAquariums(firestore, orgId, transaction);
+  return { heir, aquariums };
+}
+
+function transferPrimaryOwnership(
+  transaction: Transaction,
+  firestore: Firestore,
+  aquariums: DocumentSnapshot[],
+  fromUid: string,
+  heir: { uid: string; name: string },
+  now: number
+) {
+  const moved: string[] = [];
+  for (const aquarium of aquariums) {
+    if (aquarium.get('ownerId') !== fromUid) continue;
+    const updatedAt = new Date(now).toISOString();
+    transaction.update(aquarium.ref, { ownerId: heir.uid, ownerName: heir.name, updatedAt });
+    transaction.set(firestore.doc(`aquarium_directory/${aquarium.id}`), { ownerId: heir.uid, ownerName: heir.name, updatedAt }, { merge: true });
+    moved.push(aquarium.id);
+  }
+  return moved;
+}
+
 export async function removeMember(dependencies: OrgDependencies, actor: OrgActor, input: { orgId: unknown; uid: unknown }) {
   const { firestore } = dependencies;
   requireVerifiedEmail(actor);
   const orgId = requireId(input.orgId, 'Organization');
   const uid = requireId(input.uid, 'Member', UID_PATTERN);
   const now = clock(dependencies);
+  const actorName = (await readProfileName(firestore, actor.uid, actor.email)).name;
 
   const affected = await firestore.runTransaction(async (transaction) => {
     const [actorMember, target] = await transaction.getAll(
@@ -576,15 +620,21 @@ export async function removeMember(dependencies: OrgDependencies, actor: OrgActo
     );
     assertOwner(actorMember);
     if (!target.exists) throw new MutationError('not-found', 'Member not found.');
+    let moved: string[] = [];
+    let aquariums: DocumentSnapshot[];
     if (target.get('role') === 'owner') {
-      // Only one owner exists per org today, so an owner is never removable.
-      throw new MutationError('failed-precondition', 'An organization must keep at least one owner.');
-    }
-    const aquariums = (await readOrgAquariums(firestore, orgId, transaction)).filter((doc) =>
-      ((doc.get('caretakerIds') as unknown[] | undefined) ?? []).includes(uid)
-    );
-    for (const aquarium of aquariums) {
-      transaction.update(aquarium.ref, { caretakerIds: FieldValue.arrayRemove(uid) });
+      // Co-owners (Sprint 4): any owner may remove another owner, never the last one.
+      const plan = await planOwnerLoss(transaction, firestore, orgId, uid, actor.uid);
+      const heirName = plan.heir === actor.uid ? actorName : (await transaction.get(memberRef(firestore, orgId, plan.heir))).get('displayName') ?? plan.heir;
+      moved = transferPrimaryOwnership(transaction, firestore, plan.aquariums, uid, { uid: plan.heir, name: heirName }, now);
+      aquariums = plan.aquariums;
+    } else {
+      aquariums = (await readOrgAquariums(firestore, orgId, transaction)).filter((doc) =>
+        ((doc.get('caretakerIds') as unknown[] | undefined) ?? []).includes(uid)
+      );
+      for (const aquarium of aquariums) {
+        transaction.update(aquarium.ref, { caretakerIds: FieldValue.arrayRemove(uid) });
+      }
     }
     transaction.delete(target.ref);
     writeAuditLog(transaction, firestore, {
@@ -592,7 +642,12 @@ export async function removeMember(dependencies: OrgDependencies, actor: OrgActo
       action: 'member.remove',
       target: `organizations/${orgId}/members/${uid}`,
       orgId,
-      details: { role: target.get('role'), email: target.get('email') ?? null, aquariumIds: aquariums.map((doc) => doc.id) },
+      details: {
+        role: target.get('role'),
+        email: target.get('email') ?? null,
+        aquariumIds: aquariums.map((doc) => doc.id),
+        ...(moved.length ? { primaryOwnerMovedTo: actor.uid, movedAquariumIds: moved } : {}),
+      },
       at: now,
     });
     return aquariums.map((doc) => doc.id);
@@ -601,6 +656,71 @@ export async function removeMember(dependencies: OrgDependencies, actor: OrgActo
   // The member doc is gone (Firestore access ended in the commit); now RTDB.
   await syncAquariums(dependencies, affected);
   return { orgId, uid, removed: true, aquariumIds: affected };
+}
+
+/**
+ * Sprint 4: promote a caretaker to owner or demote an owner to caretaker.
+ * Owner only; an org always keeps at least one owner. A new owner sees every
+ * tank, so their caretaker assignments are cleared; a demoted owner starts
+ * with no tanks until an owner assigns some.
+ */
+export async function setMemberRole(
+  dependencies: OrgDependencies,
+  actor: OrgActor,
+  input: { orgId: unknown; uid: unknown; role: unknown }
+) {
+  const { firestore } = dependencies;
+  requireVerifiedEmail(actor);
+  const orgId = requireId(input.orgId, 'Organization');
+  const uid = requireId(input.uid, 'Member', UID_PATTERN);
+  if (input.role !== 'owner' && input.role !== 'caretaker') {
+    throw new MutationError('invalid-argument', 'Role must be owner or caretaker.');
+  }
+  const role: OrgRole = input.role;
+  const now = clock(dependencies);
+  const actorName = (await readProfileName(firestore, actor.uid, actor.email)).name;
+
+  const result = await firestore.runTransaction(async (transaction) => {
+    const [org, actorMember, target] = await transaction.getAll(
+      orgRef(firestore, orgId),
+      memberRef(firestore, orgId, actor.uid),
+      memberRef(firestore, orgId, uid)
+    );
+    assertOwner(actorMember);
+    assertOrgActive(org);
+    if (!target.exists) throw new MutationError('not-found', 'Member not found.');
+    const previous = target.get('role') as OrgRole;
+    if (previous === role) return { changed: false, aquariumIds: [] as string[], moved: [] as string[] };
+
+    let aquariums: DocumentSnapshot[];
+    let moved: string[] = [];
+    if (role === 'caretaker') {
+      const plan = await planOwnerLoss(transaction, firestore, orgId, uid, actor.uid);
+      const heirName = plan.heir === actor.uid ? actorName : (await transaction.get(memberRef(firestore, orgId, plan.heir))).get('displayName') ?? plan.heir;
+      moved = transferPrimaryOwnership(transaction, firestore, plan.aquariums, uid, { uid: plan.heir, name: heirName }, now);
+      aquariums = plan.aquariums;
+    } else {
+      aquariums = await readOrgAquariums(firestore, orgId, transaction);
+      for (const aquarium of aquariums) {
+        if (((aquarium.get('caretakerIds') as unknown[] | undefined) ?? []).includes(uid)) {
+          transaction.update(aquarium.ref, { caretakerIds: FieldValue.arrayRemove(uid) });
+        }
+      }
+    }
+    transaction.update(target.ref, { role, roleChangedAt: now, roleChangedBy: actor.uid });
+    writeAuditLog(transaction, firestore, {
+      actor: actor.uid,
+      action: role === 'owner' ? 'member.promote' : 'member.demote',
+      target: `organizations/${orgId}/members/${uid}`,
+      orgId,
+      details: { from: previous, to: role, email: target.get('email') ?? null, ...(moved.length ? { movedAquariumIds: moved } : {}) },
+      at: now,
+    });
+    return { changed: true, aquariumIds: aquariums.map((doc) => doc.id), moved };
+  });
+
+  await syncAquariums(dependencies, result.aquariumIds);
+  return { orgId, uid, role, changed: result.changed, primaryOwnerMoved: result.moved };
 }
 
 export async function updateCaretakerAssignments(

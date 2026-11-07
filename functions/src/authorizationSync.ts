@@ -57,12 +57,15 @@ type AquariumSource = {
   orgActive: boolean;
   /** caretakerIds that are still caretaker members of the org, sorted. */
   caretakerUids: string[];
+  /** Sprint 4 co-owners: the org's other `owner` members (not ownerUid), sorted. */
+  coOwnerUids: string[];
 };
 
 type AquariumMirror = {
   ownerUid?: string;
   orgId?: string;
   caretakerUids?: Record<string, boolean>;
+  coOwnerUids?: Record<string, boolean>;
   state?: AquariumAuthorizationState;
   deviceUids?: Record<string, boolean>;
   activeMutationId?: string;
@@ -113,7 +116,8 @@ function sameAquariumSource(left: AquariumSource, right: AquariumSource) {
     left.authorizationBlocked === right.authorizationBlocked &&
     left.orgId === right.orgId &&
     left.orgActive === right.orgActive &&
-    left.caretakerUids.join(',') === right.caretakerUids.join(',')
+    left.caretakerUids.join(',') === right.caretakerUids.join(',') &&
+    left.coOwnerUids.join(',') === right.coOwnerUids.join(',')
   );
 }
 
@@ -185,6 +189,7 @@ async function readAquariumSource(
       orgId: null,
       orgActive: false,
       caretakerUids: [],
+      coOwnerUids: [],
     };
   }
 
@@ -209,6 +214,7 @@ async function readAquariumSource(
     orgId,
     orgActive: org?.active ?? false,
     caretakerUids: org?.caretakerUids ?? [],
+    coOwnerUids: (org?.ownerUids ?? []).filter((uid) => uid !== ownerUid),
   };
 }
 
@@ -223,8 +229,15 @@ async function readOrgAccess(firestore: Firestore, orgId: string, caretakerIds: 
     : [];
   const orgRef = firestore.doc(`organizations/${orgId}`);
   const memberRefs = ids.map((uid) => firestore.doc(`organizations/${orgId}/members/${uid}`));
-  const [orgSnapshot, ...members] = await firestore.getAll(orgRef, ...memberRefs);
+  const [[orgSnapshot, ...members], owners] = await Promise.all([
+    firestore.getAll(orgRef, ...memberRefs),
+    firestore.collection(`organizations/${orgId}/members`).where('role', '==', 'owner').get(),
+  ]);
   return {
+    ownerUids: owners.docs
+      .map((member) => member.id)
+      .filter((uid) => !RTDB_FORBIDDEN_KEY_CHARACTERS.some((character) => uid.includes(character)))
+      .sort(),
     active: orgSnapshot.exists && orgSnapshot.get('status') === 'active',
     caretakerUids: members
       .filter((member) => member.exists && member.get('role') === 'caretaker')
@@ -275,14 +288,15 @@ function userMirrorMatches(
 
 function aquariumMirrorMatches(
   mirror: AquariumMirror | null,
-  desired: Pick<AquariumMirror, 'ownerUid' | 'state' | 'sourceUpdatedAt' | 'orgId' | 'caretakerUids'>
+  desired: Pick<AquariumMirror, 'ownerUid' | 'state' | 'sourceUpdatedAt' | 'orgId' | 'caretakerUids' | 'coOwnerUids'>
 ) {
   return (
     mirror?.ownerUid === desired.ownerUid &&
     mirror?.state === desired.state &&
     mirror?.sourceUpdatedAt === desired.sourceUpdatedAt &&
     mirror?.orgId === desired.orgId &&
-    sameCaretakers(mirror?.caretakerUids, desired.caretakerUids)
+    sameCaretakers(mirror?.caretakerUids, desired.caretakerUids) &&
+    sameCaretakers(mirror?.coOwnerUids, desired.coOwnerUids)
   );
 }
 
@@ -390,9 +404,10 @@ async function writeAquariumMirror(
     Boolean(source.ownerUid) &&
     source.ownerRole === 'User' &&
     source.orgId !== null;
-  const orgFields: Pick<AquariumMirror, 'orgId' | 'caretakerUids'> = {
+  const orgFields: Pick<AquariumMirror, 'orgId' | 'caretakerUids' | 'coOwnerUids'> = {
     ...(source.orgId ? { orgId: source.orgId } : {}),
     ...(caretakerMap(source.caretakerUids) ? { caretakerUids: caretakerMap(source.caretakerUids) } : {}),
+    ...(caretakerMap(source.coOwnerUids) ? { coOwnerUids: caretakerMap(source.coOwnerUids) } : {}),
   };
 
   const desired: AquariumMirror = eligible
@@ -451,6 +466,7 @@ async function writeAquariumMirror(
     // Access lists are replaced, never merged: a removed caretaker must lose
     // access, and a legacy aquarium has no org.
     if (!desired.caretakerUids) delete next.caretakerUids;
+    if (!desired.coOwnerUids) delete next.coOwnerUids;
     if (!desired.orgId) delete next.orgId;
 
     if (!source.exists) {
