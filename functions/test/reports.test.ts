@@ -2,7 +2,7 @@
 // logs -> weekly report -> Firestore monitoring_reports + PDF and CSV in Storage.
 // Run: npm run test:reports
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import test, { after, before } from 'node:test';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';
@@ -179,6 +179,8 @@ test('REPORT-02 a weekly report for the seeded tank: correct summary, PDF and CS
   assert.match(s.thresholds.draftNote, /Draft thresholds/, 'the seeded goldfish thresholds are DRAFT');
 
   const [pdfBytes] = await bucket.file(report.pdfPath).download();
+  // For the docs: REPORT_PDF_OUT=<file> keeps a copy of this generated PDF.
+  if (process.env.REPORT_PDF_OUT) writeFileSync(process.env.REPORT_PDF_OUT, pdfBytes);
   const pdf = await PDFDocument.load(pdfBytes);
   assert.ok(pdf.getPageCount() >= 3, `PDF has ${pdf.getPageCount()} pages`);
   assert.match(pdf.getTitle() ?? '', /Tank 1 - 2026-11-02 to 2026-11-08/);

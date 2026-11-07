@@ -108,6 +108,7 @@ export function renderReportPdf(input: ReportPdfInput): Promise<Buffer> {
       doc.x = MARGIN;
       doc.y = y + height;
     };
+    ensure(48); // never leave a header alone at the bottom of a page
     drawRow(columns.map((column) => column.label), true);
     for (const row of rows) drawRow(row, false);
     doc.moveDown(0.4);
@@ -141,10 +142,10 @@ export function renderReportPdf(input: ReportPdfInput): Promise<Buffer> {
     doc.moveDown(0.5);
     const text = summary.thresholds.draftNote;
     doc.font('Helvetica-Bold').fontSize(9.5);
-    const height = doc.heightOfString(`DRAFT THRESHOLDS. ${text}`, { width: width - 16 }) + 12;
+    const height = doc.heightOfString(`DRAFT. ${text}`, { width: width - 16 }) + 12;
     const y = doc.y;
     doc.rect(MARGIN, y, width, height).fill(WARN_FILL);
-    doc.fillColor('#92400e').text(`DRAFT THRESHOLDS. `, MARGIN + 8, y + 6, { width: width - 16, continued: true })
+    doc.fillColor('#92400e').text('DRAFT. ', MARGIN + 8, y + 6, { width: width - 16, continued: true })
       .font('Helvetica').text(text);
     doc.y = y + height;
   }

@@ -421,8 +421,10 @@ export function computeCompleteness(
   createdAt: number | null,
   covered: number
 ): StructuredSummary['completeness'] {
-  // Expected samples start at the tank's creation if that is inside the period.
-  const from = createdAt !== null && createdAt > start ? createdAt : start;
+  // Expected samples start at the tank's creation if that is inside the period,
+  // or at the first stored reading if that is earlier (a reading proves the device existed).
+  const firstReading = rows.reduce((first, row) => (row.at >= start && row.at < first ? row.at : first), Number.POSITIVE_INFINITY);
+  const from = createdAt !== null && createdAt > start ? Math.max(start, Math.min(createdAt, firstReading)) : start;
   const expectedSamples = effectiveEnd > from ? Math.ceil((effectiveEnd - from) / REPORT_SAMPLE_INTERVAL_MS) : 0;
   const slots = new Set<number>();
   for (const row of rows) {

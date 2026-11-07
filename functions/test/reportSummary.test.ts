@@ -144,6 +144,13 @@ test('completeness: expected vs received 5-minute slots, gaps and offline time',
   assert.equal(completeness.offlineEvents, 1);
 });
 
+test('completeness: a tank created mid-period counts from its creation, or from an earlier stored reading', () => {
+  const created = buildStructuredSummary({ ...inputs, aquarium: { ...inputs.aquarium, createdAt: start + 60 * MIN } });
+  assert.deepEqual([created.completeness.expectedSamples, created.completeness.receivedSamples], [24, 6], 'counting starts at the first row (2 min), so the 2- and 5-min rows share a slot');
+  const late = buildStructuredSummary({ ...inputs, readings: readings.filter((row) => row.at >= start + 60 * MIN), aquarium: { ...inputs.aquarium, createdAt: start + 60 * MIN } });
+  assert.deepEqual([late.completeness.expectedSamples, late.completeness.receivedSamples], [12, 2]);
+});
+
 test('time in condition: overall and per parameter, the prior row carries in, rows hold at most 6 min', () => {
   const { timeInCondition } = buildStructuredSummary(inputs);
   assert.deepEqual(timeInCondition.overall, {
