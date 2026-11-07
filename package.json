@@ -43,7 +43,8 @@
     "seed:demo": "node --experimental-strip-types scripts/seed-demo.ts",
     "test:smoke": "playwright test",
     "test:sprint4-functions": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-sprint4 \"node --test functions/lib/test/sprint4.test.js\"",
-    "test:schedule": "node --experimental-strip-types --test tests/unit/schedule.test.mjs"
+    "test:schedule": "node --experimental-strip-types --test tests/unit/schedule.test.mjs",
+    "test:sprint4-e2e": "npm run build:functions && node tests/helpers/ensureEmulatorPepper.mjs && cross-env DATABASE_URL=https://demo-smartaqua-sprint4e2e-default-rtdb.firebaseio.com FUNCTIONS_DISCOVERY_TIMEOUT=60 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-sprint4e2e \"node --experimental-strip-types --no-warnings scripts/seed-demo.ts && node --test --test-force-exit --test-timeout=120000 tests/integration/sprint4-e2e.test.mjs\""
   },
   "dependencies": {
     "clsx": "^2.1.1",
