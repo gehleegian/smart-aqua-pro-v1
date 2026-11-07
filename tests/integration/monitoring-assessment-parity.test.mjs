@@ -59,7 +59,8 @@ function deviceFrom(patch = {}) {
   };
 }
 // Web side of the parity check: the Sprint 2 rule engine with the seeded draft
-// rules. The mobile copy must port the same engine (mobile sync is pending).
+// rules. The mobile adapter receives the same seeded config, as it would from
+// Firestore; mobile never bundles thresholds or rules of its own.
 const ruleConfig = seedRuleConfig();
 function webFrom(device) {
   const snapshot = getFreshTelemetrySnapshot(device, now);
@@ -83,23 +84,24 @@ mobileTest('web and mobile adapters produce identical assessments', () => {
   ]) {
     const device = deviceFrom(patch);
     const web = webFrom(device);
-    const mobile = assessTelemetry(profile, device, 'live', now);
+    const mobile = assessTelemetry(profile, device, 'live', now, ruleConfig);
     assert.deepEqual(mobile, web, JSON.stringify(patch));
   }
 });
 
 mobileTest('mobile explicit unavailable source suppresses retained stale readings', () => {
-  const result = assessTelemetry(profile, deviceFrom({ temperatureC: 40 }), 'unavailable', now);
+  const result = assessTelemetry(profile, deviceFrom({ temperatureC: 40 }), 'unavailable', now, ruleConfig);
   assert.equal(result.overallSeverity, 'unavailable');
   assert.equal(result.recommendations.length, 0);
 });
 
 mobileTest('production Firebase parsers reject malformed numbers before assessment', () => {
   for (const value of [null, undefined, '', ' ', '22', false, true, [], {}, NaN, Infinity]) {
-    for (const [field, parameter] of [['ph', 'ph'], ['turbidity', 'turbidity'], ['tdsPercent', 'tds']]) {
+    // TDS is evaluated in ppm (Sprint 2 engine); tdsPercent is a legacy display field.
+    for (const [field, parameter] of [['ph', 'ph'], ['turbidity', 'turbidity'], ['tdsPpm', 'tds']]) {
       const raw = deviceFrom({ [field]: value });
       const web = webFrom(normalizeTelemetry(raw));
-      const mobile = assessTelemetry(profile, mapTelemetry(raw), 'live', now);
+      const mobile = assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig);
       assert.equal(web.parameters.find((p) => p.parameter === parameter).severity, 'unavailable');
       assert.equal(mobile.parameters.find((p) => p.parameter === parameter).severity, 'unavailable');
       assert.equal(web.recommendations.length, 0);
@@ -108,7 +110,7 @@ mobileTest('production Firebase parsers reject malformed numbers before assessme
     for (const field of ['temperatureC', 'waterLevelPercent', 'updatedAt']) {
       const raw = deviceFrom({ [field]: value });
       const web = webFrom(normalizeTelemetry(raw));
-      const mobile = assessTelemetry(profile, mapTelemetry(raw), 'live', now);
+      const mobile = assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig);
       assert.equal(web.overallSeverity, 'unavailable');
       assert.equal(web.recommendations.length, 0);
       assert.deepEqual(mobile, web);
@@ -120,8 +122,9 @@ mobileTest('zero values parse as numbers but are assessed as sensor faults, not 
   const raw = deviceFrom({ ph: 0, waterLevelPercent: 0, turbidity: 0, tdsPpm: 0 });
   assert.equal(normalizeTelemetry(raw).ph, 0);
   assert.equal(mapTelemetry(raw).waterLevelPercent, 0);
-  assert.equal(webFrom(normalizeTelemetry(raw)).recommendations.length, 0);
-  assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now), webFrom(normalizeTelemetry(raw)));
+  // Sensor faults yield only the sensor_fault "check the probe" rule, never water-quality advice (AGENTS.md §5).
+  assert.ok(webFrom(normalizeTelemetry(raw)).matchedRules.every((rule) => rule.ruleId === 'sensor_fault'));
+  assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig), webFrom(normalizeTelemetry(raw)));
 });
 
 mobileTest('production power parsing accepts the same aliases on web and mobile', () => {
@@ -133,7 +136,7 @@ mobileTest('production power parsing accepts the same aliases on web and mobile'
     const raw = deviceFrom({ powerStatus: value });
     assert.equal(normalizeTelemetry(raw).powerStatus, expected);
     assert.equal(mapTelemetry(raw).powerStatus, expected);
-    assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now), webFrom(normalizeTelemetry(raw)));
+    assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig), webFrom(normalizeTelemetry(raw)));
   }
 });
 
@@ -156,7 +159,7 @@ mobileTest('future timestamps are unavailable in both apps, including just beyon
     const telemetry = deviceFrom({ updatedAt: now + delta });
     assert.equal(getDeviceTelemetryState(telemetry, now), 'unavailable');
     assert.equal(getFreshTelemetrySnapshot(telemetry, now), null);
-    const mobile = assessTelemetry(profile, telemetry, 'live', now);
+    const mobile = assessTelemetry(profile, telemetry, 'live', now, ruleConfig);
     assert.equal(mobile.source, 'unavailable');
     assert.equal(mobile.recommendations.length, 0);
     assert.deepEqual(mobile, webFrom(telemetry));
