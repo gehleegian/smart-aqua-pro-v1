@@ -1,3 +1,4 @@
+import { getActiveMembership } from './orgContext';
 import {
   child,
   get,
@@ -25,6 +26,7 @@ import {
 } from '../types/device';
 import type {
   DeviceCommand,
+  DeviceCommandAck,
   DeviceControlProfile,
   DeviceShadow,
   DeviceTelemetry,
@@ -34,6 +36,7 @@ import type {
 const emptyDeviceShadow: DeviceShadow = {
   control: null,
   latestCommand: null,
+  latestAck: null,
   telemetry: null,
 };
 
@@ -48,7 +51,7 @@ type DeviceCommandRequest = Omit<DeviceCommand, 'requestedBy'>;
 
 async function assertRealtimeDeviceAccess(
   aquariumId: string,
-  action: 'read' | 'write'
+  action: 'read' | 'write' | 'control'
 ) {
   const currentUser = auth.currentUser;
 
@@ -74,10 +77,20 @@ async function assertRealtimeDeviceAccess(
   const aquariumData = aquariumSnap.data() as Record<string, unknown>;
   const ownerId =
     typeof aquariumData.ownerId === 'string' ? aquariumData.ownerId.trim() : '';
+  const orgId = typeof aquariumData.orgId === 'string' ? aquariumData.orgId : '';
+  const membership = getActiveMembership();
+  const caretakerIds = Array.isArray(aquariumData.caretakerIds) ? aquariumData.caretakerIds : [];
+  // Sprint 3: owners and assigned caretakers read telemetry and send
+  // commands; control/schedules are owner-only (scope 'control').
+  const allowed = orgId
+    ? membership?.orgId === orgId &&
+      membership.org.status === 'active' &&
+      (membership.role === 'owner' || (action !== 'control' && caretakerIds.includes(currentProfile.id)))
+    : Boolean(ownerId) && ownerId === currentProfile.id;
 
-  if (!ownerId || ownerId !== currentProfile.id) {
+  if (!allowed) {
     throw new Error(
-      `You are not allowed to ${action} device data for this aquarium.`
+      `You are not allowed to ${action === 'control' ? 'change schedules' : action} device data for this aquarium.`
     );
   }
 
@@ -157,7 +170,11 @@ export async function syncDeviceControlProfile(
     return;
   }
 
-  await assertRealtimeDeviceAccess(aquariumId, 'write');
+  // Caretakers send commands only; the control profile is owner-written.
+  if (getActiveMembership()?.role === 'caretaker') {
+    return;
+  }
+  await assertRealtimeDeviceAccess(aquariumId, 'control');
   await set(child(deviceRootRef, 'control'), profile);
 }
 
@@ -344,7 +361,8 @@ export type SensorReadingsBackfillResult = {
  * but no normal production UI read path invokes this client-side writer.
  */
 export async function backfillSensorReadingsFromDeviceHistory(
-  aquariumId: string
+  aquariumId: string,
+  dateKeys: string[]
 ): Promise<SensorReadingsBackfillResult> {
   const deviceRootRef = getDeviceRootRef(aquariumId);
 
@@ -368,20 +386,19 @@ export async function backfillSensorReadingsFromDeviceHistory(
     };
   }
 
-  const historySnapshot = await get(child(deviceRootRef, 'history'));
-
-  if (!historySnapshot.exists()) {
-    return {
-      dateKeysProcessed: 0,
-      readingsWritten: 0,
-    };
-  }
-
-  const historyByDate = historySnapshot.val() as Record<string, unknown>;
+  // RTDB rules grant owner reads at history/{dateKey} only; reading the
+  // history root is denied. Read each requested date key individually.
   let dateKeysProcessed = 0;
   let readingsWritten = 0;
 
-  for (const [dateKey, dayValue] of Object.entries(historyByDate)) {
+  for (const dateKey of new Set(dateKeys)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+      continue;
+    }
+
+    const daySnapshot = await get(child(deviceRootRef, `history/${dateKey}`));
+    const dayValue: unknown = daySnapshot.exists() ? daySnapshot.val() : null;
+
     if (!dayValue || typeof dayValue !== 'object' || Array.isArray(dayValue)) {
       continue;
     }
@@ -412,6 +429,21 @@ export async function backfillSensorReadingsFromDeviceHistory(
   return {
     dateKeysProcessed,
     readingsWritten,
+  };
+}
+
+function normalizeCommandAck(value: unknown): DeviceCommandAck | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const ack = value as Record<string, unknown>;
+  if (typeof ack.commandId !== 'string' || (ack.status !== 'done' && ack.status !== 'failed') ||
+      typeof ack.executedAt !== 'number' || !Number.isFinite(ack.executedAt)) {
+    return null;
+  }
+  return {
+    commandId: ack.commandId,
+    status: ack.status,
+    executedAt: ack.executedAt,
+    ...(typeof ack.error === 'string' ? { error: ack.error } : {}),
   };
 }
 
@@ -545,6 +577,29 @@ export function subscribeToDeviceShadow(
 
       if (subscriptionsClosed) {
         latestCommandUnsubscribe();
+        return;
+      }
+
+      // Command acknowledgements are additive (device contract decision 5).
+      // A denied or missing ack node must not break telemetry, so errors here
+      // only clear the ack instead of closing the whole subscription.
+      const latestAckUnsubscribe = onValue(
+        child(deviceRootRef, 'commandAck/latest'),
+        (snapshot) => {
+          if (cancelled || subscriptionsClosed) return;
+          shadow = { ...shadow, latestAck: normalizeCommandAck(snapshot.val()) };
+          if (initializedChildren.size === 3) callback(shadow);
+        },
+        (error) => {
+          console.warn('Command acknowledgements are unavailable.', error);
+          if (cancelled || subscriptionsClosed) return;
+          shadow = { ...shadow, latestAck: null };
+        }
+      );
+      unsubscribers.push(latestAckUnsubscribe);
+
+      if (subscriptionsClosed) {
+        latestAckUnsubscribe();
       }
     } catch (error) {
       // The subscription reports handled access/configuration failures to the

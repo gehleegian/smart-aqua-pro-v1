@@ -1,12 +1,15 @@
 import { Card, CardContent } from '../components/ui/Card';
+import LoadingState from '../components/ui/LoadingState';
 import { AdminMonitoringView } from '../components/monitoring/AdminMonitoringView';
 import { AquariumDetailsView } from '../components/monitoring/AquariumDetailsView';
 import { AutomationSettingsModal } from '../components/monitoring/AutomationSettingsModal';
 import { UserAquariumList } from '../components/monitoring/UserAquariumList';
 import { useMonitoringController } from '../hooks/useMonitoringController';
+import { useOrg } from '../hooks/useOrg';
 
 export default function Monitoring() {
   const monitoring = useMonitoringController();
+  const { isOwner } = useOrg();
   const { actions } = monitoring;
   const liveDataWarning = monitoring.liveDataError ? (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
@@ -66,7 +69,8 @@ export default function Monitoring() {
   }
 
   if (!monitoring.automationSettings || !monitoring.manualActions) {
-    return null;
+    // The selected tank is still resolving (never a blank page).
+    return <LoadingState label="Loading aquarium..." />;
   }
 
   return (
@@ -84,6 +88,7 @@ export default function Monitoring() {
         savingSystemKey={monitoring.savingSystemKey}
         systemError={monitoring.systemError}
         systemMode={monitoring.systemMode}
+        canManage={isOwner}
         onAutomationToggle={() => void actions.handleAutomationEnabledToggle()}
         onBack={actions.backToAquariums}
         onManualAction={(field) => void actions.handleManualAction(field)}

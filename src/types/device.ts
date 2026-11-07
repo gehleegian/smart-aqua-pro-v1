@@ -1,5 +1,15 @@
 import type { Aquarium, AutomationSettings, ManualSystemStatus } from './aquarium';
-import { normalizeDevicePowerStatus, getTelemetryFreshness, TELEMETRY_STALE_MS, TELEMETRY_EPOCH_FLOOR } from '../utils/monitoringAssessmentCore.ts';
+import {
+  COMMAND_ACK_TIMEOUT_MS,
+  evaluateTelemetryValidity,
+  getCommandStatus,
+  derivePowerStatus,
+  getTelemetryFreshness,
+  TELEMETRY_STALE_MS,
+  TELEMETRY_EPOCH_FLOOR,
+  type CommandStatus,
+  type TelemetryValidity,
+} from '../utils/monitoringAssessmentCore.ts';
 import type { SystemMode } from './monitoring';
 
 export type DeviceCommandType =
@@ -11,6 +21,8 @@ export type DeviceCommandType =
 export type DeviceCommandState = 'Active' | 'Inactive' | 'On' | 'Off';
 export type DevicePowerStatus = 'Online' | 'Offline' | 'Power Interruption' | 'Unknown';
 
+// RTDB devices/{aquariumId}/telemetry. Field status (current vs new) is
+// documented in docs/device-contract.md.
 export interface DeviceTelemetry {
   lightState?: 'On' | 'Off';
   temperatureC: number;
@@ -21,12 +33,21 @@ export interface DeviceTelemetry {
   tdsPercent?: number;
   tdsReadingValid?: boolean;
   turbidity?: number;
+  /** New (additive). */
+  turbidityReadingValid?: boolean;
+  /** Main (PR #8): categorical turbidity from a digital module (no numeric NTU invented). */
   turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
+  /** Allowed by rules; out of scope (no ammonia sensor). */
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
+  /** New (additive): mains adapter sensed on a GPIO. false while online = Power Interruption. */
+  mainsPresent?: boolean;
   ph?: number;
+  /** New (additive). */
+  phReadingValid?: boolean;
+  /** Epoch ms. New firmware writes the RTDB server timestamp; legacy firmware writes its own clock. */
   updatedAt: number;
   online: boolean;
 }
@@ -44,7 +65,10 @@ export interface DeviceTelemetryLogEntry {
   filterState?: 'Active' | 'Inactive';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
+  mainsPresent?: boolean;
   ph?: number;
+  phReadingValid?: boolean;
+  turbidityReadingValid?: boolean;
   online?: boolean;
   recordedAt: string;
   recordedAtEpoch: number;
@@ -74,10 +98,38 @@ export interface DeviceCommand {
   durationMs?: number;
 }
 
+// RTDB devices/{aquariumId}/commandAck/latest (new). Written only by the bound device.
+export interface DeviceCommandAck {
+  commandId: string;
+  status: 'done' | 'failed';
+  /** Epoch ms, RTDB server timestamp. */
+  executedAt: number;
+  error?: string;
+}
+
 export interface DeviceShadow {
   control: DeviceControlProfile | null;
   latestCommand: DeviceCommand | null;
+  /** Optional for callers that predate command acknowledgement. */
+  latestAck?: DeviceCommandAck | null;
   telemetry: DeviceTelemetry | null;
+}
+
+export type { CommandStatus, TelemetryValidity };
+export { COMMAND_ACK_TIMEOUT_MS };
+
+export function getDeviceCommandStatus(shadow: DeviceShadow | null | undefined, now = Date.now()): CommandStatus {
+  return getCommandStatus(shadow?.latestCommand, shadow?.latestAck, now);
+}
+
+export function getCommandStatusText(status: CommandStatus) {
+  switch (status) {
+    case 'pending': return 'Waiting for device';
+    case 'done': return 'Done';
+    case 'failed': return 'Failed';
+    case 'no_response': return 'No response';
+    default: return '';
+  }
 }
 
 export type DeviceTelemetryState = 'live' | 'offline' | 'unavailable';
@@ -208,36 +260,34 @@ export function getFreshTelemetrySnapshot(
     return null;
   }
 
+  const validity = evaluateTelemetryValidity(telemetry as unknown as Record<string, unknown>);
   const purityPercent = getTelemetryPurityPercent(telemetry);
-  const tdsPpm = getTelemetryTdsPpm(telemetry);
-  const waterPresent = telemetry.waterPresent !== false;
-  const hasFreshTemperatureTelemetry =
-    waterPresent && telemetry.temperatureReadingValid !== false;
-  const ph = typeof telemetry.ph === 'number' && Number.isFinite(telemetry.ph) && telemetry.ph >= 0 && telemetry.ph <= 14
-    ? telemetry.ph
+  const tdsValid = validity.tds.status === 'valid';
+  const tdsPercent = tdsValid && purityPercent !== null && purityPercent >= 0 && purityPercent <= 100
+    ? purityPercent
     : null;
-  const turbidity =
-    typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity) && telemetry.turbidity >= 0
-      ? telemetry.turbidity
-      : null;
-  const powerStatus = normalizeDevicePowerStatus(telemetry.powerStatus);
+  const waterPresent = telemetry.waterPresent !== false;
+  const phValid = validity.ph.status === 'valid';
+  const turbidityValid = validity.turbidity.status === 'valid';
+  const powerStatus = derivePowerStatus(telemetry as unknown as Record<string, unknown>);
 
   return {
     temperatureC: telemetry.temperatureC,
     waterLevelPercent: telemetry.waterLevelPercent,
     waterPresent,
-    hasFreshTemperatureTelemetry,
-    tdsPpm,
-    tdsPercent: purityPercent !== null && purityPercent >= 0 && purityPercent <= 100 ? purityPercent : null,
-    hasFreshPurityTelemetry: purityPercent !== null && purityPercent >= 0 && purityPercent <= 100,
-    ph,
-    hasFreshPhTelemetry: ph !== null,
-    turbidity,
+    hasFreshTemperatureTelemetry: validity.temperature.status === 'valid',
+    tdsPpm: tdsValid ? getTelemetryTdsPpm(telemetry) : null,
+    tdsPercent,
+    hasFreshPurityTelemetry: tdsPercent !== null,
+    ph: phValid ? telemetry.ph! : null,
+    hasFreshPhTelemetry: phValid,
+    turbidity: turbidityValid ? telemetry.turbidity! : null,
+    hasFreshTurbidityTelemetry: turbidityValid,
     turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy'
       ? telemetry.turbidityState : undefined,
-    hasFreshTurbidityTelemetry: turbidity !== null,
     powerStatus,
     hasFreshPowerTelemetry: Boolean(powerStatus),
+    validity,
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState

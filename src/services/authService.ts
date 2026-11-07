@@ -8,6 +8,8 @@ import {
   type User,
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { mfaFlows } from './mfaService';
+import { isMfaRequiredError } from '../utils/mfa';
 import { auth, db } from '../firebase';
 import type { UserData } from '../types/user';
 import { getAuthErrorCode } from '../utils/authErrors';
@@ -165,11 +167,50 @@ export async function registerUser(
   });
 }
 
+/** The password was right and the account has a second factor (TOTP): ask for the code. */
+export class MfaChallengeRequiredError extends Error {
+  readonly challenge: MfaChallenge;
+
+  constructor(challenge: MfaChallenge) {
+    super('Enter the code from your authenticator app.');
+    this.name = 'MfaChallengeRequiredError';
+    this.challenge = challenge;
+  }
+}
+
+type MfaChallenge = ReturnType<typeof mfaFlows.startChallenge>;
+
+async function profileOrSignOut(user: User): Promise<UserData> {
+  try {
+    const profile = await resolveSessionProfile(user);
+    resetAuthRateLimit('login');
+    return profile;
+  } catch (error) {
+    await signOutSafely();
+    throw error;
+  }
+}
+
+/** Second step of a TOTP sign-in (Sprint 5, docs/access-model.md MFA section). */
+export async function completeMfaLogin(challenge: MfaChallenge, code: string): Promise<UserData> {
+  registerAuthAttempt('login');
+  return runAuthFlow(async () => {
+    const credential = await mfaFlows.resolveChallenge(challenge, code);
+    return profileOrSignOut(credential.user);
+  });
+}
+
 export async function loginUser(email: string, password: string): Promise<UserData> {
   registerAuthAttempt('login');
 
   return runAuthFlow(async () => {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    let userCredential;
+    try {
+      userCredential = await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      if (isMfaRequiredError(error)) throw new MfaChallengeRequiredError(mfaFlows.startChallenge(error));
+      throw error;
+    }
 
     try {
       const profile = await resolveSessionProfile(userCredential.user);

@@ -6,14 +6,18 @@ import AuthShell, {
   authLinkClassName,
   authSubmitClassName,
 } from '../components/auth/AuthShell';
+import TotpCodeForm from '../components/auth/TotpCodeForm';
 import {
+  completeMfaLogin,
   EmailVerificationRequiredError,
+  MfaChallengeRequiredError,
   loginUser,
   requestPasswordReset,
   resendVerificationEmail,
 } from '../services/authService';
 import type { UserData } from '../types/user';
 import { getAuthErrorMessage } from '../utils/authErrors';
+import { MfaFlowError } from '../utils/mfa';
 import { formatAuthRateLimitDuration, getAuthRateLimitStatus } from '../utils/authRateLimit';
 
 const RESEND_COOLDOWN_MS = 60_000;
@@ -42,6 +46,7 @@ export default function Login({
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const [sendingReset, setSendingReset] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallengeRequiredError['challenge'] | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -79,7 +84,11 @@ export default function Login({
 
       onLogin(await loginUser(email, password));
     } catch (err: unknown) {
-      if (err instanceof EmailVerificationRequiredError) {
+      if (err instanceof MfaChallengeRequiredError) {
+        setMfaChallenge(err.challenge);
+      } else if (err instanceof MfaFlowError) {
+        setError(err.message);
+      } else if (err instanceof EmailVerificationRequiredError) {
         setNeedsVerification(true);
       } else {
         console.error('Login failed:', err);
@@ -142,6 +151,22 @@ export default function Login({
 
   const signInDisabled = loading || rateLimitStatus.blocked;
 
+  const handleMfaCode = async (code: string) => {
+    if (!mfaChallenge) return;
+    try {
+      setLoading(true);
+      setError('');
+      onLogin(await completeMfaLogin(mfaChallenge, code));
+    } catch (err: unknown) {
+      setError(err instanceof MfaFlowError ? err.message : getAuthErrorMessage(err, 'Login failed.'));
+      if (err instanceof MfaFlowError && (err.code === 'auth/totp-challenge-timeout' || err.code === 'auth/code-expired')) {
+        setMfaChallenge(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthShell onBack={onGoBack}>
           <div className="mb-6">
@@ -192,6 +217,24 @@ export default function Login({
             )}
           </div>
 
+          {mfaChallenge ? (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-white">Two-step verification</h2>
+              <TotpCodeForm
+                submitLabel={loading ? 'Checking...' : 'Verify and sign in'}
+                busy={loading}
+                onSubmit={(code) => void handleMfaCode(code)}
+                inputClassName={`${authInputClassName} font-mono text-lg tracking-widest`}
+                buttonClassName={authSubmitClassName}
+              />
+              <p className="text-xs text-slate-400">
+                Lost your phone? An administrator can remove your second factor after confirming who you are (see Settings → Two-step verification for recovery steps).
+              </p>
+              <button type="button" className={`${authLinkClassName} text-sm`} onClick={() => { setMfaChallenge(null); setError(''); }}>
+                Use a different account
+              </button>
+            </div>
+          ) : (
           <form
             noValidate
             onSubmit={(event) => {
@@ -268,6 +311,7 @@ export default function Login({
                   : 'Sign in'}
             </button>
           </form>
+          )}
 
           <p className="mt-6 text-center text-sm text-slate-300">
             Don&apos;t have an account?{' '}

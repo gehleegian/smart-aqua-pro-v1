@@ -1,8 +1,9 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectDatabaseEmulator, getDatabase } from 'firebase/database';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
+import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -23,8 +24,10 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const appCheckSiteKey = process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY;
 
+const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
+
 export const appCheck: AppCheck | null =
-  typeof window !== 'undefined' && appCheckSiteKey
+  typeof window !== 'undefined' && appCheckSiteKey && !useEmulators
     ? initializeAppCheck(app, {
         provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true,
@@ -34,7 +37,22 @@ export const appCheck: AppCheck | null =
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
+// Report PDFs and CSVs (Sprint 5); read access is decided by storage.rules.
+export const storage = getStorage(app);
 export const functions = getFunctions(
   app,
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1'
 );
+
+// Local development only: NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true points the
+// app at the Emulator Suite (ports from firebase.json). Never set it in a
+// deployed build.
+const emulatorFlag = '__smartAquaEmulatorsConnected';
+if (useEmulators && typeof window !== 'undefined' && !(globalThis as Record<string, unknown>)[emulatorFlag]) {
+  (globalThis as Record<string, unknown>)[emulatorFlag] = true;
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
+}

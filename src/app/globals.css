@@ -6,7 +6,8 @@
   --color-slate-200: #bfe4df;
   --color-slate-300: #93cbc4;
   --color-slate-400: #66aea9;
-  --color-slate-500: #3f9290;
+  /* Sprint 5 a11y: #3f9290 was 3.8:1 on cards; this is 4.9:1 (WCAG AA). */
+  --color-slate-500: #52a6a3;
   --color-slate-600: #2b7478;
   --color-slate-700: #205963;
   --color-slate-800: #173f4b;
@@ -193,4 +194,20 @@ body {
 .app-aquarium-motion {
   animation: aquariumHeroDrift 28s ease-in-out infinite;
   filter: saturate(1.08);
+}
+
+/* Sprint 5 a11y: skip link, visible only when focused. */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  border-radius: 0.5rem;
+  background: #0f766e;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 1rem;
 }

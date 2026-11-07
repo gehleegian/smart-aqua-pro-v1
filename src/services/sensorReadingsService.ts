@@ -133,6 +133,9 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
         : undefined,
     powerStatus: normalizeDevicePowerStatus(reading.powerStatus),
     ph: readNumber(reading.ph),
+    phReadingValid: typeof reading.phReadingValid === 'boolean' ? reading.phReadingValid : undefined,
+    turbidityReadingValid:
+      typeof reading.turbidityReadingValid === 'boolean' ? reading.turbidityReadingValid : undefined,
     online: readBoolean(reading.online, true),
     recordedAt: readRecordedAtLabel(reading.recordedAt, recordedAtEpoch),
     recordedAtEpoch,

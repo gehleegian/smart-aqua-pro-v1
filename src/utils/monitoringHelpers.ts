@@ -1,3 +1,4 @@
+import { validateSchedule } from './schedule';
 import type {
   Aquarium,
   AutomationSettings,
@@ -5,7 +6,6 @@ import type {
 } from '../types/aquarium';
 import { getDeviceTelemetryStatusText } from '../types/device';
 import type {
-  HealthStatus,
   ManualActionDisplay,
   ManualActionLock,
   MonitoringAquarium,
@@ -14,7 +14,7 @@ import type {
   SystemField,
 } from '../types/monitoring';
 import type { UserData, UserRole } from '../types/user';
-import { assessAquariumCondition } from './monitoringAssessment';
+import { assessAquarium } from './conditionAssessment';
 
 export const systemStatusConfig: Record<
   SystemField,
@@ -43,60 +43,11 @@ export const defaultAutomationSettings: AutomationSettings = {
   filtrationRuntimeHours: 8,
 };
 
-export function getHealthStatus(
-  level: number,
-  quality: number,
-  minLevel = 75,
-  minQuality = 80,
-  hasPurityReading = true,
-  tdsPpm?: number | null
-): HealthStatus {
-  const purityIsHealthy =
-    typeof tdsPpm === 'number' ? tdsPpm <= 500 : quality >= minQuality;
-
-  if (!hasPurityReading || level < minLevel || !purityIsHealthy) {
-    return 'warning';
-  }
-
-  return 'healthy';
-}
-
-export function getQualityLabel(quality: number, tdsPpm?: number | null) {
-  if (typeof tdsPpm === 'number') {
-    if (tdsPpm <= 300) return 'Healthy';
-    if (tdsPpm <= 500) return 'Moderate';
-    return 'Poor';
-  }
-
-  if (quality >= 85) return 'Healthy';
-  if (quality >= 65) return 'Moderate';
-  return 'Poor';
-}
-
-export function getLevelLabel(level: number) {
-  if (level >= 90) return 'High';
-  if (level >= 75) return 'Normal';
-  if (level >= 60) return 'Low';
-  return 'Critical';
-}
-
-export function getTemperatureLabel(temp: number, minTemp: number, maxTemp: number) {
-  if (temp < minTemp || temp > maxTemp) {
-    return 'Out of Range';
-  }
-
-  return 'Normal';
-}
-
 export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
     healthStatus: 'warning',
-    assessment: assessAquariumCondition({
-      profile: aquarium,
-      telemetry: null,
-      source: 'unavailable',
-    }),
+    assessment: assessAquarium({ aquarium: {}, reading: null, source: 'unavailable', now: Date.now(), ruleConfig: null }),
     telemetrySource: 'unavailable',
     hasFreshTelemetry: false,
     hasFreshTemperatureTelemetry: false,
@@ -105,6 +56,8 @@ export function mapMonitoringAquariums(aquariums: Aquarium[]): MonitoringAquariu
     hasFreshTurbidityTelemetry: false,
     hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
+    sensorValidity: null,
+    commandStatus: 'none',
   }));
 }
 
@@ -115,6 +68,24 @@ export function getAutomationSettings(
     ...defaultAutomationSettings,
     ...(aquarium?.automationSettings || {}),
   };
+}
+
+/** True when the owner has saved a schedule for this tank (Sprint 5: no implied default schedule). */
+export function hasSavedSchedule(aquarium: Pick<Aquarium, 'automationSettings'> | null) {
+  return Boolean(aquarium?.automationSettings);
+}
+
+/**
+ * The schedule sent to the device's control profile. A tank with no saved
+ * schedule sends automation OFF: the RTDB rules need well-formed times, so
+ * the default times go along, but the device must not run them.
+ */
+export function deviceProfileSettings(
+  aquarium: Pick<Aquarium, 'automationSettings'>,
+  nextSettings?: AutomationSettings
+): AutomationSettings {
+  if (nextSettings) return nextSettings;
+  return hasSavedSchedule(aquarium) ? getAutomationSettings(aquarium) : { ...defaultAutomationSettings, enabled: false };
 }
 
 export function getManualSystemStatus(
@@ -246,8 +217,8 @@ export function buildMonitoringOwners(
 export function getInitials(name: string) {
   return (
     name
-      .split(' ')
-      .map((part) => part[0])
+      .split(/\s+/)
+      .map((part) => part.replace(/[^\p{L}\p{N}]/gu, '')[0] ?? '')
       .join('')
       .slice(0, 2)
       .toUpperCase() || 'U'
@@ -385,10 +356,16 @@ export function prepareAutomationSettings(draft: AutomationSettings):
     return { settings: null, error: 'Light On and Light Off must be different times.' };
   }
 
+  // Sprint 4 (FR18): HH:mm, feeding times at least 30 min apart, light pair.
+  const problems = validateSchedule({ ...draft, feedingTimes, filtrationRuntimeHours: runtimeHours });
+  if (problems.length > 0) {
+    return { settings: null, error: problems.join(' ') };
+  }
+
   return {
     settings: {
       ...draft,
-      feedingTimes,
+      feedingTimes: [...feedingTimes].sort(),
       filtrationRuntimeHours: runtimeHours,
     },
     error: '',

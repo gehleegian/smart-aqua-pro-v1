@@ -1,3 +1,4 @@
+# SUPERSEDED (Sprint 3): docs/rule-matrix.md is the threshold sign-off document for the adviser. Kept for history; do not edit.
 rule_id,parameter_or_event,unit_or_state,validity_expression,normal_expression,warning_expression,critical_expression,persistence_policy,context_conditions,recommendation_rule_ids,status,approved_by,approval_date,approval_reference
 THR-TEMP-001,water_temperature,degC,TBD,TBD,TBD,TBD,TBD,Small freshwater aquarium and Goldfish,TBD,APPROVAL_REQUIRED,,,,
 THR-PH-001,ph,pH,TBD,TBD,TBD,TBD,TBD,Small freshwater aquarium and Goldfish,TBD,APPROVAL_REQUIRED,,,,

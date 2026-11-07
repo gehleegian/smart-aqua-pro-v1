@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Sprint 5 (FR21): report files at reports/{orgId}/{aquariumId}/{reportId}.{pdf,csv}.
+// Same access as the tank (docs/access-model.md): an owner of the tank's org,
+// a caretaker assigned to the tank, or a platform admin (read-only). Only Cloud
+// Functions (Admin SDK) write here; every other path is closed.
+//
+// Cloud Storage rules may read at most two distinct Firestore documents per
+// request, so this uses exactly two: the aquarium and the caller's member doc.
+// Organization suspension reaches the member doc as `orgStatus`, written by the
+// setOrganizationStatus callable (members are server-written only).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedInPerson() {
+      return request.auth != null
+        && request.auth.token.get('principalType', '') != 'device'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isPlatformAdmin() {
+      return signedInPerson() && request.auth.token.get('platformAdmin', false) == true;
+    }
+
+    function canReadTank(orgId, aquariumId) {
+      let aquarium = firestore.get(/databases/(default)/documents/aquariums/$(aquariumId));
+      let member = firestore.get(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      return signedInPerson()
+        && aquarium != null
+        && aquarium.data.get('orgId', null) == orgId
+        && member != null
+        && member.data.get('orgStatus', 'active') == 'active'
+        && (member.data.role == 'owner'
+          || (member.data.role == 'caretaker' && request.auth.uid in aquarium.data.get('caretakerIds', [])));
+    }
+
+    match /reports/{orgId}/{aquariumId}/{fileName} {
+      allow read: if isPlatformAdmin() || canReadTank(orgId, aquariumId);
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

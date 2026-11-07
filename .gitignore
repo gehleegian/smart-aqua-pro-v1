@@ -13,6 +13,7 @@ functions/lib
 dist
 dist-ssr
 .next
+.next-demo
 next-env.d.ts
 *.tsbuildinfo
 *.local
@@ -46,3 +47,17 @@ functions/%LOCALAPPDATA%/
 **/*.map
 tmp-docx-schema/
 tmp-manuscript-analysis/
+
+# Sprint 3: device credentials, claim labels, claim-code pepper (never commit)
+firmware/secrets/
+provisioning-output/
+functions/.secret.local
+functions/.env*
+.secret.local
+
+# Sprint 4: demo/Playwright output (docs/screens keeps only the curated set)
+test-results/
+playwright-report/
+docs/screens/*
+!docs/screens/README.md
+!docs/screens/doc-*.png

@@ -7,12 +7,8 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
-import type { Aquarium } from '../types/aquarium';
-import {
-  getDeviceTelemetryState,
-  getFreshTelemetrySnapshot,
-  type DeviceShadow,
-} from '../types/device';
+import type { DashboardAquarium } from '../types/dashboard';
+import type { MonitoringParameter } from './monitoringAssessmentCore';
 import type {
   AlertCandidate,
   AlertCategory,
@@ -119,170 +115,53 @@ export function formatRelativeTime(epochMillis: number) {
   }`;
 }
 
-function buildTemperatureAlerts(aquarium: Aquarium): AlertCandidate[] {
-  const alerts: AlertCandidate[] = [];
+const parameterCategory: Record<MonitoringParameter, AlertCategory> = {
+  temperature: 'temperature',
+  ph: 'ph',
+  turbidity: 'turbidity',
+  tds: 'tds',
+  waterLevel: 'water_level',
+  filtration: 'filter_state',
+  equipment: 'equipment_status',
+  power: 'power_status',
+};
 
-  if (aquarium.temp < aquarium.minTemp) {
-    alerts.push({
-      fingerprint: `${aquarium.id}:temperature:low`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: 'warning',
-      category: 'temperature',
-      message: `Temperature below safe range (${aquarium.temp.toFixed(1)}\u00B0C, minimum ${aquarium.minTemp}\u00B0C).`,
-    });
-  }
+// Alerts are derived only from the shared assessment (monitoringAssessmentCore).
+// This file defines no thresholds of its own. Parameters assessed as
+// "unavailable" (missing, invalid, default, or sensor-fault values) never raise
+// a water-condition alert.
+export function buildAlertCandidates(aquariums: DashboardAquarium[]): AlertCandidate[] {
+  return aquariums.flatMap((aquarium) => {
+    const candidates: AlertCandidate[] = [];
 
-  if (aquarium.temp > aquarium.maxTemp) {
-    alerts.push({
-      fingerprint: `${aquarium.id}:temperature:high`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: 'warning',
-      category: 'temperature',
-      message: `Temperature above safe range (${aquarium.temp.toFixed(1)}\u00B0C, maximum ${aquarium.maxTemp}\u00B0C).`,
-    });
-  }
-
-  return alerts;
-}
-
-function buildLevelAlert(aquarium: Aquarium): AlertCandidate[] {
-  if (aquarium.level >= aquarium.minLevel) {
-    return [];
-  }
-
-  const severity: AlertSeverity =
-    aquarium.level <= Math.max(aquarium.minLevel - 10, 0) ? 'critical' : 'warning';
-
-  return [
-    {
-      fingerprint: `${aquarium.id}:water_level:low`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: severity,
-      category: 'water_level',
-      message: `Water level below minimum (${Math.round(aquarium.level)}%, threshold ${aquarium.minLevel}%).`,
-    },
-  ];
-}
-
-function buildQualityAlert(aquarium: Aquarium): AlertCandidate[] {
-  const hasPpm = typeof aquarium.tdsPpm === 'number' && Number.isFinite(aquarium.tdsPpm);
-  const isInRange = hasPpm ? aquarium.tdsPpm! <= 500 : aquarium.quality >= aquarium.minQuality;
-
-  if (isInRange) {
-    return [];
-  }
-
-  const severity: AlertSeverity =
-    hasPpm
-      ? aquarium.tdsPpm! > 700
-        ? 'critical'
-        : 'warning'
-      : aquarium.quality <= Math.max(aquarium.minQuality - 10, 0)
-        ? 'critical'
-        : 'warning';
-
-  return [
-    {
-      fingerprint: `${aquarium.id}:water_quality:low`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: severity,
-      category: 'water_quality',
-      message: hasPpm
-        ? `Estimated TDS is high at ${Math.round(aquarium.tdsPpm!)} ppm.`
-        : `TDS level below minimum purity threshold (${Math.round(aquarium.quality)}%, threshold ${aquarium.minQuality}%).`,
-    },
-  ];
-}
-
-function buildSystemAlerts(aquarium: Aquarium, shadow?: DeviceShadow): AlertCandidate[] {
-  const alerts: AlertCandidate[] = [];
-  const telemetry = shadow?.telemetry;
-  const telemetryState = getDeviceTelemetryState(telemetry);
-
-  if (telemetryState === 'offline') {
-    alerts.push({
-      fingerprint: `${aquarium.id}:system:offline`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: 'critical',
-      category: 'system',
-      message: 'Device is offline and not reporting live telemetry.',
-    });
-  }
-
-  if (telemetryState === 'unavailable') {
-    alerts.push({
-      fingerprint: `${aquarium.id}:system:no_live_data`,
-      aquariumId: aquarium.id,
-      tankName: aquarium.name,
-      ownerName: aquarium.ownerName,
-      type: 'warning',
-      category: 'system',
-      message: 'No live data is available from this device yet.',
-    });
-  }
-
-  return alerts;
-}
-
-export function mergeLiveAquariums(
-  aquariums: Aquarium[],
-  deviceShadows: Record<string, DeviceShadow>,
-  now = Date.now()
-) {
-  return aquariums.map((aquarium) => {
-    const snapshot = getFreshTelemetrySnapshot(deviceShadows[aquarium.id]?.telemetry, now);
-
-    if (!snapshot) {
-      return aquarium;
+    if (aquarium.telemetrySource === 'live') {
+      for (const parameter of aquarium.assessment.parameters) {
+        if (parameter.severity !== 'warning' && parameter.severity !== 'critical') continue;
+        candidates.push({
+          fingerprint: `${aquarium.id}:${parameter.parameter}:${parameter.severity}`,
+          aquariumId: aquarium.id,
+          tankName: aquarium.name,
+          ownerName: aquarium.ownerName,
+          type: parameter.severity,
+          category: parameterCategory[parameter.parameter],
+          message: parameter.message,
+        });
+      }
     }
 
-    return {
-      ...aquarium,
-      temp: snapshot.temperatureC,
-      level: snapshot.waterLevelPercent,
-      tdsPpm: snapshot.tdsPpm ?? aquarium.tdsPpm,
-      quality: snapshot.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
-      filter: snapshot.filterState ?? aquarium.filter,
-    };
-  });
-}
+    if (aquarium.telemetryState === 'offline') {
+      candidates.push({
+        fingerprint: `${aquarium.id}:system:offline`,
+        aquariumId: aquarium.id,
+        tankName: aquarium.name,
+        ownerName: aquarium.ownerName,
+        type: 'warning',
+        category: 'system',
+        message: 'Device is not reporting live telemetry.',
+      });
+    }
 
-export function buildAlertCandidates(
-  aquariums: Aquarium[],
-  deviceShadows: Record<string, DeviceShadow>,
-  now = Date.now()
-) {
-  return aquariums.flatMap((aquarium) => {
-    const shadow = deviceShadows[aquarium.id];
-    const snapshot = getFreshTelemetrySnapshot(shadow?.telemetry, now);
-    const sensorAquarium = snapshot
-      ? {
-          ...aquarium,
-          temp: snapshot.temperatureC,
-          level: snapshot.waterLevelPercent,
-          tdsPpm: snapshot.tdsPpm ?? aquarium.tdsPpm,
-          quality: snapshot.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
-        }
-      : null;
-
-    return [
-      ...(sensorAquarium ? buildTemperatureAlerts(sensorAquarium) : []),
-      ...(sensorAquarium ? buildLevelAlert(sensorAquarium) : []),
-      ...(sensorAquarium && snapshot?.hasFreshPurityTelemetry
-        ? buildQualityAlert(sensorAquarium)
-        : []),
-      ...buildSystemAlerts(aquarium, shadow),
-    ];
+    return candidates;
   });
 }
 
@@ -439,13 +318,21 @@ export function buildDistribution(alerts: AquariumAlert[]) {
   const categories: { label: string; key: AlertCategory; color: string }[] = [
     { label: 'Temperature', key: 'temperature', color: 'bg-orange-500' },
     { label: 'Water Level', key: 'water_level', color: 'bg-blue-500' },
-    { label: 'Water Purity (TDS)', key: 'water_quality', color: 'bg-emerald-500' },
+    { label: 'pH', key: 'ph', color: 'bg-violet-500' },
+    { label: 'TDS', key: 'tds', color: 'bg-emerald-500' },
+    { label: 'Turbidity', key: 'turbidity', color: 'bg-teal-500' },
+    { label: 'Equipment & Power', key: 'equipment_status', color: 'bg-rose-500' },
     { label: 'System', key: 'system', color: 'bg-yellow-500' },
   ];
 
+  const grouped: Partial<Record<AlertCategory, AlertCategory>> = {
+    power_status: 'equipment_status',
+    filter_state: 'equipment_status',
+  };
+
   return categories.map((category) => ({
     ...category,
-    count: alerts.filter((alert) => alert.category === category.key).length,
+    count: alerts.filter((alert) => (grouped[alert.category] ?? alert.category) === category.key).length,
   }));
 }
 

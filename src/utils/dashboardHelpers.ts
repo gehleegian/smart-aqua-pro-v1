@@ -19,8 +19,10 @@ import {
   getDeviceTelemetryUpdatedAt,
   getFreshTelemetrySnapshot,
   getDeviceTelemetryState,
+  getDeviceCommandStatus,
   type DeviceShadow,
 } from '../types/device';
+import { getSensorDisplay } from './sensorDisplay';
 import type {
   DashboardAquarium,
   DashboardData,
@@ -28,10 +30,8 @@ import type {
   DashboardTankStat,
   OwnerGroup,
 } from '../types/dashboard';
-import {
-  assessAquariumCondition,
-  type AssessmentTelemetry,
-} from './monitoringAssessment';
+import { assessAquarium, getCustomThresholdKeys, getEffectiveThresholds } from './conditionAssessment';
+import type { AquariumEngineState, RuleConfigSnapshot } from '../services/ruleConfigService';
 
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -41,15 +41,21 @@ export function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+export type FreshTelemetrySnapshot = NonNullable<ReturnType<typeof getFreshTelemetrySnapshot>>;
+
+const UNASSESSED = (now = Date.now()) => assessAquarium({
+  aquarium: {},
+  reading: null,
+  source: 'unavailable',
+  now,
+  ruleConfig: null,
+});
+
 export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[] {
   return aquariums.map((aquarium) => ({
     ...aquarium,
     status: 'warning',
-    assessment: assessAquariumCondition({
-      profile: aquarium,
-      telemetry: null,
-      source: 'unavailable',
-    }),
+    assessment: UNASSESSED(),
     telemetrySource: 'unavailable',
     fishCount: aquarium.fishCount ?? 0,
     hasFreshTelemetry: false,
@@ -60,13 +66,19 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     hasFreshPowerTelemetry: false,
     telemetryState: 'unavailable',
     lastUpdatedAt: null,
+    sensorValidity: null,
+    commandStatus: 'none',
+    thresholds: null,
+    engineState: null,
   }));
 }
 
 export function mergeDashboardAquariums(
   aquariums: DashboardAquarium[],
   deviceShadows: Record<string, DeviceShadow>,
-  now = Date.now()
+  now = Date.now(),
+  ruleConfig: RuleConfigSnapshot | null = null,
+  engineStates: Record<string, AquariumEngineState> = {}
 ): DashboardAquarium[] {
   return aquariums.map((aquarium) => {
     const telemetry = deviceShadows[aquarium.id]?.telemetry;
@@ -77,7 +89,8 @@ export function mergeDashboardAquariums(
       ...aquarium,
       temp: snapshot ? snapshot.temperatureC : aquarium.temp,
       level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
-      tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+      // TDS ppm stands on its own: firmware may send tdsPpm without the legacy purity %.
+      tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
       ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
       turbidity: snapshot?.hasFreshTurbidityTelemetry
         ? snapshot.turbidity ?? aquarium.turbidity
@@ -91,29 +104,13 @@ export function mergeDashboardAquariums(
         ? { ...aquarium.manualStatus, filter: snapshot.filterState }
         : aquarium.manualStatus,
     };
-    const assessmentTelemetry: AssessmentTelemetry | null = snapshot
-      ? {
-          temperatureC: snapshot.temperatureC,
-          temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-          waterLevelPercent: snapshot.waterLevelPercent,
-          waterLevelValid: true,
-          tdsPpm: snapshot.tdsPpm,
-          tdsPurityPercent: snapshot.tdsPercent,
-          tdsValid: snapshot.hasFreshPurityTelemetry,
-          ph: snapshot.ph,
-          phValid: snapshot.hasFreshPhTelemetry,
-          turbidity: snapshot.turbidity,
-          turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-          filterState: snapshot.filterState,
-          equipmentStatus: snapshot.equipmentStatus,
-          powerStatus: snapshot.powerStatus,
-        }
-      : null;
-    const assessment = assessAquariumCondition({
-      profile: nextAquarium,
-      telemetry: assessmentTelemetry,
+    const assessment = assessAquarium({
+      aquarium: nextAquarium as unknown as Record<string, unknown>,
+      reading: snapshot && telemetry ? telemetry as unknown as Record<string, unknown> : null,
       source: snapshot ? 'live' : 'unavailable',
-      assessedAt: now,
+      now,
+      ruleConfig,
+      engineState: engineStates[aquarium.id] ?? null,
     });
 
     return {
@@ -130,6 +127,15 @@ export function mergeDashboardAquariums(
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       telemetryState,
       lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
+      sensorValidity: snapshot?.validity ?? null,
+      commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], now),
+      thresholds: getEffectiveThresholds(nextAquarium as unknown as Record<string, unknown>, ruleConfig),
+      customThresholds: getCustomThresholdKeys(
+        getEffectiveThresholds(nextAquarium as unknown as Record<string, unknown>, ruleConfig),
+        nextAquarium as unknown as Record<string, unknown>,
+        ruleConfig
+      ),
+      engineState: engineStates[aquarium.id] ?? null,
     };
   });
 }
@@ -229,53 +235,56 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
   const trend = (parameter: string): DashboardTankStat['trend'] =>
     condition(parameter)?.severity === 'normal' ? 'good' : 'warning';
 
+  const live = tank.hasFreshTelemetry;
+  const temperature = getSensorDisplay(tank.sensorValidity, 'temperature', live, () => `${tank.temp.toFixed(1)}\u00B0C`);
+  const waterLevel = getSensorDisplay(tank.sensorValidity, 'waterLevel', live, () => formatWaterLevel(tank.level));
+  const tds = getSensorDisplay(tank.sensorValidity, 'tds', live, () =>
+    typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm` : `${tank.quality}%`);
+  const ph = getSensorDisplay(tank.sensorValidity, 'ph', live, () =>
+    typeof tank.ph === 'number' ? tank.ph.toFixed(1) : '--');
+  const turbidity = getSensorDisplay(tank.sensorValidity, 'turbidity', live, () =>
+    typeof tank.turbidity === 'number' ? `${tank.turbidity.toFixed(0)} NTU` : '--');
+  const changeFor = (display: { isError: boolean; status: string }, parameter: string, fallback: string) =>
+    display.isError ? display.status : condition(parameter)?.message || fallback;
+
   return [
     {
       title: 'Temperature',
-      value: tank.hasFreshTemperatureTelemetry ? `${tank.temp.toFixed(1)}\u00B0C` : '--',
+      value: temperature.value,
       icon: Thermometer,
-      change:
-        condition('temperature')?.message || 'Assessment unavailable',
+      change: changeFor(temperature, 'temperature', 'Assessment unavailable'),
       trend: trend('temperature'),
       sparkline: [],
     },
     {
       title: 'Water Level',
-      value: formatWaterLevel(tank.level, tank.hasFreshTelemetry),
+      value: waterLevel.value,
       icon: Droplets,
-      change: condition('waterLevel')?.message || 'Assessment unavailable',
+      change: changeFor(waterLevel, 'waterLevel', 'Assessment unavailable'),
       trend: trend('waterLevel'),
       sparkline: [],
     },
     {
       title: 'Water Purity (TDS)',
-      value: tank.hasFreshPurityTelemetry
-        ? typeof tank.tdsPpm === 'number'
-          ? `${Math.round(tank.tdsPpm)} ppm`
-          : `${tank.quality}%`
-        : '--',
+      value: tds.value,
       icon: Waves,
-      change: condition('tds')?.message || 'Sensor unavailable',
+      change: changeFor(tds, 'tds', 'Sensor unavailable'),
       trend: trend('tds'),
       sparkline: [],
     },
     {
       title: 'pH Level',
-      value: tank.hasFreshPhTelemetry && typeof tank.ph === 'number'
-        ? tank.ph.toFixed(1)
-        : '--',
+      value: ph.value,
       icon: Activity,
-      change: condition('ph')?.message || 'Waiting for telemetry',
+      change: changeFor(ph, 'ph', 'Waiting for telemetry'),
       trend: trend('ph'),
       sparkline: [],
     },
     {
       title: 'Turbidity',
-      value: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
-        ? `${tank.turbidity.toFixed(0)} NTU`
-        : '--',
+      value: turbidity.value,
       icon: Gauge,
-      change: condition('turbidity')?.message || 'Waiting for telemetry',
+      change: changeFor(turbidity, 'turbidity', 'Waiting for telemetry'),
       trend: trend('turbidity'),
       sparkline: [],
     },
@@ -404,7 +413,7 @@ export function buildUserAlerts(aquariums: DashboardAquarium[]) {
     (tank) =>
       tank.hasFreshTelemetry
         ? `${tank.name} needs attention based on current monitoring values.`
-        : `${tank.name} is ${getDeviceTelemetryStatusText(tank.telemetryState).toLowerCase()}.`
+        : `${tank.name}: ${tank.telemetryState === 'offline' ? 'device offline' : 'no live data yet'}.`
   );
 }
 

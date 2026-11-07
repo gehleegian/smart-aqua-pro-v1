@@ -1,4 +1,6 @@
-import { Plus } from 'lucide-react';
+import { PlusCircle, Wrench } from 'lucide-react';
+import Button from '../components/ui/Button';
+import { setSetupTarget } from '../services/orgContext';
 import { Card, CardContent } from '../components/ui/Card';
 import { AquariumCard } from '../components/aquariums/AquariumCard';
 import { AquariumFormModal } from '../components/aquariums/AquariumFormModal';
@@ -9,8 +11,9 @@ import {
   getAquariumsEmptyMessage,
 } from '../utils/aquariumManagementHelpers';
 
-export default function Aquariums() {
+export default function Aquariums({ onNavigate }: { onNavigate: (page: string) => void }) {
   const aquariums = useAquariumsController();
+  const pendingSetup = aquariums.visibleAquariums.filter((aquarium) => aquarium.setupStatus === 'setup');
 
   return (
     <div className="space-y-6">
@@ -38,15 +41,26 @@ export default function Aquariums() {
         </div>
 
         {aquariums.currentUserRole === 'User' ? (
-          <button
-            onClick={aquariums.actions.openAddModal}
-            className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-950/20 transition-all hover:bg-teal-500"
-          >
-            <Plus className="h-4 w-4" />
-            Add Aquarium
-          </button>
+          // Sprint 3: an aquarium is created by claiming its device.
+          <Button onClick={() => onNavigate('add-device')}>
+            <PlusCircle className="h-4 w-4" aria-hidden="true" />
+            Add device
+          </Button>
         ) : null}
       </div>
+
+      {pendingSetup.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-500/10 p-4">
+          <p className="text-sm font-medium text-amber-200">Finish setting up {pendingSetup.length === 1 ? 'this aquarium' : 'these aquariums'}:</p>
+          <div className="flex flex-wrap gap-2">
+            {pendingSetup.map((aquarium) => (
+              <Button key={aquarium.id} size="sm" variant="secondary" onClick={() => { setSetupTarget(aquarium.id); onNavigate('setup'); }}>
+                <Wrench className="h-3.5 w-3.5" aria-hidden="true" /> {aquarium.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {aquariums.currentUserRole === 'Admin' && (
         <AquariumOwnerSelector

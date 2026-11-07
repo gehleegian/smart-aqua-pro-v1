@@ -56,6 +56,10 @@ export function AutomationSettingsModal({
 
         <div className="space-y-4 px-6 py-5">
           {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+          <p className="text-xs text-slate-400">
+            All times are Asia/Manila (UTC+8), 24-hour. Feeding times must be at least 30 minutes apart; the filter runs 1–24 hours from its start.
+            The device keeps running this schedule on its own clock if Wi-Fi drops.
+          </p>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

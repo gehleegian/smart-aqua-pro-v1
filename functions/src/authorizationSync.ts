@@ -7,7 +7,7 @@ import type {
 } from 'firebase-admin/firestore';
 
 export type UserRole = 'User' | 'Admin';
-export type AquariumAuthorizationState = 'active' | 'revoked' | 'transitioning';
+export type AquariumAuthorizationState = 'active' | 'revoked' | 'suspended' | 'transitioning';
 
 export type SyncOperation = {
   kind: 'user' | 'aquarium';
@@ -51,10 +51,21 @@ type AquariumSource = {
   ownerRole: UserRole | null;
   authorizationBlocked: boolean;
   sourceUpdatedAt: string | null;
+  /** Sprint 3 access model. null for a legacy (pre-migration) aquarium. */
+  orgId: string | null;
+  /** false when the org document is missing or not `active`. */
+  orgActive: boolean;
+  /** caretakerIds that are still caretaker members of the org, sorted. */
+  caretakerUids: string[];
+  /** Sprint 4 co-owners: the org's other `owner` members (not ownerUid), sorted. */
+  coOwnerUids: string[];
 };
 
 type AquariumMirror = {
   ownerUid?: string;
+  orgId?: string;
+  caretakerUids?: Record<string, boolean>;
+  coOwnerUids?: Record<string, boolean>;
   state?: AquariumAuthorizationState;
   deviceUids?: Record<string, boolean>;
   activeMutationId?: string;
@@ -93,13 +104,20 @@ function sameUserSource(left: UserSource, right: UserSource) {
   );
 }
 
+// Compares only what the mirror grants. Not updateTime: the ingest pipeline
+// rewrites the aquarium doc (condition, cleaning) as often as every reading, and
+// a write that changes no access field must not push a sync into
+// 'transitioning' (found by the Sprint 4 demo seed).
 function sameAquariumSource(left: AquariumSource, right: AquariumSource) {
   return (
     left.exists === right.exists &&
     left.ownerUid === right.ownerUid &&
     left.ownerRole === right.ownerRole &&
     left.authorizationBlocked === right.authorizationBlocked &&
-    left.sourceUpdatedAt === right.sourceUpdatedAt
+    left.orgId === right.orgId &&
+    left.orgActive === right.orgActive &&
+    left.caretakerUids.join(',') === right.caretakerUids.join(',') &&
+    left.coOwnerUids.join(',') === right.coOwnerUids.join(',')
   );
 }
 
@@ -168,10 +186,16 @@ async function readAquariumSource(
         authorizedMutationId
       ),
       sourceUpdatedAt: null,
+      orgId: null,
+      orgActive: false,
+      caretakerUids: [],
+      coOwnerUids: [],
     };
   }
 
   const ownerUid = readNonEmptyString(aquariumSnapshot.get('ownerId'));
+  const orgId = readNonEmptyString(aquariumSnapshot.get('orgId'));
+  const org = orgId ? await readOrgAccess(firestore, orgId, aquariumSnapshot.get('caretakerIds')) : null;
   const [ownerSnapshot, ownerBlock] = ownerUid
     ? await Promise.all([
         firestore.doc(`users/${ownerUid}`).get(),
@@ -187,7 +211,47 @@ async function readAquariumSource(
       blockApplies(aquariumBlock, authorizedMutationId) ||
       Boolean(ownerBlock && blockApplies(ownerBlock, authorizedMutationId)),
     sourceUpdatedAt: sourceVersion(aquariumSnapshot),
+    orgId,
+    orgActive: org?.active ?? false,
+    caretakerUids: org?.caretakerUids ?? [],
+    coOwnerUids: (org?.ownerUids ?? []).filter((uid) => uid !== ownerUid),
   };
+}
+
+/**
+ * Org status plus the caretakerIds that are still `caretaker` members of the
+ * org. A uid left in caretakerIds after its member doc is gone gets no access.
+ */
+async function readOrgAccess(firestore: Firestore, orgId: string, caretakerIds: unknown) {
+  const ids = Array.isArray(caretakerIds)
+    ? [...new Set(caretakerIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+        .filter((id) => !RTDB_FORBIDDEN_KEY_CHARACTERS.some((character) => id.includes(character)))
+    : [];
+  const orgRef = firestore.doc(`organizations/${orgId}`);
+  const memberRefs = ids.map((uid) => firestore.doc(`organizations/${orgId}/members/${uid}`));
+  const [[orgSnapshot, ...members], owners] = await Promise.all([
+    firestore.getAll(orgRef, ...memberRefs),
+    firestore.collection(`organizations/${orgId}/members`).where('role', '==', 'owner').get(),
+  ]);
+  return {
+    ownerUids: owners.docs
+      .map((member) => member.id)
+      .filter((uid) => !RTDB_FORBIDDEN_KEY_CHARACTERS.some((character) => uid.includes(character)))
+      .sort(),
+    active: orgSnapshot.exists && orgSnapshot.get('status') === 'active',
+    caretakerUids: members
+      .filter((member) => member.exists && member.get('role') === 'caretaker')
+      .map((member) => member.id)
+      .sort(),
+  };
+}
+
+function caretakerMap(uids: string[]) {
+  return uids.length > 0 ? Object.fromEntries(uids.map((uid) => [uid, true])) : undefined;
+}
+
+function sameCaretakers(left: Record<string, boolean> | undefined, right: Record<string, boolean> | undefined) {
+  return Object.keys(left ?? {}).sort().join(',') === Object.keys(right ?? {}).sort().join(',');
 }
 
 async function readAquariumMirror(
@@ -224,12 +288,15 @@ function userMirrorMatches(
 
 function aquariumMirrorMatches(
   mirror: AquariumMirror | null,
-  desired: Pick<AquariumMirror, 'ownerUid' | 'state' | 'sourceUpdatedAt'>
+  desired: Pick<AquariumMirror, 'ownerUid' | 'state' | 'sourceUpdatedAt' | 'orgId' | 'caretakerUids' | 'coOwnerUids'>
 ) {
   return (
     mirror?.ownerUid === desired.ownerUid &&
     mirror?.state === desired.state &&
-    mirror?.sourceUpdatedAt === desired.sourceUpdatedAt
+    mirror?.sourceUpdatedAt === desired.sourceUpdatedAt &&
+    mirror?.orgId === desired.orgId &&
+    sameCaretakers(mirror?.caretakerUids, desired.caretakerUids) &&
+    sameCaretakers(mirror?.coOwnerUids, desired.coOwnerUids)
   );
 }
 
@@ -327,20 +394,36 @@ async function writeAquariumMirror(
     source.exists &&
     !source.authorizationBlocked &&
     Boolean(source.ownerUid) &&
-    source.ownerRole === 'User';
+    source.ownerRole === 'User' &&
+    (source.orgId === null || source.orgActive);
+  // Otherwise-eligible aquarium in a suspended (or missing) org.
+  const suspended =
+    !eligible &&
+    source.exists &&
+    !source.authorizationBlocked &&
+    Boolean(source.ownerUid) &&
+    source.ownerRole === 'User' &&
+    source.orgId !== null;
+  const orgFields: Pick<AquariumMirror, 'orgId' | 'caretakerUids' | 'coOwnerUids'> = {
+    ...(source.orgId ? { orgId: source.orgId } : {}),
+    ...(caretakerMap(source.caretakerUids) ? { caretakerUids: caretakerMap(source.caretakerUids) } : {}),
+    ...(caretakerMap(source.coOwnerUids) ? { coOwnerUids: caretakerMap(source.coOwnerUids) } : {}),
+  };
 
   const desired: AquariumMirror = eligible
     ? {
         ownerUid: source.ownerUid ?? undefined,
         state: 'active',
         sourceUpdatedAt: source.sourceUpdatedAt ?? undefined,
+        ...orgFields,
       }
     : {
         ...(source.ownerUid ? { ownerUid: source.ownerUid } : {}),
-        state: 'revoked',
+        state: suspended ? 'suspended' : 'revoked',
         ...(source.sourceUpdatedAt
           ? { sourceUpdatedAt: source.sourceUpdatedAt }
           : {}),
+        ...orgFields,
       };
 
   if (aquariumMirrorMatches(current, desired) && !current?.activeMutationId) {
@@ -380,6 +463,11 @@ async function writeAquariumMirror(
       ...desired,
       syncedAt: ServerValue.TIMESTAMP as unknown as number,
     };
+    // Access lists are replaced, never merged: a removed caretaker must lose
+    // access, and a legacy aquarium has no org.
+    if (!desired.caretakerUids) delete next.caretakerUids;
+    if (!desired.coOwnerUids) delete next.coOwnerUids;
+    if (!desired.orgId) delete next.orgId;
 
     if (!source.exists) {
       delete next.ownerUid;
@@ -425,7 +513,8 @@ export async function syncAquariumAuthorization(
       return {
         id: aquariumId,
         status: changed
-          ? source.exists && source.ownerUid && source.ownerRole === 'User'
+          ? source.exists && source.ownerUid && source.ownerRole === 'User' &&
+            (source.orgId === null || source.orgActive)
             ? 'active'
             : 'revoked'
           : 'unchanged',
