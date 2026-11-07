@@ -310,17 +310,26 @@ export async function claimDevice(
   }
   const now = clock(dependencies);
   const nowIso = new Date(now).toISOString();
-  const aquariumRef = firestore.collection('aquariums').doc();
+  // A device converted from the PR #8 registry keeps the aquarium ID its
+  // firmware already writes to (scripts/convert-pr8-registry.ts).
+  const reservedAquariumId = readString(registry.get('reservedAquariumId'));
+  const aquariumRef = reservedAquariumId && /^[A-Za-z0-9_-]{1,128}$/.test(reservedAquariumId)
+    ? firestore.doc(`aquariums/${reservedAquariumId}`)
+    : firestore.collection('aquariums').doc();
   const aquariumId = aquariumRef.id;
 
   const orgCreated = await firestore.runTransaction(async (transaction) => {
-    const [registryNow, orgNow, ownerMember] = await transaction.getAll(
+    const [registryNow, orgNow, ownerMember, aquariumNow] = await transaction.getAll(
       registryRef,
       orgRef(firestore, orgId),
-      memberRef(firestore, orgId, actor.uid)
+      memberRef(firestore, orgId, actor.uid),
+      aquariumRef
     );
     if (registryNow.get('status') !== 'unclaimed') {
       throw new MutationError('already-exists', 'Already registered, contact the owner.');
+    }
+    if (aquariumNow.exists) {
+      throw new MutationError('failed-precondition', 'This device is not ready to be claimed. Contact SmartAqua support.');
     }
     let created = false;
     if (orgNow.exists) {

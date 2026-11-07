@@ -28,8 +28,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeClaimLabel } from './lib/claim-label.ts';
 import {
-  claimUri,
   deviceUidFor,
   generateClaimCode,
   generateDeviceId,
@@ -38,11 +38,9 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireFromFunctions = createRequire(path.join(root, 'functions/package.json'));
-const requireFromRoot = createRequire(path.join(root, 'package.json'));
 const { initializeApp } = requireFromFunctions('firebase-admin/app');
 const { getAuth } = requireFromFunctions('firebase-admin/auth');
 const { getFirestore } = requireFromFunctions('firebase-admin/firestore');
-const QRCode = requireFromRoot('qrcode');
 
 const DEFAULT_EMULATOR_PROJECT = 'demo-smartaqua';
 const args = process.argv.slice(2);
@@ -71,32 +69,6 @@ function readPepper() {
     if (line) return line.slice('CLAIM_CODE_PEPPER='.length).trim();
   }
   return '';
-}
-
-function escapeXml(value: string) {
-  return value.replace(/[<>&"']/g, (character) => `&#${character.charCodeAt(0)};`);
-}
-
-async function labelSvg(deviceId: string, claimCode: string) {
-  const qr: string = await QRCode.toString(claimUri(deviceId, claimCode), { type: 'svg', errorCorrectionLevel: 'M', margin: 1 });
-  const qrBody = qr.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
-  const viewBox = /viewBox="([^"]+)"/.exec(qr)?.[1] ?? '0 0 33 33';
-  const grouped = `${claimCode.slice(0, 4)} ${claimCode.slice(4)}`;
-  // 62 x 29 mm: a common thermal label size.
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="62mm" height="29mm" viewBox="0 0 620 290">
-  <rect width="620" height="290" fill="#ffffff"/>
-  <svg x="10" y="10" width="270" height="270" viewBox="${viewBox}">${qrBody}</svg>
-  <g font-family="Helvetica, Arial, sans-serif" fill="#0f172a">
-    <text x="300" y="58" font-size="26" font-weight="700">SmartAqua Pro</text>
-    <text x="300" y="104" font-size="18" fill="#475569">Device ID</text>
-    <text x="300" y="136" font-size="28" font-family="Menlo, Consolas, monospace">${escapeXml(deviceId)}</text>
-    <text x="300" y="182" font-size="18" fill="#475569">Claim code</text>
-    <text x="300" y="218" font-size="34" font-weight="700" font-family="Menlo, Consolas, monospace">${escapeXml(grouped)}</text>
-    <text x="300" y="262" font-size="15" fill="#475569">Scan in the app: Add device</text>
-  </g>
-</svg>
-`;
 }
 
 function firmwareHeader(deviceId: string, email: string, password: string) {
@@ -168,11 +140,7 @@ async function main() {
       createdAt: Date.now(),
     });
 
-    const deviceDir = path.join(outDir, deviceId);
-    mkdirSync(deviceDir, { recursive: true });
-    await QRCode.toFile(path.join(deviceDir, 'qr.png'), claimUri(deviceId, claimCode), { errorCorrectionLevel: 'M', margin: 2, width: 512 });
-    writeFileSync(path.join(deviceDir, 'label.svg'), await labelSvg(deviceId, claimCode));
-    writeFileSync(path.join(deviceDir, 'claim.json'), `${JSON.stringify({ deviceId, claimCode, uri: claimUri(deviceId, claimCode) }, null, 2)}\n`, { mode: 0o600 });
+    const deviceDir = await writeClaimLabel(outDir, deviceId, claimCode);
     writeFileSync(path.join(secretsDir, `${deviceId}.h`), firmwareHeader(deviceId, email, password), { mode: 0o600 });
     provisioned.push(deviceId);
     console.log(`Provisioned ${deviceId} (uid ${uid}). Label: ${path.relative(root, deviceDir)}/label.svg; credentials: firmware/secrets/${deviceId}.h`);
