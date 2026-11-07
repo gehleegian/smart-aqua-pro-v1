@@ -13,6 +13,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   }
 } });
 const web = await import('../../src/types/device.ts');
+const { TELEMETRY_STALE_MS } = await import('../../src/utils/monitoringAssessmentCore.ts');
 const webHelpers = await import('../../src/utils/monitoringHelpers.ts');
 const mobile = await import('../../../smart-aqua-mobile/src/utils/aquarium-control.ts');
 const settings = { enabled: true, feedingTimes: ['08:00', '17:30'],
@@ -36,7 +37,7 @@ test('scheduled output reports override saved manual values on both clients', ()
     assert.equal(webHelpers.getManualActionDisplay({ ...displayArgs, field: 'filter' }).buttonLabel, 'Stop Filtration');
     const off = resolve(live, parse({ ...raw, lightState: 'Off', filterState: 'Inactive' }), now);
     assert.deepEqual(off, fallback);
-    assert.deepEqual(resolve(fallback, parse(raw), now + 31000), fallback);
+    assert.deepEqual(resolve(fallback, parse(raw), now + TELEMETRY_STALE_MS + 1000), fallback);
     assert.deepEqual(resolve(fallback, parse({ ...raw, online: false }), now), fallback);
     assert.deepEqual(resolve(fallback, parse({ ...raw, lightState: 'bad', filterState: 'bad' }), now), fallback);
     assert.deepEqual(resolve(fallback, null, now), fallback);

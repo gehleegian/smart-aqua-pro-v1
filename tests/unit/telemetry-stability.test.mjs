@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
 import { getFreshTelemetrySnapshot } from '../../src/types/device.ts';
 import { mapTelemetry } from '../../../smart-aqua-mobile/src/utils/device-telemetry-parser.ts';
-import { formatWaterLevel } from '../../src/utils/monitoringAssessmentCore.ts';
+import { formatWaterLevel, TELEMETRY_STALE_MS } from '../../src/utils/monitoringAssessmentCore.ts';
 
 test('freshness uses receive time rather than an earlier UI tick', () => {
   const receivedAt = Date.now();
@@ -12,7 +12,7 @@ test('freshness uses receive time rather than an earlier UI tick', () => {
     updatedAt: receivedAt - 100, online: true, turbidityState: 'Cloudy' });
   assert.equal(getFreshTelemetrySnapshot(telemetry, receivedAt - 2000), null);
   assert.equal(getFreshTelemetrySnapshot(telemetry, receivedAt)?.turbidityState, 'Cloudy');
-  assert.equal(getFreshTelemetrySnapshot(telemetry, receivedAt + 31000), null);
+  assert.equal(getFreshTelemetrySnapshot(telemetry, receivedAt + TELEMETRY_STALE_MS + 1000), null);
   for (const name of ['useMonitoringController', 'useDashboardController']) {
     const source = readFileSync(new URL(`../../src/hooks/${name}.ts`, import.meta.url), 'utf8');
     assert.match(source, /\(shadow\) => \{[\s\S]*?setTelemetryNow\(Date.now\(\)\);\s*setDeviceShadows/);
@@ -30,7 +30,7 @@ test('categorical turbidity stays separate from numeric NTU in both parsers', ()
     assert.equal(normalizeTelemetry(input).turbidity, undefined);
     assert.equal(mapTelemetry(input).turbidity, undefined);
   }
-  const stale = { temperatureC: 26, waterLevelPercent: 90, updatedAt: Date.now() - 31000, online: true, turbidityState: 'Clear' };
+  const stale = { temperatureC: 26, waterLevelPercent: 90, updatedAt: Date.now() - TELEMETRY_STALE_MS - 1000, online: true, turbidityState: 'Clear' };
   assert.equal(getFreshTelemetrySnapshot(normalizeTelemetry(stale)), null);
 });
 

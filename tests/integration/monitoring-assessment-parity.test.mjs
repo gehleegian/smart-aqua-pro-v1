@@ -97,7 +97,8 @@ mobileTest('mobile explicit unavailable source suppresses retained stale reading
 
 mobileTest('production Firebase parsers reject malformed numbers before assessment', () => {
   for (const value of [null, undefined, '', ' ', '22', false, true, [], {}, NaN, Infinity]) {
-    for (const [field, parameter] of [['ph', 'ph'], ['turbidity', 'turbidity'], ['tdsPercent', 'tds']]) {
+    // TDS is evaluated in ppm (Sprint 2 engine); tdsPercent is a legacy display field.
+    for (const [field, parameter] of [['ph', 'ph'], ['turbidity', 'turbidity'], ['tdsPpm', 'tds']]) {
       const raw = deviceFrom({ [field]: value });
       const web = webFrom(normalizeTelemetry(raw));
       const mobile = assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig);
@@ -121,7 +122,8 @@ mobileTest('zero values parse as numbers but are assessed as sensor faults, not 
   const raw = deviceFrom({ ph: 0, waterLevelPercent: 0, turbidity: 0, tdsPpm: 0 });
   assert.equal(normalizeTelemetry(raw).ph, 0);
   assert.equal(mapTelemetry(raw).waterLevelPercent, 0);
-  assert.equal(webFrom(normalizeTelemetry(raw)).recommendations.length, 0);
+  // Sensor faults yield only the sensor_fault "check the probe" rule, never water-quality advice (AGENTS.md §5).
+  assert.ok(webFrom(normalizeTelemetry(raw)).matchedRules.every((rule) => rule.ruleId === 'sensor_fault'));
   assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig), webFrom(normalizeTelemetry(raw)));
 });
 
