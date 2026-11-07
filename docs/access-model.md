@@ -79,6 +79,7 @@ provision-device.ts                1. Wi-Fi setup: join the
                                       badges) · Finish → status "active"
 ```
 
+- **Superseded alternative:** PR #8's ID-only `/api/devices/claim` route (`docs/security/spark-device-claiming.md`) is kept as reference and is not used by the app.
 - **Claim codes** never exist in the database. Only `HMAC-SHA256(pepper, deviceId:code)` is stored, and the pepper is a Cloud Functions secret (`CLAIM_CODE_PEPPER`) that is never in git.
 - **Errors** are shown in plain words: "Invalid code" (wrong code *or* unknown device, deliberately the same), "Already registered, contact the owner", "Too many attempts. Try again in an hour", "This organization is suspended".
 - **Retry is safe.** Claiming the same device again as the same Owner finishes any unfinished step and returns the same aquarium.

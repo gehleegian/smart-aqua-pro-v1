@@ -144,6 +144,20 @@ From then on, a missing `<sensor>ReadingValid` flag counts as a sensor fault (de
 
 **Order matters:** the Sprint 3 Firestore rules list aquariums by `orgId`, so the data must be migrated **before** those rules are deployed. RTDB rules are backward compatible either way: caretaker access is additive, and device rules are unchanged.
 
+### 7·0. Live baseline changed by PR #8 (merged 2026-11-07)
+
+Gian's PR #8 is merged, and his handoff (`docs/security/review-handoff-2026-11-07.md`) reports that live Firestore already runs **`firestore.claiming.rules`**, a focused rollout, not this repo's `firestore.rules`. Live `device_registry` holds his schema: a pre-reserved `aquariumId`, `ownerUid`, and `device_uid_registry`, with no `claimCodeHash`. Aquarium 2 is registered live and not yet claimed.
+
+Decisions (2026-11-07): our `claimDevice` callable stays the claim path, **claim codes stay required**, and the target plan is **Blaze**. Before 7c:
+- [ ] Back up the live rules that are actually deployed (`firebase firestore:rules:get` or the console), not this repo's file.
+- [ ] Inventory live `device_registry` and `device_uid_registry` (read-only).
+- [ ] **Open item:** convert each of Gian's registry docs to ours. Today `migrate-orgs.ts` skips a registry doc that already exists, so:
+  - a device already claimed through his route keeps his fields;
+  - an unclaimed one (Aquarium 2) has no claim code and can never be claimed through `claimDevice`.
+
+  It needs a small converter (plan only, then `--apply`) that adds `claimCodeHash`, `status`, `orgId` and `claimedBy`, and prints a new label for each unclaimed device. Not written yet.
+- [ ] Do not configure the `/api/devices/claim` route's server credentials (`.env.claiming.example`) in production. It is superseded and would create aquariums without an organization.
+
 ### 7a. Prerequisites
 - [ ] Steps 1–4 are done and stable.
 - [ ] Back up again (reads only): `firebase database:get /authorization --project practice-smartaqua > backup-authorization-$(date +%F).json` (keep it out of git). Export `aquariums`, `users` and `aquarium_directory` from Firestore.
