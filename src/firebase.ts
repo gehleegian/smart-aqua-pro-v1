@@ -3,6 +3,7 @@ import { connectAuthEmulator, getAuth } from 'firebase/auth';
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
+import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -36,6 +37,8 @@ export const appCheck: AppCheck | null =
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
+// Report PDFs and CSVs (Sprint 5); read access is decided by storage.rules.
+export const storage = getStorage(app);
 export const functions = getFunctions(
   app,
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1'
@@ -51,4 +54,5 @@ if (useEmulators && typeof window !== 'undefined' && !(globalThis as Record<stri
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
 }

@@ -10,6 +10,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -319,4 +321,18 @@ test('ORG-14 command logs: members of the tank read, nobody writes; a co-owner (
   await assertFails(setDoc(doc(context('owner-a'), 'command_logs', 'forged'), { aquariumId: TANK_1, status: 'done' }));
   await assertFails(updateDoc(doc(context('owner-a'), 'command_logs', `${TANK_1}_cmd-1`), { status: 'done' }));
   await assertFails(setDoc(doc(context('owner-a'), 'maintenance_actions', 'forged'), { aquariumId: TANK_1, actionType: 'cleaning', performedAt: 2 }));
+});
+
+test('ORG-15 monitoring reports (Sprint 5): the Reports page list query is org-scoped; a caretaker sees only assigned tanks; nobody writes', async () => {
+  const list = (db, id) => getDocs(query(collection(db, 'monitoring_reports'), where('aquarium_id', '==', id), orderBy('generated_at', 'desc'), limit(30)));
+  await assertSucceeds(list(context('owner-a'), TANK_1));
+  await assertSucceeds(list(context('owner-a'), TANK_2));
+  await assertSucceeds(list(context('care-x'), TANK_1));
+  await assertFails(list(context('care-x'), TANK_2));
+  await assertFails(list(context('owner-b'), TANK_1));
+  await assertFails(list(context('owner-s'), TANK_S));
+  await assertFails(getDocs(query(collection(context('owner-a'), 'monitoring_reports'))), 'an unfiltered list is denied');
+  await assertSucceeds(list(context('admin-p', { platformAdmin: true }), TANK_3));
+  await assertFails(setDoc(doc(context('owner-a'), 'monitoring_reports', 'mine'), { aquarium_id: TANK_1, report_type: 'daily' }));
+  await assertFails(updateDoc(doc(context('owner-a'), 'monitoring_reports', `report-${TANK_1}`), { summary: 'edited' }));
 });

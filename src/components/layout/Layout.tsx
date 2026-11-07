@@ -23,6 +23,7 @@ import Organizations from '../../views/Organizations';
 import AcceptInvite from '../../views/AcceptInvite';
 import AuditLog, { AdminAuditLog } from '../../views/AuditLog';
 import RulesEditor from '../../views/RulesEditor';
+import Reports from '../../views/Reports';
 import ConfirmModal from '../ui/ConfirmModal';
 import NoOrgState, { SuspendedOrgState } from '../org/NoOrgState';
 import type { NavRole } from './Sidebar';
@@ -59,6 +60,7 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   audit: AuditLog,
   'admin-audit': AdminAuditLog,
   rules: RulesEditor,
+  reports: Reports,
 };
 
 type AppPage = 'landing' | 'login' | 'signup' | 'app';
@@ -79,12 +81,12 @@ const getInitialTheme = (): ThemeMode => {
 // enforce the same boundaries; this only decides what is shown.
 const rolePermissions: Record<NavRole, string[]> = {
   Admin: ['dashboard', 'organizations', 'users', 'rules', 'admin-audit', 'settings', 'support'],
-  owner: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
-  caretaker: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'add-device', 'setup', 'settings', 'support', 'invite'],
+  owner: ['dashboard', 'monitoring', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
+  caretaker: ['dashboard', 'monitoring', 'alerts', 'datalogs', 'reports', 'add-device', 'setup', 'settings', 'support', 'invite'],
   none: ['dashboard', 'add-device', 'setup', 'settings', 'support', 'invite'],
 };
 // Pages that need an active (not suspended) organization's data.
-const orgDataPages = new Set(['monitoring', 'automation', 'alerts', 'datalogs', 'aquariums', 'team', 'setup', 'audit']);
+const orgDataPages = new Set(['monitoring', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'team', 'setup', 'audit']);
 
 function navRoleFor(platformRole: UserRole | undefined, orgRole: 'owner' | 'caretaker' | null): NavRole {
   if (platformRole === 'Admin') return 'Admin';
