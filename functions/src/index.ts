@@ -2,6 +2,7 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getDatabase } from 'firebase-admin/database';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
@@ -38,6 +39,15 @@ import {
   type OrgDependencies,
 } from './orgAccess.js';
 import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
+import { logMaintenance as logMaintenanceCore } from './maintenance.js';
+import { markUnansweredCommands, recordAck, recordCommand } from './commandLog.js';
+import {
+  createFcmSender,
+  createOutboxSender,
+  notifyAlert,
+  notifyCleaningRecommendation,
+  type NotificationSender,
+} from './notifications.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -570,5 +580,95 @@ export const onMaintenanceActionLogged = onDocumentCreated(
       return;
     }
     await refreshCleaningSchedule({ firestore: dependencies.firestore }, action.aquariumId, { resolvePendingCleaning: true });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Sprint 4: maintenance logging, command log, push notifications
+// ---------------------------------------------------------------------------
+
+// FR20: owners and assigned caretakers log maintenance; a linked
+// recommendation becomes 'applied'; a cleaning starts a new cleaning cycle
+// through onMaintenanceActionLogged above.
+export const logMaintenance = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    const result = await logMaintenanceCore({ firestore: dependencies.firestore }, actor, {
+      aquariumId: data.aquariumId,
+      type: data.type,
+      waterChangePercent: data.waterChangePercent,
+      notes: data.notes,
+      performedAt: data.performedAt,
+      recommendationId: data.recommendationId,
+    });
+    logger.info('logMaintenance completed.', { actorUid: actor.uid, aquariumId: result.aquariumId });
+    return result;
+  } catch (error) {
+    return callableFailure(error);
+  }
+});
+
+// FR17/FR19: command_logs from the RTDB latest command and acknowledgement.
+export const logDeviceCommand = onValueWritten(
+  { ref: '/devices/{aquariumId}/commands/latest' },
+  async (event) => {
+    if (!event.data.after.exists()) return;
+    const result = await recordCommand({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
+    if (!result.recorded && result.reason !== 'duplicate') logger.warn('Command not logged.', { aquariumId: event.params.aquariumId, reason: result.reason });
+  }
+);
+
+export const logDeviceCommandAck = onValueWritten(
+  { ref: '/devices/{aquariumId}/commandAck/latest' },
+  async (event) => {
+    if (!event.data.after.exists()) return;
+    const result = await recordAck({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
+    if (!result.updated && result.reason !== 'already_final') logger.warn('Command ack not logged.', { aquariumId: event.params.aquariumId, reason: result.reason });
+  }
+);
+
+// Pending commands with no acknowledgement after 30 s become no_response.
+// Live firmware does not acknowledge yet (docs/firmware-changes.md §5), so
+// until it does every command ends as no_response; the app shows that neutrally.
+export const checkCommandAcks = onSchedule(
+  { schedule: 'every 1 minutes', retryCount: 0, maxInstances: 1, timeoutSeconds: 50 },
+  async () => {
+    const result = await markUnansweredCommands({ firestore: dependencies.firestore });
+    if (result.marked > 0) logger.info('Commands without acknowledgement.', result);
+  }
+);
+
+// FR15: FCM cannot be emulated; in the Functions emulator the sender writes
+// dev_notification_outbox instead (docs/notifications.md).
+let notificationSender: NotificationSender | null = null;
+function sender() {
+  notificationSender ??= process.env.FUNCTIONS_EMULATOR === 'true'
+    ? createOutboxSender(dependencies.firestore)
+    : createFcmSender(getMessaging());
+  return notificationSender;
+}
+
+export const notifyAlertRecord = onDocumentWritten(
+  { document: 'alert_records/{alertId}', retry: false },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return;
+    const requestedAt = after.get('notifyRequestedAt');
+    // Most writes are repeats (occurrences/lastSeenAt): nothing new to send.
+    if (typeof requestedAt !== 'number' || after.get('notifiedForRequestAt') === requestedAt || after.get('status') === 'resolved') return;
+    const result = await notifyAlert({ firestore: dependencies.firestore, sender: sender() }, event.params.alertId);
+    if (result.sent) {
+      logger.info('Alert notification sent.', { alertId: event.params.alertId, recipients: result.targeted.length, delivered: result.delivered, failed: result.failures.length });
+    }
+  }
+);
+
+export const notifyCleaningReminder = onDocumentCreated(
+  { document: 'recommendations/{recommendationId}' },
+  async (event) => {
+    const ruleId = event.data?.get('ruleId');
+    if (ruleId !== 'cleaning_due' && ruleId !== 'cleaning_due_early') return;
+    await notifyCleaningRecommendation({ firestore: dependencies.firestore, sender: sender() }, event.params.recommendationId);
   }
 );
