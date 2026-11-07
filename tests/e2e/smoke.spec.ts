@@ -110,3 +110,78 @@ test('admin suspends an org, and its owner sees the suspended state', async ({ b
   await expect(row.getByText('Active')).toBeVisible();
   await admin.close();
 });
+
+test('a recommendation marked Applied → maintenance logged', async ({ page }) => {
+  const demo = summary();
+  await login(page, demo.accounts.ownerA.email, demo.password);
+  await page.getByLabel('Select aquarium').selectOption({ label: 'Display Tank B' });
+  const rec = page.locator('li').filter({ hasText: 'Water temperature far above range' }).filter({ has: page.getByRole('button', { name: 'Applied' }) }).first();
+  await expect(rec).toBeVisible();
+  await rec.getByRole('button', { name: 'Applied' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Log maintenance' })).toBeVisible();
+  await expect(dialog.getByLabel('Notes (optional)')).toHaveValue('Done: Water temperature far above range');
+  await dialog.getByLabel('What was done').selectOption('water_change');
+  await dialog.getByLabel('Water changed (%)').fill('30');
+  await expect(dialog.getByText('This starts a new cleaning cycle')).toBeVisible();
+  await shot(page, 'log-maintenance');
+  await dialog.getByRole('button', { name: 'Log and mark applied' }).click();
+  await expect(page.getByText(/Maintenance logged and the recommendation marked applied\. A new cleaning cycle starts/)).toBeVisible();
+  await expect(page.locator('li').filter({ hasText: 'Water temperature far above range' }).filter({ has: page.getByRole('button', { name: 'Applied' }) })).toHaveCount(0);
+
+  await nav(page, 'Monitoring');
+  await page.getByRole('button', { name: /Display Tank B/ }).click();
+  await expect(page.getByRole('heading', { name: 'Maintenance history' })).toBeVisible();
+  const entry = page.locator('li').filter({ hasText: 'Water change · 30%' });
+  await expect(entry).toBeVisible();
+  await expect(entry.getByText('From recommendation')).toBeVisible();
+  await expect(entry.getByText('New cleaning cycle')).toBeVisible();
+
+  // Feed now → the command log records it (no device here: it waits, then "No response").
+  await page.getByRole('button', { name: 'Feed Now' }).click();
+  const command = page.locator('li').filter({ hasText: 'Feed now' }).first();
+  await expect(command).toBeVisible();
+  await expect(command.getByText('Waiting for device')).toBeVisible();
+  await shot(page, 'monitoring-tank-history');
+});
+
+test('Sprint 4 screens: schedules, team co-owners, audit log, notifications, admin rules editor', async ({ browser }) => {
+  const demo = summary();
+  const owner = await browser.newPage();
+  await login(owner, demo.accounts.ownerA.email, demo.password);
+  await nav(owner, 'Automation');
+  await expect(owner.getByRole('heading', { name: 'Front Counter Tank' })).toBeVisible();
+  await shot(owner, 'automation');
+  await nav(owner, 'Team');
+  await expect(owner.getByRole('button', { name: 'Make owner' }).first()).toBeVisible();
+  await expect(owner.getByRole('button', { name: 'Make caretaker' })).toBeDisabled();
+  await shot(owner, 'team');
+  await nav(owner, 'Audit Log');
+  await expect(owner.locator('li').filter({ hasText: 'claimed a device' }).first()).toBeVisible();
+  await shot(owner, 'audit-log-owner');
+  await nav(owner, 'Settings');
+  await expect(owner.getByRole('button', { name: 'Turn on alerts' })).toBeDisabled();
+  await expect(owner.getByText(/cannot be sent from the local emulator/)).toBeVisible();
+  await owner.getByLabel('Alert level').selectOption('critical');
+  await expect(owner.getByText('Preferences saved.')).toBeVisible();
+  await shot(owner, 'notification-settings');
+  await owner.close();
+
+  const admin = await browser.newPage();
+  await login(admin, demo.accounts.admin.email, demo.password);
+  await nav(admin, 'Rules Editor');
+  await admin.getByRole('button', { name: /pH above range/ }).first().click();
+  await admin.getByLabel('ph', { exact: true }).fill('7.9');
+  await expect(admin.getByText('ph_high_warning').last()).toBeVisible();
+  await admin.getByLabel('Source (citation; required to approve)').fill('Adviser memo 2026-11-07, Table 3');
+  await admin.getByRole('button', { name: 'Save draft' }).click();
+  await expect(admin.getByText('Saved as draft. The engine uses it within 5 minutes.')).toBeVisible();
+  await admin.getByRole('button', { name: 'Approve' }).click();
+  await expect(admin.getByText('Approved. The engine uses it within 5 minutes.')).toBeVisible();
+  await expect(admin.getByText(/Approved by Platform Admin/)).toBeVisible();
+  await shot(admin, 'rules-editor');
+  await nav(admin, 'Audit Log');
+  await expect(admin.locator('li').filter({ hasText: 'approved a rule' }).first()).toBeVisible();
+  await shot(admin, 'audit-log-admin');
+  await admin.close();
+});

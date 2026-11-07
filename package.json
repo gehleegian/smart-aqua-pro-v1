@@ -42,7 +42,8 @@
     "demo": "node scripts/demo.mjs",
     "seed:demo": "node --experimental-strip-types scripts/seed-demo.ts",
     "test:smoke": "playwright test",
-    "test:sprint4-functions": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-sprint4 \"node --test functions/lib/test/sprint4.test.js\""
+    "test:sprint4-functions": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-sprint4 \"node --test functions/lib/test/sprint4.test.js\"",
+    "test:schedule": "node --experimental-strip-types --test tests/unit/schedule.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
