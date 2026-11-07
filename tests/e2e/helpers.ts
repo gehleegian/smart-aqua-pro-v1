@@ -35,6 +35,24 @@ export async function login(page: Page, email: string, password: string) {
   await page.getByPlaceholder('Enter your password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('button', { name: 'Log out' }).first()).toBeVisible();
+  // Sprint 5: the smoke stack runs the emulator TOTP mock (--mfa-mock), so a
+  // platform admin is gated until they enroll. Enroll with the mock code.
+  const gate = page.getByText('Platform administrators must turn on two-step verification');
+  if (await gate.isVisible()) {
+    await enrollMockTotp(page, { gated: true });
+    await expect(gate).toBeHidden();
+  }
+}
+
+export const MOCK_TOTP_CODE = '123456';
+
+export async function enrollMockTotp(page: Page, options: { gated?: boolean } = {}) {
+  await page.getByRole('button', { name: 'Set up authenticator app' }).click();
+  await expect(page.getByAltText(/QR code to add SmartAqua Pro/)).toBeVisible();
+  await page.getByLabel('Authenticator code').fill(MOCK_TOTP_CODE);
+  await page.getByRole('button', { name: 'Verify and turn on' }).click();
+  // Behind the admin gate the card disappears as soon as the factor exists.
+  if (!options.gated) await expect(page.getByRole('heading', { name: /Two-step verification \(on\)/ })).toBeVisible();
 }
 
 export async function nav(page: Page, label: string) {

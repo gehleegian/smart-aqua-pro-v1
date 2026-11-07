@@ -1,6 +1,6 @@
 // Sprint 4 task 0: the key flows clicked through on the emulator-backed app.
 import { expect, test } from '@playwright/test';
-import { login, nav, PASSWORD, shot, signUpAndVerify, summary } from './helpers';
+import { login, nav, PASSWORD, shot, signUpAndVerify, summary, enrollMockTotp } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -183,5 +183,90 @@ test('Sprint 4 screens: schedules, team co-owners, audit log, notifications, adm
   await nav(admin, 'Audit Log');
   await expect(admin.locator('li').filter({ hasText: 'approved a rule' }).first()).toBeVisible();
   await shot(admin, 'audit-log-admin');
+  await admin.close();
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 5: reports (FR21) and the TOTP MFA screens (emulator mock, --mfa-mock)
+// ---------------------------------------------------------------------------
+const manilaDate = (offsetDays = 0) => new Date(Date.now() + 8 * 3_600_000 + offsetDays * 86_400_000).toISOString().slice(0, 10);
+
+test('Sprint 5: generate a report, read the summary, open the PDF and CSV; a caretaker sees only assigned tanks', async ({ browser }) => {
+  const demo = summary();
+  const page = await browser.newPage();
+  await login(page, demo.accounts.ownerA.email, demo.password);
+  await nav(page, 'Reports');
+  await expect(page.getByRole('heading', { name: 'Monitoring reports' })).toBeVisible();
+  await page.getByLabel('Aquarium', { exact: true }).selectOption({ label: 'Display Tank B' });
+  await page.getByLabel('Period', { exact: true }).selectOption('custom');
+  // The seeded history is the last 4 hours, which can cross midnight in Manila.
+  await page.getByLabel('From').fill(manilaDate(-1));
+  await page.getByLabel('To (inclusive)').fill(manilaDate());
+  await page.getByRole('button', { name: 'Generate report' }).click();
+  await expect(page.getByText('Report ready.')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('heading', { name: 'Recommendations and what was done' })).toBeVisible();
+  await expect(page.getByRole('note').getByText('Draft thresholds.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Readings (valid readings only)' })).toBeVisible();
+  await shot(page, 'reports');
+
+  // getDownloadURL reads the file's metadata from Storage (allowed by storage.rules);
+  // the browser then opens the file. Fetch the same file with the returned token.
+  const fileFrom = async (button: RegExp) => {
+    const [response] = await Promise.all([
+      page.waitForResponse((item) => item.url().includes('127.0.0.1:9199') && item.url().includes('reports%2F') && item.request().method() === 'GET'),
+      page.getByRole('button', { name: button }).first().click(),
+    ]);
+    expect(response.status()).toBe(200);
+    const meta = await response.json() as { name: string; bucket: string; downloadTokens: string };
+    expect(meta.name).toMatch(/^reports\/[^/]+\/[^/]+\/[^/]+\.(pdf|csv)$/);
+    return fetch(`http://127.0.0.1:9199/v0/b/${meta.bucket}/o/${encodeURIComponent(meta.name)}?alt=media&token=${meta.downloadTokens.split(',')[0]}`);
+  };
+  const pdf = await (await fileFrom(/^Download PDF/)).arrayBuffer();
+  expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe('%PDF-');
+  const csv = await (await fileFrom(/^Download CSV/)).text();
+  expect(csv.split('\n')[0]).toContain('recorded_at_manila');
+  await page.close();
+
+  const caretaker = await browser.newPage();
+  await login(caretaker, demo.accounts.caretakerX.email, demo.password);
+  await nav(caretaker, 'Reports');
+  await expect(caretaker.getByLabel('Aquarium', { exact: true }).locator('option')).toHaveText(['Front Counter Tank']);
+  await caretaker.close();
+});
+
+test('Sprint 5: MFA (emulator mock): an owner enrolls optionally; a platform admin is gated until enrolled', async ({ browser }) => {
+  const demo = summary();
+  const owner = await browser.newPage();
+  await login(owner, demo.accounts.ownerA.email, demo.password);
+  await nav(owner, 'Settings');
+  await expect(owner.getByRole('heading', { name: /Two-step verification \(off\)/ })).toBeVisible();
+  await expect(owner.getByText('Optional. Recommended for owners.')).toBeVisible();
+  await owner.getByRole('button', { name: 'Set up authenticator app' }).click();
+  await expect(owner.getByAltText(/QR code to add SmartAqua Pro/)).toBeVisible();
+  await owner.getByLabel('Authenticator code').fill('000000');
+  await owner.getByRole('button', { name: 'Verify and turn on' }).click();
+  await expect(owner.getByText(/That code is not right/)).toBeVisible();
+  await shot(owner, 'mfa-enroll');
+  await owner.getByLabel('Authenticator code').fill('123 456');
+  await owner.getByRole('button', { name: 'Verify and turn on' }).click();
+  await expect(owner.getByRole('heading', { name: /Two-step verification \(on\)/ })).toBeVisible();
+  await expect(owner.getByText('If you lose your phone')).toBeVisible();
+  await owner.close();
+
+  // Logged in by hand (not the helper) to see the gate before enrolling.
+  const admin = await browser.newPage();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: 'Login', exact: true }).click();
+  await admin.getByPlaceholder('you@example.com').fill(demo.accounts.admin.email);
+  await admin.getByPlaceholder('Enter your password').fill(demo.password);
+  await admin.getByRole('button', { name: 'Sign in' }).click();
+  const gate = admin.getByText('Platform administrators must turn on two-step verification');
+  await expect(gate).toBeVisible();
+  await nav(admin, 'Organizations');
+  await expect(gate).toBeVisible();
+  await shot(admin, 'mfa-admin-gate');
+  await enrollMockTotp(admin, { gated: true });
+  await expect(gate).toBeHidden();
+  await expect(admin.getByRole('heading', { name: /Organizations/ }).first()).toBeVisible();
   await admin.close();
 });
