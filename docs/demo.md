@@ -8,7 +8,7 @@
 2. Run `npm run demo`. It:
    1. builds the functions;
    2. creates an emulator-only claim-code pepper in `functions/.secret.local` (gitignored) if there is none;
-   3. starts the auth, firestore, database and functions emulators (`DATABASE_URL` set so the functions, triggers and rules all use the default RTDB instance `demo-smartaqua-default-rtdb`);
+   3. starts the auth, firestore, database, functions and storage emulators (storage holds report PDFs and CSVs) (`DATABASE_URL` set so the functions, triggers and rules all use the default RTDB instance `demo-smartaqua-default-rtdb`);
    4. runs `scripts/seed-demo.ts` (below);
    5. starts the demo devices (`scripts/demo-device.ts`), which send a reading every 15 s;
    6. starts `next dev` against the emulators on the first free port from 3000, with its own build folder `.next-demo`.
@@ -18,6 +18,7 @@
 Options:
 - `--no-live`: no demo devices. Tanks show "Device offline" after 60 s, which also demonstrates the offline alert.
 - `--port 3100`: use a fixed port.
+- `--mfa-mock`: the emulator-only TOTP mock (code `123456`), so Settings → Two-step verification and the platform-admin gate can be clicked through. The Auth emulator cannot run real TOTP.
 
 ## What is seeded
 
@@ -48,3 +49,6 @@ The emulator ports are fixed (`firebase.json`), so stop `npm run demo` before ru
 | ![Team: co-owners and caretakers](screens/doc-team.png) | ![Log maintenance from an Applied recommendation](screens/doc-log-maintenance.png) |
 | ![Tank: maintenance and command history](screens/doc-monitoring-tank-history.png) | ![Alerts and notification preferences](screens/doc-notification-settings.png) |
 | ![Admin rules editor with preview](screens/doc-rules-editor.png) | ![Owner audit log](screens/doc-audit-log-owner.png) |
+| ![Reports page with the summary](screens/doc-reports.png) | ![Report PDF, page 1](screens/doc-report-pdf-page1.png) |
+| ![Report PDF, charts](screens/doc-report-pdf-page2.png) | ![Automation: no schedule set](screens/doc-monitoring-no-schedule.png) |
+| ![MFA enrollment (emulator mock)](screens/doc-mfa-enroll.png) | ![Platform admin MFA gate](screens/doc-mfa-admin-gate.png) |

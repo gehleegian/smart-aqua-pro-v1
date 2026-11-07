@@ -178,6 +178,30 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 - **Co-owners:** `setMemberRole`, owner removal, the ≥1-owner guard, `coOwnerUids` in the mirror and RTDB rules.
 - **Verified on the emulator only:** `test:sprint4-functions`, `test:org-access`, `test:firestore-org-rules`, `test:rtdb-org-rules`, `test:sprint4-e2e`, `test:smoke`. **Needs hardware:** scheduled actions, acks, NTP and offline behaviour (Gian).
 
+### 4.6 Sprint 5: reports and PDF, MFA, the PR #8 registry converter, polish (same branch; nothing deployed)
+
+- **FR21 reports:** the `generateMonitoringReport` callable (owners and assigned caretakers) and `weeklyMonitoringReports` / `monthlyMonitoringReports` (Mon 07:00 and the 1st 07:00, Asia/Manila).
+  - Computed from `sensor_readings`, `alert_records`, `recommendations`, `maintenance_actions` and `command_logs`. Valid readings only; invalid and unvalidated rows are counted, never averaged.
+  - Covers completeness, time in condition (overall and per parameter), alerts, recommendations vs action, maintenance and next cleaning, device activity and power interruptions, and the thresholds/rules in force with the draft note.
+  - PDF (pdfkit, vector charts with the normal band) and CSV in Storage at `reports/{orgId}/{aquariumId}/`. The `monitoring_reports` shape is kept, plus `orgId`, `structured_summary`, `pdfPath` and `csvPath`. The Reports page is per tank.
+  - Ingest rows now carry `parameterStatus` (additive).
+- **Storage rules:** org-scoped, the same access as the tank. They can read only two Firestore docs, so `setOrganizationStatus` stamps `orgStatus` on member docs. Known gap: the Storage rules check `email_verified` but not `security_user_blocks` (access-model §9).
+- **MFA (TOTP, no SMS):** Settings enrollment with a QR code, the sign-in challenge, the platform-admin gate in the app, and `REQUIRE_PLATFORM_ADMIN_MFA` for the callables (default off). It sits behind `NEXT_PUBLIC_MFA_TOTP_ENABLED` because the Auth emulator cannot run TOTP: tested with a fake SDK and an emulator-only mock. **Real TOTP is unverified** until Identity Platform is enabled (migration §8, access-model §10).
+- **PR #8 registry converter** (`scripts/convert-pr8-registry.ts`, migration §7·0a):
+  - claimed devices → our schema with org, binding and mirror;
+  - unclaimed devices → a hashed claim code plus a label, keeping the pre-reserved aquarium ID (`claimDevice` honours `reservedAquariumId`, so Gian's firmware needs no reflash);
+  - claims in progress → skipped;
+  - all of his fields kept, plus `pr8Original`. Idempotent.
+- **Bug found and fixed:** a tank with no saved schedule had the built-in default times pushed to the device **as an enabled schedule** on every manual light/filter toggle. It now sends automation OFF, and the panel says "No schedule set".
+- **Polish:**
+  - `scripts/cleanup-test-data.ts` (contract §7 only; dry-run; backup before delete; never run against live);
+  - `npm run clean:emulator-secrets`;
+  - security headers (CSP, HSTS, frame-ancestors) and `vercel.json`, with env names in `docs/deploy.md`;
+  - accessibility: severity shapes, AA contrast for slate-500 text, skip link, `aria-expanded`;
+  - no blank Monitoring page.
+- **Defense docs:** `docs/testing-plan.md` (accuracy, FT-01..24, simulated conditions, performance, isolation, ISO 25010), `scripts/measure-latency.ts`, `docs/defense-demo-script.md`.
+- **Verified on the emulator only.** Needs hardware or a deploy: real TOTP, Storage on the live bucket, the scheduled reports in Cloud Scheduler, latency on the real network, and the firmware ignoring default times while `automationEnabled` is false (Gian).
+
 ### Mocks and simulators found
 
 | Location | What it is | Reaches prod? |
@@ -288,9 +312,9 @@ Legend: ✅ Done · 🟡 Partial · 🧪 Stubbed/mocked · ❌ Missing. "Rules t
 | FR18 Feeding/lighting schedules | 🟡 | Editor `AutomationSettingsModal.tsx:68-88` → Firestore `automationSettings` + RTDB `control` (`types/device.ts:242-256`); light times are added only in the **uncommitted** diff | Firmware doesn't execute schedules. The `Automation` page is fake (`Automation.tsx:8-40,84`). |
 | FR19 Command log + ack | ❌ | Single overwritten node `commands/latest`; all other children denied (`database.rules.json:108-141`); device cannot write anything under `commands` | Command history, device acknowledgement path, who/when log in Firestore. |
 | FR20 Maintenance actions vs recommendation | ❌ | No `maintenance_actions` anywhere (grep: 0) | All of it. |
-| FR21 Reports + PDF | 🟡 | CSV export only (`useDataLogsController.ts:150-174`, `QuickExportCard.tsx:23`) | No daily/weekly/monthly report generation, no PDF. `createMonitoringReport` unused and denied (`monitoringReportsService.ts:69`, `firestore.rules:682`). |
+| FR21 Reports + PDF | ✅ (emulator) | Sprint 5: `functions/src/reports/*`, `src/views/Reports.tsx`, `storage.rules`; tests `test:report-summary` (11), `test:reports` (5), `test:storage-rules` (6), smoke | Deploy (Storage bucket, schedules); see §4.6 |
 | FR22 Audit log | 🟡 | `security_audit_events` written by trusted mutations (`functions/src/trustedMutations.ts:134-139,291-300`) | No login audit. No audit of profile or threshold edits. No admin viewer. |
-| MFA | ❌ | No `multiFactor`/TOTP usage (grep: 0). App Check is optional (`src/firebase.ts:24-32`). | All of it. |
+| MFA | 🧪 (mocked) | Sprint 5: `src/utils/mfa.ts`, `src/services/mfaService.ts`, `functions/src/mfaPolicy.ts`; behind `NEXT_PUBLIC_MFA_TOTP_ENABLED`; tests with a fake SDK and an emulator mock | Identity Platform + TOTP on the live project, then the manual check (access-model §10) |
 | Power-interruption detection | 🟡 | `powerStatus` enum in rules and assessment (`database.rules.json:51-53`; `assessPower`); client-side staleness 30 s (`monitoringAssessmentCore.ts:103`) | No server `lastSeen`/heartbeat watchdog. No AC-sense input in firmware. No battery/UPS. No alert. |
 
 ---

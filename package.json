@@ -63,7 +63,8 @@
     "cleanup:test-data": "node --experimental-strip-types scripts/cleanup-test-data.ts",
     "test:cleanup": "firebase emulators:exec --only firestore,database --project demo-smartaqua-cleanup \"node --test tests/integration/cleanup-test-data.test.mjs\"",
     "clean:emulator-secrets": "node scripts/clean-emulator-secrets.mjs",
-    "test:security-headers": "node --test tests/unit/security-headers.test.mjs"
+    "test:security-headers": "node --test tests/unit/security-headers.test.mjs",
+    "measure:latency": "node --experimental-strip-types --no-warnings scripts/measure-latency.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
