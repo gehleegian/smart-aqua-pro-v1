@@ -186,7 +186,7 @@ test('mobile presentation distinguishes retained readings from current or invali
   assert.equal(getTelemetryDisplay(null, live, now + 90_000).source, 'simulated');
 });
 
-test('dashboard statistics contain no manufactured history and hide invalid temperatures', async () => {
+async function loadDashboardHelpers() {
   // Compile the actual module for Node; application bundlers resolve these
   // extensionless imports normally. No Firebase access or app initialization.
   const sourceUrl = new URL('../../src/utils/dashboardHelpers.ts', import.meta.url);
@@ -199,7 +199,11 @@ test('dashboard statistics contain no manufactured history and hide invalid temp
       : import.meta.resolve(specifier);
     return 'from ' + JSON.stringify(resolved);
   });
-  const { getStatsForTank } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
+  return import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
+}
+
+test('dashboard statistics contain no manufactured history and hide invalid temperatures', async () => {
+  const { getStatsForTank } = await loadDashboardHelpers();
   const tank = {
     ...profile, status: 'healthy', hasFreshTelemetry: true, hasFreshTemperatureTelemetry: true,
     hasFreshPurityTelemetry: true, hasFreshPhTelemetry: true, hasFreshTurbidityTelemetry: true,
@@ -211,4 +215,29 @@ test('dashboard statistics contain no manufactured history and hide invalid temp
   }
   const stats = getStatsForTank({ ...tank, temp: 85, hasFreshTemperatureTelemetry: false });
   assert.equal(stats.find((stat) => stat.title === 'Temperature').value, '--');
+});
+
+test('dashboard displays fresh Clear/Cloudy without inventing numeric NTU or retaining stale categories', async () => {
+  const { mapDashboardAquariums, mergeDashboardAquariums, getStatsForTank } = await loadDashboardHelpers();
+  const category = tank => getStatsForTank(tank).find(stat => stat.title === 'Turbidity');
+  const initial = mapDashboardAquariums([profile]);
+  let previous = initial;
+  for (const turbidityState of ['Clear', 'Cloudy']) {
+    const telemetry = normalizeTelemetry(deviceFrom({ turbidityState, turbidity: undefined }));
+    const merged = mergeDashboardAquariums(previous, { [profile.id]: { telemetry, control: null, latestCommand: null } }, now);
+    assert.equal(category(merged[0]).value, turbidityState);
+    assert.match(category(merged[0]).change, /not NTU/);
+    assert.equal(merged[0].hasFreshTurbidityTelemetry, false); // no fabricated numeric assessment
+    assert.equal(mapTelemetry(telemetry).turbidityState, turbidityState);
+    for (const invalid of [{ ...telemetry, updatedAt: now-31000 }, { ...telemetry, online: false },
+      { ...telemetry, turbidityState: 'Unknown' }, { ...telemetry, turbidityState: 'invalid' }, null]) {
+      const unavailable = mergeDashboardAquariums(merged, { [profile.id]: { telemetry: invalid, control: null, latestCommand: null } }, now);
+      assert.equal(unavailable[0].turbidityState, undefined);
+      const stat = category(unavailable[0]);
+      if (stat) assert.equal(stat.value, '--');
+    }
+    previous = merged;
+  }
+  const legacy = mergeDashboardAquariums(initial, { [profile.id]: { telemetry: deviceFrom({ turbidity: 2 }), control: null, latestCommand: null } }, now);
+  assert.equal(category(legacy[0]).value, '2 NTU');
 });

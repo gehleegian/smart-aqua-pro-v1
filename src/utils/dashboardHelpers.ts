@@ -118,6 +118,7 @@ export function mergeDashboardAquariums(
 
     return {
       ...nextAquarium,
+      turbidityState: snapshot?.turbidityState,
       status: assessment.overallSeverity === 'normal' ? 'healthy' : 'warning',
       assessment,
       telemetrySource: snapshot ? 'live' : 'unavailable',
@@ -271,11 +272,15 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
     },
     {
       title: 'Turbidity',
-      value: tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
+      value: tank.turbidityState === 'Clear' || tank.turbidityState === 'Cloudy'
+        ? tank.turbidityState
+        : tank.hasFreshTurbidityTelemetry && typeof tank.turbidity === 'number'
         ? `${tank.turbidity.toFixed(0)} NTU`
         : '--',
       icon: Gauge,
-      change: condition('turbidity')?.message || 'Waiting for telemetry',
+      change: tank.turbidityState === 'Clear' || tank.turbidityState === 'Cloudy'
+        ? 'Live Clear/Cloudy comparison; not NTU'
+        : condition('turbidity')?.message || 'Waiting for telemetry',
       trend: trend('turbidity'),
       sparkline: [],
     },
