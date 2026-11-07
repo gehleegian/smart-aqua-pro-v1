@@ -101,13 +101,16 @@ function sameUserSource(left: UserSource, right: UserSource) {
   );
 }
 
+// Compares only what the mirror grants. Not updateTime: the ingest pipeline
+// rewrites the aquarium doc (condition, cleaning) as often as every reading, and
+// a write that changes no access field must not push a sync into
+// 'transitioning' (found by the Sprint 4 demo seed).
 function sameAquariumSource(left: AquariumSource, right: AquariumSource) {
   return (
     left.exists === right.exists &&
     left.ownerUid === right.ownerUid &&
     left.ownerRole === right.ownerRole &&
     left.authorizationBlocked === right.authorizationBlocked &&
-    left.sourceUpdatedAt === right.sourceUpdatedAt &&
     left.orgId === right.orgId &&
     left.orgActive === right.orgActive &&
     left.caretakerUids.join(',') === right.caretakerUids.join(',')
