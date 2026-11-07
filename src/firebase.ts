@@ -23,8 +23,10 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const appCheckSiteKey = process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY;
 
+const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
+
 export const appCheck: AppCheck | null =
-  typeof window !== 'undefined' && appCheckSiteKey
+  typeof window !== 'undefined' && appCheckSiteKey && !useEmulators
     ? initializeAppCheck(app, {
         provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true,
@@ -42,7 +44,6 @@ export const functions = getFunctions(
 // Local development only: NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true points the
 // app at the Emulator Suite (ports from firebase.json). Never set it in a
 // deployed build.
-const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
 const emulatorFlag = '__smartAquaEmulatorsConnected';
 if (useEmulators && typeof window !== 'undefined' && !(globalThis as Record<string, unknown>)[emulatorFlag]) {
   (globalThis as Record<string, unknown>)[emulatorFlag] = true;

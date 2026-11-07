@@ -2,6 +2,10 @@
 const nextConfig = {
   // Keeps `next dev` from appending its own block to the project's AGENTS.md.
   agentRules: false,
+  // npm run demo builds into its own folder so it never mixes with a real build.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  // No dev-tools badge in demo screenshots.
+  ...(process.env.NEXT_DIST_DIR ? { devIndicators: false } : {}),
   // The repository's ignored local .env may still use the Vite-era names.
   // Firebase web config is public client configuration, so map those values
   // into Next's explicitly exposed NEXT_PUBLIC names for local development.

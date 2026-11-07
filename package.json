@@ -38,7 +38,10 @@
     "provision:device": "node --experimental-strip-types scripts/provision-device.ts",
     "migrate:orgs": "node --experimental-strip-types scripts/migrate-orgs.ts",
     "test:claim-uri": "node --experimental-strip-types --test tests/unit/claim-uri.test.mjs",
-    "test:sprint3-e2e": "npm run build:functions && node tests/helpers/ensureEmulatorPepper.mjs && cross-env FUNCTIONS_DISCOVERY_TIMEOUT=60 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-sprint3 \"node --test --test-force-exit --test-timeout=120000 tests/integration/sprint3-e2e.test.mjs\""
+    "test:sprint3-e2e": "npm run build:functions && node tests/helpers/ensureEmulatorPepper.mjs && cross-env FUNCTIONS_DISCOVERY_TIMEOUT=60 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-sprint3 \"node --test --test-force-exit --test-timeout=120000 tests/integration/sprint3-e2e.test.mjs\"",
+    "demo": "node scripts/demo.mjs",
+    "seed:demo": "node --experimental-strip-types scripts/seed-demo.ts",
+    "test:smoke": "playwright test"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -53,6 +56,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@firebase/rules-unit-testing": "^5.0.2",
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
