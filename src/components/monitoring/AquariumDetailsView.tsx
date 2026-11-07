@@ -49,7 +49,6 @@ interface AquariumDetailsViewProps {
   /** Sprint 3: false for a caretaker (commands only; schedules are owner-only). */
   canManage?: boolean;
   onRefresh: () => void;
-  onSystemToggle: (field: SystemField) => void;
 }
 
 export function AquariumDetailsView({
@@ -71,7 +70,6 @@ export function AquariumDetailsView({
   onOpenAutomationEditor,
   canManage = true,
   onRefresh,
-  onSystemToggle,
 }: AquariumDetailsViewProps) {
   const [logging, setLogging] = useState(false);
   const now = useNow();
@@ -125,7 +123,10 @@ export function AquariumDetailsView({
                     typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
                 },
                 { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
-                { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
+                // Main (PR #8): a Clear/Cloudy module reports a category, never invented NTU.
+                aquarium.turbidityState && live
+                  ? { label: 'Turbidity', display: { value: aquarium.turbidityState, status: 'Live Clear/Cloudy comparison; not NTU' } }
+                  : { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
               ];
               return readings.map(({ label, display }) => (
                 <Reading key={label} label={label} value={display.value} status={display.status} />
@@ -134,7 +135,7 @@ export function AquariumDetailsView({
             <Reading
               label="Power Status"
               value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
-              status={aquarium.hasFreshPowerTelemetry ? 'Live telemetry' : 'Waiting for telemetry'}
+              status={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus === 'Unknown' ? 'Power detector setup not verified' : 'Live telemetry' : 'Waiting for telemetry'}
             />
             <Reading
               label="Estimated Bioload"
@@ -278,6 +279,9 @@ export function AquariumDetailsView({
               ))}
             </div>
 
+            <p className="mb-4 text-xs text-slate-400">
+              Manual controls work while automation is enabled. Light and filter overrides last until the next scheduled change.
+            </p>
             {aquarium.commandStatus !== 'none' ? (
               <p className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-300" role="status">
                 Last command: <CommandStatusBadge status={aquarium.commandStatus} />
@@ -294,7 +298,7 @@ export function AquariumDetailsView({
                     size="sm"
                     variant="secondary"
                     disabled={controlsDisabled || manualActions[field].disabled || Boolean(savingSystemKey)}
-                    onClick={() => (systemMode === 'manual' || !canManage ? onManualAction(field) : onSystemToggle(field))}
+                    onClick={() => onManualAction(field)}
                   >
                     {manualActions[field].buttonLabel}
                   </Button>
@@ -321,6 +325,7 @@ export function AquariumDetailsView({
           <CardContent>
             <div className="space-y-3 text-sm">
               <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
+              <Row label="Schedule time zone" value="UTC+8" />
               <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
               <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
               <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />

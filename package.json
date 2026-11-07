@@ -19,6 +19,10 @@
     "test:trusted-mutations": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-trusted-mutations \"node --test functions/lib/test/trustedMutations.test.js\"",
     "test:trusted-mutation-callables": "npm run build:functions && cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-trusted-mutations \"node --test functions/lib/test/trustedMutationCallable.test.js\"",
     "test:client-contracts": "node --experimental-strip-types --test tests/integration/trusted-mutation-contracts.test.mjs",
+    "test:device-claim-unit": "node --experimental-strip-types --test tests/unit/device-claim-validation.test.mjs",
+    "test:device-claim-parity": "node --experimental-strip-types --test tests/integration/device-claim-parity.test.mjs",
+    "test:device-claims": "firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-device-claims \"node --conditions=react-server --experimental-strip-types --test tests/integration/device-claim.test.mjs\"",
+    "device:provision": "node scripts/provision-device.mjs",
     "test:aquarium-profile": "node --experimental-strip-types --test tests/unit/aquarium-profile.test.mjs",
     "test:monitoring-assessment": "node --experimental-strip-types --test tests/unit/monitoring-assessment.test.mjs",
     "test:device-contract": "node --experimental-strip-types --test tests/unit/device-contract.test.mjs",
@@ -44,16 +48,23 @@
     "test:smoke": "playwright test",
     "test:sprint4-functions": "npm run build:functions && firebase emulators:exec --only auth,firestore,database --project demo-smartaqua-sprint4 \"node --test functions/lib/test/sprint4.test.js\"",
     "test:schedule": "node --experimental-strip-types --test tests/unit/schedule.test.mjs",
-    "test:sprint4-e2e": "npm run build:functions && node tests/helpers/ensureEmulatorPepper.mjs && cross-env DATABASE_URL=https://demo-smartaqua-sprint4e2e-default-rtdb.firebaseio.com FUNCTIONS_DISCOVERY_TIMEOUT=60 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-sprint4e2e \"node --experimental-strip-types --no-warnings scripts/seed-demo.ts && node --test --test-force-exit --test-timeout=120000 tests/integration/sprint4-e2e.test.mjs\""
+    "test:sprint4-e2e": "npm run build:functions && node tests/helpers/ensureEmulatorPepper.mjs && cross-env DATABASE_URL=https://demo-smartaqua-sprint4e2e-default-rtdb.firebaseio.com FUNCTIONS_DISCOVERY_TIMEOUT=60 firebase emulators:exec --only auth,firestore,database,functions --project demo-smartaqua-sprint4e2e \"node --experimental-strip-types --no-warnings scripts/seed-demo.ts && node --test --test-force-exit --test-timeout=120000 tests/integration/sprint4-e2e.test.mjs\"",
+    "test:claiming-rollout-rules": "firebase emulators:exec --only firestore --project demo-smartaqua-claiming-rollout \"node --test tests/firestore/claiming-rollout.rules.test.mjs\"",
+    "test:claim-origin": "node --experimental-strip-types --test tests/unit/claim-origin.test.mjs",
+    "test:aquarium2-firmware": "node --experimental-strip-types --test tests/unit/aquarium2-firmware.test.mjs",
+    "test:firmware-contract": "node firmware/Aquarium1Device/verify-contract.mjs && node firmware/Aquarium2Device/verify-contract.mjs",
+    "test:mobile-parity": "node --experimental-strip-types --test tests/unit/automation-controls.test.mjs tests/unit/telemetry-stability.test.mjs tests/integration/device-claim-parity.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "firebase": "^12.12.0",
+    "firebase-admin": "^14.5.0",
     "html5-qrcode": "2.3.8",
     "lucide-react": "^1.8.0",
     "next": "^16.4.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {

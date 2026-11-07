@@ -705,7 +705,9 @@ service cloud.firestore {
           && resource.data.orgId is string
           && memberAccess(resource.data));
 
-      // Aquariums are created only by the claimDevice callable (Sprint 3).
+      // Aquariums are created only by the claimDevice callable (Sprint 3), which
+      // checks the claim code and creates the org. Gian's /api/devices/claim
+      // route (main, PR #8) is kept for reference but superseded.
       allow create: if false;
 
       // Owner only: profile, thresholds, schedules. Caretakers cannot edit.

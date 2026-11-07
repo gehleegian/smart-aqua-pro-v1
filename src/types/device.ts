@@ -1,4 +1,4 @@
-import type { Aquarium, AutomationSettings } from './aquarium';
+import type { Aquarium, AutomationSettings, ManualSystemStatus } from './aquarium';
 import {
   COMMAND_ACK_TIMEOUT_MS,
   evaluateTelemetryValidity,
@@ -24,6 +24,7 @@ export type DevicePowerStatus = 'Online' | 'Offline' | 'Power Interruption' | 'U
 // RTDB devices/{aquariumId}/telemetry. Field status (current vs new) is
 // documented in docs/device-contract.md.
 export interface DeviceTelemetry {
+  lightState?: 'On' | 'Off';
   temperatureC: number;
   temperatureReadingValid?: boolean;
   waterLevelPercent: number;
@@ -34,6 +35,8 @@ export interface DeviceTelemetry {
   turbidity?: number;
   /** New (additive). */
   turbidityReadingValid?: boolean;
+  /** Main (PR #8): categorical turbidity from a digital module (no numeric NTU invented). */
+  turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
   /** Allowed by rules; out of scope (no ammonia sensor). */
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
@@ -221,6 +224,21 @@ export function hasFreshDeviceTelemetry(
   return getDeviceTelemetryState(telemetry, now) === 'live';
 }
 
+export function getReportedManualStatus(
+  fallback: ManualSystemStatus,
+  telemetry: DeviceTelemetry | null | undefined,
+  now = Date.now()
+): ManualSystemStatus {
+  if (!telemetry || !hasFreshDeviceTelemetry(telemetry, now)) return { ...fallback };
+  return {
+    ...fallback,
+    light: telemetry.lightState === 'On' || telemetry.lightState === 'Off'
+      ? telemetry.lightState : fallback.light,
+    filter: telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
+      ? telemetry.filterState : fallback.filter,
+  };
+}
+
 export function getDeviceTelemetryStatusText(state: DeviceTelemetryState) {
   return state === 'offline' ? 'Device offline' : state === 'unavailable' ? 'No live data' : 'Live data';
 }
@@ -265,6 +283,8 @@ export function getFreshTelemetrySnapshot(
     hasFreshPhTelemetry: phValid,
     turbidity: turbidityValid ? telemetry.turbidity! : null,
     hasFreshTurbidityTelemetry: turbidityValid,
+    turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy'
+      ? telemetry.turbidityState : undefined,
     powerStatus,
     hasFreshPowerTelemetry: Boolean(powerStatus),
     validity,

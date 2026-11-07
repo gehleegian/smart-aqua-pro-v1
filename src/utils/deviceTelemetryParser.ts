@@ -45,7 +45,11 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
     turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
     turbidityReadingValid:
       typeof telemetry.turbidityReadingValid === 'boolean' ? telemetry.turbidityReadingValid : undefined,
+    turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy' || telemetry.turbidityState === 'Unknown'
+      ? telemetry.turbidityState : undefined,
     ammoniaPpm: Number.isFinite(ammoniaPpm) ? ammoniaPpm : undefined,
+    lightState: telemetry.lightState === 'On' || telemetry.lightState === 'Off'
+      ? telemetry.lightState : undefined,
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState

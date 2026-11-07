@@ -61,6 +61,8 @@ export interface Aquarium {
   /** false when the doc has no legacy temp/level fields (show '--', not 0). */
   hasStoredReadings?: boolean;
   id: string;
+  deviceId?: string;
+  deviceUid?: string;
   name: string;
   species: string[];
   bioload?: BioloadLevel;
@@ -105,7 +107,6 @@ export interface Aquarium {
   setupStatus?: 'setup' | 'active';
   orgId?: string;
   caretakerIds?: string[];
-  deviceId?: string;
   createdAt?: string;
   updatedAt?: string;
   directorySchemaVersion?: number;

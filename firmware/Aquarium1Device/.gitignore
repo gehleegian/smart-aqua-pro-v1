@@ -1,0 +1,4 @@
+DeviceIdentity.h
+*secrets.h
+*.bin
+*.elf

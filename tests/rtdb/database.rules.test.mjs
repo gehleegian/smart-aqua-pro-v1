@@ -23,6 +23,7 @@ const TELEMETRY = Object.freeze({
   turbidity: 1,
   ammoniaPpm: 0,
   filterState: 'Active',
+  lightState: 'On',
   equipmentStatus: 'Normal',
   powerStatus: 'Online',
   ph: 7,
@@ -177,6 +178,20 @@ test('AUTH-01 unauthenticated access is denied', async () => {
   const database = anonymousDatabase();
   await assertFails(get(ref(database, `devices/${AQUARIUM_A}/telemetry`)));
   await assertFails(set(ref(database, `devices/${AQUARIUM_A}/control`), CONTROL));
+});
+
+test('device relay reports accept only known states and preserve ownership restrictions', async () => {
+  const path = `devices/${AQUARIUM_A}/telemetry`;
+  const device = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(device, path), { ...TELEMETRY, lightState: 'On', filterState: 'Active' }));
+  await assertSucceeds(set(ref(device, path), { ...TELEMETRY, lightState: 'Off', filterState: 'Inactive' }));
+  const legacy = { ...TELEMETRY }; delete legacy.lightState;
+  await assertSucceeds(set(ref(device, path), legacy));
+  await assertFails(set(ref(device, path), { ...TELEMETRY, lightState: 'invalid' }));
+  await assertFails(set(ref(device, path), { ...TELEMETRY, lightState: true }));
+  await assertFails(set(ref(humanDatabase('user-a'), path), TELEMETRY));
+  await assertFails(get(ref(humanDatabase('user-b'), path)));
+  await assertFails(set(ref(deviceDatabase('device-b'), path), TELEMETRY));
 });
 
 test('AUTH-02 clients cannot read or modify authorization projections', async () => {
@@ -620,6 +635,18 @@ test('PARENT-01 through PARENT-04 parent reads cannot bypass child rules', async
   await assertSucceeds(
     get(ref(database, `devices/${AQUARIUM_A}/history/${HISTORY_DATE}`))
   );
+});
+
+test('TURBIDITY categorical readings are device-only and enum validated', async () => {
+  const path = `devices/${AQUARIUM_A}/telemetry`;
+  for (const turbidityState of ['Clear', 'Cloudy', 'Unknown']) {
+    await assertSucceeds(set(ref(deviceDatabase('device-a'), path), { ...TELEMETRY, turbidityState }));
+  }
+  for (const turbidityState of ['clear', 'Dirty', 25]) {
+    await assertFails(set(ref(deviceDatabase('device-a'), path), { ...TELEMETRY, turbidityState }));
+  }
+  await assertFails(set(ref(humanDatabase('user-a'), path), { ...TELEMETRY, turbidityState: 'Clear' }));
+  await assertFails(set(ref(deviceDatabase('device-b'), path), { ...TELEMETRY, turbidityState: 'Clear' }));
 });
 
 test('PARENT-05 parent and multi-location writes cannot bypass child rules', async () => {

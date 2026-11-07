@@ -1,6 +1,8 @@
 import { getActiveMembership } from './orgContext';
 import { collection, doc, getDoc, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import type { AquariumUpdatePayload } from '../types/aquariumManagement';
+import { normalizeDeviceId, validateDeviceId } from './deviceClaimContracts';
 import type {
   Aquarium,
   AquariumDirectoryEntry,
@@ -207,6 +209,8 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
 
   return {
     id: docId,
+    deviceId: typeof data.deviceId === 'string' ? data.deviceId : undefined,
+    deviceUid: typeof data.deviceUid === 'string' ? data.deviceUid : undefined,
     name: readString(data.name, 'Unnamed Aquarium'),
     species: Array.isArray(data.species)
       ? data.species.filter((species): species is string => typeof species === 'string')
@@ -236,7 +240,6 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     caretakerIds: Array.isArray(data.caretakerIds)
       ? data.caretakerIds.filter((id): id is string => typeof id === 'string')
       : [],
-    deviceId: typeof data.deviceId === 'string' ? data.deviceId : undefined,
     tankType: typeof data.tankType === 'string' ? data.tankType : undefined,
     tankSizeLiters: readOptionalNumber(data.tankSizeLiters),
     tankSizeCategory:
@@ -493,36 +496,44 @@ export async function getAquariumById(aquariumId: string) {
   }
 }
 
-/** @deprecated Sprint 3: aquariums are created by claiming a device (orgService.claimDevice). Rules deny this write. */
-export async function createAquarium(data: Omit<Aquarium, 'id'>): Promise<void> {
+/**
+ * Main (PR #8): ID-only claim through Gian's /api/devices/claim route.
+ * SUPERSEDED (decision 2026-11-07): the app claims through orgService.claimDevice
+ * (claim code + organizations). Kept for reference; no screen calls it, and the
+ * route stays disabled unless its server credentials are configured.
+ */
+export async function createAquarium(
+  profile: AquariumUpdatePayload,
+  device: { deviceId: string },
+): Promise<void> {
   const currentProfile = await requireAuthenticatedProfile();
 
   if (currentProfile.role === 'Admin') {
     throw new Error('Administrators cannot create or manage user aquariums.');
   }
 
-  if (data.ownerId !== currentProfile.id) {
-    throw new Error('You can only create aquariums for your own account.');
+  const validation = validateDeviceId(device.deviceId);
+  if (validation) throw new Error(validation);
+  const user = auth.currentUser;
+  if (!user) throw new Error('Please sign in again.');
+  let response: Response;
+  try {
+    response = await fetch('/api/devices/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      cache: 'no-store',
+      body: JSON.stringify({ deviceId: normalizeDeviceId(device.deviceId), profile }),
+    });
+  } catch {
+    throw new Error('Connection interrupted. Retry with the same account and device ID to resume setup.');
   }
-
-  const now = new Date().toISOString();
-  const aquariumRef = doc(collection(db, 'aquariums'));
-  const payload = {
-    ...data,
-    ownerId: currentProfile.id,
-    ownerName: currentProfile.name,
-    createdAt: now,
-    updatedAt: now,
-    directorySchemaVersion: AQUARIUM_DIRECTORY_SCHEMA_VERSION,
-  };
-  const batch = writeBatch(db);
-
-  batch.set(aquariumRef, payload);
-  batch.set(
-    doc(db, AQUARIUM_DIRECTORY_COLLECTION, aquariumRef.id),
-    buildAquariumDirectoryDocument(payload, now)
-  );
-  await batch.commit();
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(typeof result?.message === 'string' ? result.message :
+    'Device setup is unavailable. Retry with the same account and device ID.');
+  if (result?.status !== 'claimed' || typeof result.aquariumId !== 'string' ||
+    result.deviceId !== normalizeDeviceId(device.deviceId)) {
+    throw new Error('Unexpected setup response. Retry with the same account and device ID.');
+  }
 }
 
 export async function updateAquarium(

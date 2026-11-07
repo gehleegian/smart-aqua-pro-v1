@@ -286,7 +286,7 @@ export function normalizeDevicePowerStatus(value: unknown): 'Online' | 'Offline'
 }
 
 export function formatWaterLevel(value: unknown, available = true): string {
-  return available && bounded(value, 0, 100) ? `${value}%` : '--';
+  return available && bounded(value, 0, 100) ? `${Math.round((value as number) * 10) / 10}%` : '--';
 }
 
 

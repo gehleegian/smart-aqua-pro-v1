@@ -23,13 +23,13 @@ import {
   getDeviceTelemetryState,
   getDeviceTelemetryStatusText,
   getFreshTelemetrySnapshot,
+  getReportedManualStatus,
   type DeviceShadow,
 } from '../types/device';
 import type {
   ManualActionDisplay,
   ManualActionLock,
   MonitoringAquarium,
-  SimulationScenario,
   SystemField,
   SystemMode,
   TelemetrySource,
@@ -46,8 +46,7 @@ import {
   prepareAutomationSettings,
   systemStatusConfig,
 } from '../utils/monitoringHelpers';
-import { createSimulatedTelemetry } from '../utils/monitoringSimulator';
-import { assessAquarium, getEffectiveThresholds } from '../utils/conditionAssessment';
+import { assessAquarium } from '../utils/conditionAssessment';
 import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -88,8 +87,6 @@ export function useMonitoringController() {
   >({});
   const [manualNow, setManualNow] = useState(() => Date.now());
   const [telemetryNow, setTelemetryNow] = useState(() => Date.now());
-  const [simulationEnabled, setSimulationEnabled] = useState(false);
-  const [simulationScenario, setSimulationScenario] = useState<SimulationScenario>('normal');
   const manualTimersRef = useRef<Set<number>>(new Set());
   const aquariumSubscriptionKey = useMemo(
     () =>
@@ -235,6 +232,9 @@ export function useMonitoringController() {
       subscribeToDeviceShadow(
         aquariumId,
         (shadow) => {
+          // A just-arrived server timestamp must be compared with receive time,
+          // not the previous five-second UI tick (which can precede the reading).
+          setTelemetryNow(Date.now());
           setDeviceShadows((prev) => ({
             ...prev,
             [aquariumId]: shadow,
@@ -293,31 +293,25 @@ export function useMonitoringController() {
 
   const liveAquariums = useMemo<MonitoringAquarium[]>(() => {
     return aquariums.map((aquarium) => {
-      const liveTelemetry = deviceShadows[aquarium.id]?.telemetry;
-      const thresholds = getEffectiveThresholds(aquarium as unknown as Record<string, unknown>, ruleConfig);
-      const telemetry = simulationEnabled
-        ? (thresholds
-          ? createSimulatedTelemetry(thresholds, simulationScenario, telemetryNow, aquarium) ?? undefined
-          : undefined)
-        : liveTelemetry;
+      // Main (PR #8) removed the browser telemetry simulator: live data only.
+      const telemetry = deviceShadows[aquarium.id]?.telemetry;
       const telemetryState = getDeviceTelemetryState(telemetry, telemetryNow);
       const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow);
-      const telemetrySource: TelemetrySource = simulationEnabled
-        ? 'simulated'
-        : snapshot
-          ? 'live'
-          : 'unavailable';
+      // Main (PR #8): light/filter as the device reports them, when fresh.
+      const manualStatus = getReportedManualStatus(getManualSystemStatus(aquarium), telemetry, telemetryNow);
+      const telemetrySource: TelemetrySource = snapshot ? 'live' : 'unavailable';
       const assessment = assessAquarium({
         aquarium: aquarium as unknown as Record<string, unknown>,
         reading: snapshot && telemetry ? telemetry as unknown as Record<string, unknown> : null,
-        source: snapshot ? telemetrySource : 'unavailable',
+        source: telemetrySource,
         now: telemetryNow,
         ruleConfig,
-        engineState: simulationEnabled ? null : engineStates[aquarium.id] ?? null,
+        engineState: engineStates[aquarium.id] ?? null,
       });
 
       return {
         ...aquarium,
+        turbidityState: snapshot?.turbidityState,
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
         // TDS ppm stands on its own (firmware may send ppm without the legacy purity %).
@@ -330,7 +324,8 @@ export function useMonitoringController() {
           ? snapshot.powerStatus ?? aquarium.powerStatus
           : aquarium.powerStatus,
         quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
-        filter: snapshot?.filterState ?? aquarium.filter,
+        filter: manualStatus.filter,
+        light: manualStatus.light,
         healthStatus: assessment.overallSeverity === 'normal' ? 'healthy' : 'warning',
         assessment,
         telemetrySource,
@@ -342,16 +337,11 @@ export function useMonitoringController() {
         hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
         telemetryState,
         sensorValidity: snapshot?.validity ?? null,
-        commandStatus: simulationEnabled ? 'none' : getDeviceCommandStatus(deviceShadows[aquarium.id], telemetryNow),
-        manualStatus: snapshot?.filterState
-          ? {
-              ...getManualSystemStatus(aquarium),
-              filter: snapshot.filterState,
-            }
-          : aquarium.manualStatus,
+        commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], telemetryNow),
+        manualStatus,
       };
     });
-  }, [aquariums, deviceShadows, engineStates, ruleConfig, simulationEnabled, simulationScenario, telemetryNow]);
+  }, [aquariums, deviceShadows, engineStates, ruleConfig, telemetryNow]);
 
   const ownerCards = useMemo(
     () => buildMonitoringOwners(liveAquariums, users),
@@ -367,9 +357,6 @@ export function useMonitoringController() {
   }, [liveAquariums, selectedAquariumId]);
 
   const liveDataError = useMemo(() => {
-    if (simulationEnabled) {
-      return '';
-    }
     const preferredAquariums =
       userRole === 'Admin' && selectedOwnerId
         ? liveAquariums.filter((aquarium) => aquarium.ownerId === selectedOwnerId)
@@ -403,7 +390,6 @@ export function useMonitoringController() {
     selectedAquariumId,
     selectedOwnerId,
     userRole,
-    simulationEnabled,
   ]);
 
   const automationSettings = useMemo(() => {
@@ -480,10 +466,6 @@ export function useMonitoringController() {
   };
 
   const openAutomationEditor = () => {
-    if (simulationEnabled) {
-      setSystemError('Controls are disabled while simulated telemetry is active.');
-      return;
-    }
 
     if (!selectedAquarium) {
       return;
@@ -606,10 +588,6 @@ export function useMonitoringController() {
   );
 
   const handleSystemToggle = async (field: SystemField) => {
-    if (simulationEnabled) {
-      setSystemError('Controls are disabled while simulated telemetry is active.');
-      return false;
-    }
 
     if (!selectedAquarium) {
       return false;
@@ -783,10 +761,6 @@ export function useMonitoringController() {
   };
 
   const handleManualAction = async (field: SystemField) => {
-    if (simulationEnabled) {
-      setSystemError('Controls are disabled while simulated telemetry is active.');
-      return;
-    }
 
     if (!selectedAquarium) {
       return;
@@ -817,10 +791,6 @@ export function useMonitoringController() {
   };
 
   const handleAutomationSave = async () => {
-    if (simulationEnabled) {
-      setAutomationError('Automation cannot be changed while simulated telemetry is active.');
-      return;
-    }
 
     if (!selectedAquarium) {
       return;
@@ -856,10 +826,6 @@ export function useMonitoringController() {
   };
 
   const handleAutomationEnabledToggle = async () => {
-    if (simulationEnabled) {
-      setSystemError('Automation cannot be changed while simulated telemetry is active.');
-      return;
-    }
 
     if (!selectedAquarium || !automationSettings) {
       return;
@@ -870,6 +836,13 @@ export function useMonitoringController() {
       ...automationSettings,
       enabled: !automationSettings.enabled,
     };
+    if (nextSettings.enabled) {
+      const prepared = prepareAutomationSettings(nextSettings);
+      if (!prepared.settings) {
+        setSystemError(prepared.error);
+        return;
+      }
+    }
 
     setSavingAutomationEnabled(true);
     setSystemError('');
@@ -890,12 +863,12 @@ export function useMonitoringController() {
   };
 
   const handleSystemModeChange = async (mode: SystemMode) => {
-    if (simulationEnabled) {
-      setSystemError('Control mode cannot be changed while simulated telemetry is active.');
-      return;
-    }
 
-    if (!selectedAquarium || mode === systemMode) {
+    // A newly claimed aquarium has no control snapshot yet. Clicking the already
+    // selected Manual tab must initialize it so the ESP32 can establish access
+    // and a safe command baseline before the first equipment command.
+    if (!selectedAquarium ||
+        (mode === systemMode && deviceShadows[selectedAquarium.id]?.control)) {
       return;
     }
 
@@ -952,8 +925,6 @@ export function useMonitoringController() {
     showAutomationModal,
     systemError,
     systemMode,
-    simulationEnabled,
-    simulationScenario,
     userName,
     userRole,
     actions: {
@@ -971,8 +942,6 @@ export function useMonitoringController() {
       removeFeedingTime,
       selectAquarium,
       selectOwner: (ownerId: string) => setSelectedOwnerId(ownerId),
-      setSimulationEnabled,
-      setSimulationScenario,
       updateAutomationDraft,
       updateFeedingTime,
     },
