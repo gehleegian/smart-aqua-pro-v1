@@ -336,6 +336,7 @@ export type SpeciesConfig = ApprovalMeta & {
 
 export type CompareOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq';
 const COMPARE_OPS: readonly CompareOp[] = ['gt', 'gte', 'lt', 'lte', 'eq', 'neq'];
+export const COMPARE_OPS_LIST = COMPARE_OPS;
 export type RuleCondition = {
   op: CompareOp;
   /** Compare against the aquarium's effective threshold (min or max) for the rule's parameter. */
