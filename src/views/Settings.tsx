@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Bell,
   Database,
   Cpu,
   Info,
-  Mail,
   PencilLine,
   Thermometer,
   Droplets,
@@ -14,24 +12,15 @@ import {
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
-import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import LoadingState from '../components/ui/LoadingState';
-import Toggle from '../components/ui/Toggle';
 import ProfileModal from '../components/settings/ProfileModal';
 import { getCurrentUserProfile, updateCurrentUserProfile } from '../services/userService';
 import type { UserData } from '../types/user';
 import StatusMessage from '../components/ui/StatusMessage';
+import { NotificationSettings } from '../components/settings/NotificationSettings';
 
 export default function Settings() {
-  const [notifications, setNotifications] = useState({
-    email: true,
-    push: true,
-    critical: true,
-    warning: true,
-    info: false,
-    powerOutage: true,
-  });
   const [profile, setProfile] = useState<UserData | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -182,70 +171,7 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        <Card>
-          <CardHeader>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-white">
-              <Bell className="w-5 h-5 text-amber-400" />
-              Notification Preferences
-              <Badge>Sample data</Badge>
-            </h3>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { key: 'email', label: 'Email Notifications', desc: 'Receive alerts via email' },
-                { key: 'push', label: 'Push Notifications', desc: 'Browser push notifications' },
-                { key: 'critical', label: 'Critical Alerts', desc: 'Power outage, system failure' },
-                { key: 'warning', label: 'Warning Alerts', desc: 'Parameter out of range' },
-                { key: 'info', label: 'Info Notifications', desc: 'Feeding completed, routine events' },
-                { key: 'powerOutage', label: 'Power Outage Alerts', desc: 'Immediate notification on power loss' },
-              ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-white">{item.label}</p>
-                    <p className="text-xs text-slate-400">{item.desc}</p>
-                  </div>
-                  <Toggle
-                    checked={notifications[item.key as keyof typeof notifications]}
-                    label={item.label}
-                    onChange={() =>
-                      setNotifications({
-                        ...notifications,
-                        [item.key]: !notifications[item.key as keyof typeof notifications],
-                      })
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 border-t border-slate-700 pt-4">
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-                <Mail className="w-4 h-4 text-slate-400" />
-                Email Settings
-              </h4>
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="settings-notification-email" className="mb-1 block text-xs text-slate-400">Notification Email</label>
-                  <input
-                    id="settings-notification-email"
-                    type="email"
-                    defaultValue="admin@smartaqua.pro"
-                    className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="settings-sms-number" className="mb-1 block text-xs text-slate-400">SMS Number</label>
-                  <input
-                    id="settings-sms-number"
-                    type="tel"
-                    defaultValue="+63 900 000 0000"
-                    className="w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-300/30"
-                  />
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {profile?.role !== 'Admin' ? <NotificationSettings /> : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
