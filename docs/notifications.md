@@ -40,7 +40,7 @@ Users edit these in **Settings → Alerts and notifications**. Only the user can
 
 ## 4. Tokens: `users/{uid}/fcmTokens/{sha256(token)[:40]}`
 
-`{ token, platform: web | ios-pwa | android, userAgent: "Chrome on macOS", createdAt, lastSeenAt }`.
+`{ token, platform: web | ios-pwa | android | ios, userAgent: "Chrome on macOS", createdAt, lastSeenAt }`.
 
 - **Written by the user's own browser** after they press **Turn on alerts**. The permission prompt is never shown on page load.
 - `lastSeenAt` is refreshed on each app start if alerts are already on.

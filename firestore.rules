@@ -664,7 +664,7 @@ service cloud.firestore {
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0
           && request.resource.data.token.size() <= 4096
-          && request.resource.data.platform in ['web', 'ios-pwa', 'android']
+          && request.resource.data.platform in ['web', 'ios-pwa', 'android', 'ios']
           && request.resource.data.userAgent is string
           && request.resource.data.userAgent.size() <= 120
           && request.resource.data.createdAt is int

@@ -296,7 +296,13 @@ test('ORG-13 FCM tokens and notification prefs: only the user themself, valid sh
   await assertSucceeds(getDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID)));
   await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', 'not-a-hash'), tokenDoc()));
   await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ extra: true })));
+  // Every allowed platform, including the native iOS app ('ios'), is accepted.
+  for (const platform of ['web', 'ios-pwa', 'android', 'ios']) {
+    await assertSucceeds(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ platform })), `platform ${platform}`);
+  }
   await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ platform: 'desktop' })));
+  await assertFails(setDoc(doc(me, 'users/care-x/fcmTokens', TOKEN_ID), tokenDoc({ platform: 'IOS' })), 'platform match is exact');
+  await assertFails(setDoc(doc(me, 'users/owner-a/fcmTokens', TOKEN_ID), tokenDoc({ platform: 'ios' })), 'ios does not bypass the owner check');
   await assertFails(setDoc(doc(me, 'users/owner-a/fcmTokens', TOKEN_ID), tokenDoc()), 'not someone else\'s');
   await assertFails(getDoc(doc(context('owner-a'), 'users/care-x/fcmTokens', TOKEN_ID)), 'an owner cannot read a caretaker\'s tokens');
   await assertFails(getDoc(doc(context('admin-p', { platformAdmin: true }), 'users/care-x/fcmTokens', TOKEN_ID)));
