@@ -117,6 +117,14 @@ History stays sampled: one row every 5 minutes, plus an immediate row whenever a
 
 To disable a rule, set `enabled: false`. Deleting a rule doc also works, but disabling keeps the audit trail.
 
+**In the app (Sprint 4, after go-live).** The platform admin can do steps 2–6 in **Rules Editor**, without editing JSON or running a script:
+- create and edit rules and species defaults, validated with the engine's own types (`validateRuleDraft` / `validateSpeciesDraft` in the shared core);
+- **Preview** which rules a sample reading matches;
+- **Approve**: it sets `approvedBy` and `approvedAt` and requires a cited `source`, not "TBD";
+- **Export** a `docs/rule-matrix.md`-style file for the sign-off.
+
+Any edit returns the item to `draft`. Every change goes through the `saveRuleConfig` / `approveRuleConfig` callables and is written to `audit_logs`. The engine picks changes up within its 5-minute cache. The seed JSON stays the source for a fresh project.
+
 ## 7. Alert lifecycle: dedup, cooldown, auto-resolve
 
 Constants (shared core): `ALERT_COOLDOWN_MS = 15 min`, `AUTO_RESOLVE_NORMAL_COUNT = 3`, `ALERT_TOUCH_INTERVAL_MS = 5 min`.

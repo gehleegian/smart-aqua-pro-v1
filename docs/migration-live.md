@@ -149,12 +149,14 @@ From then on, a missing `<sensor>ReadingValid` flag counts as a sensor fault (de
 - [ ] Back up again (reads only): `firebase database:get /authorization --project practice-smartaqua > backup-authorization-$(date +%F).json` (keep it out of git). Export `aquariums`, `users` and `aquarium_directory` from Firestore.
 - [ ] Generate and set the claim-code pepper. **Never print it into a shared terminal log, and never commit it.**
   `firebase functions:secrets:set CLAIM_CODE_PEPPER --project practice-smartaqua`
-- [ ] Decide whether to deploy the authorization-sync functions (`syncAquariumAuthorizationMirror`, `syncUserAuthorizationMirror`, `reconcileAuthorizationMirror`, …). They were never deployed (step 2), and the Sprint 3 callables rely on the same mirror sync. **This needs your decision.**
+- [ ] **Decided (Sprint 4):** deploy the authorization-sync functions here, at go-live: `syncAquariumAuthorizationMirror`, `syncUserAuthorizationMirror`, `syncUserVerificationPolicyMirror`, `reconcileAuthorizationMirror`. They were never deployed (step 2), and the callables rely on the same mirror sync.
+- [ ] **Decided (Sprint 4): go-live order is migrate (7c) → rules (7d) → app (7e), back to back,** with the **mobile app updated before go-live**. The new rules deny the old `ownerId` list query that the current mobile build uses.
 
 ### 7b. Deploy the Sprint 3 functions
 ```bash
 npm run build:functions
-firebase deploy --only functions:claimDevice,functions:createInvite,functions:acceptInvite,functions:revokeInvite,functions:removeMember,functions:updateCaretakerAssignments,functions:setOrganizationStatus,functions:syncOrganizationAuthorizationMirror,functions:syncMemberAuthorizationMirror --project practice-smartaqua
+firebase deploy --only functions:syncAquariumAuthorizationMirror,functions:syncUserAuthorizationMirror,functions:syncUserVerificationPolicyMirror,functions:reconcileAuthorizationMirror --project practice-smartaqua
+firebase deploy --only functions:claimDevice,functions:createInvite,functions:acceptInvite,functions:revokeInvite,functions:removeMember,functions:setMemberRole,functions:updateCaretakerAssignments,functions:setOrganizationStatus,functions:syncOrganizationAuthorizationMirror,functions:syncMemberAuthorizationMirror --project practice-smartaqua
 ```
 Nothing calls them until the app is deployed (7e).
 
@@ -190,11 +192,30 @@ firebase deploy --only firestore:rules,firestore:indexes,database --project prac
 ### 7e. Deploy the web app
 Users with no org now see "Add your first device / Waiting for an invite". Existing owners land in their personal org.
 
+### 7f. Sprint 4 functions and push notifications
+
+Deploy together with 7b. They are emulator-tested only (`npm run test:sprint4-functions`, `npm run test:sprint4-e2e`, `npm run test:smoke`).
+
+1. **VAPID key (web push).** Firebase console → Project settings → Cloud Messaging → Web Push certificates → **Generate key pair**.
+   - Put the **public** key in the web build's environment as `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (hosting env or `.env.local`, which is gitignored).
+   - The private key stays in Firebase. Never copy it into the repo, an env file or a chat.
+   - Without the public key, "Turn on alerts" says push is not configured, and nothing else changes.
+2. **Functions:**
+   ```bash
+   firebase deploy --only functions:logMaintenance,functions:logDeviceCommand,functions:logDeviceCommandAck,functions:checkCommandAcks,functions:notifyAlertRecord,functions:notifyCleaningReminder,functions:saveRuleConfig,functions:approveRuleConfig --project practice-smartaqua
+   ```
+   `checkCommandAcks` is a 1-minute schedule (Cloud Scheduler, Blaze plan). It only writes when a command is past 30 s without an ack.
+3. **Rules and indexes:** included in 7d (`fcmTokens`, `notificationPrefs`, `command_logs`, `security_audit_events`, scheduled acks, `coOwnerUids`, and three new indexes).
+4. **Check real delivery** (FCM cannot be emulated). Follow `docs/notifications.md` §6.
+
+**Expected after deploy:** the live firmware does not ack commands yet, so every command shows **No response** (grey) in the command log until Gian's firmware update (`docs/firmware-changes.md` §4, §11).
+
 ### Rollback (reverse order)
 1. Redeploy the previous rules: `git show <previous commit>:firestore.rules` and `database.rules.json`, then `firebase deploy --only firestore:rules,database`.
 2. Redeploy the previous web build.
 3. Run `node --experimental-strip-types scripts/migrate-orgs.ts --project practice-smartaqua --database-url <RTDB URL> --rollback`. It removes exactly what the migration created (docs marked `migratedAt`), clears the `platformAdmin` claims and re-syncs the mirror. Caretakers added after the migration lose access; the script warns about each one.
-4. Optionally delete the Sprint 3 functions: `firebase functions:delete claimDevice createInvite acceptInvite revokeInvite removeMember updateCaretakerAssignments setOrganizationStatus syncOrganizationAuthorizationMirror syncMemberAuthorizationMirror`.
+4. Optionally delete the Sprint 3 and 4 functions: `firebase functions:delete claimDevice createInvite acceptInvite revokeInvite removeMember setMemberRole updateCaretakerAssignments setOrganizationStatus syncOrganizationAuthorizationMirror syncMemberAuthorizationMirror logMaintenance logDeviceCommand logDeviceCommandAck checkCommandAcks notifyAlertRecord notifyCleaningReminder saveRuleConfig approveRuleConfig`.
+   Co-owners added in the app would lose owner access with the old rules. Maintenance logs, command logs and FCM tokens are kept and are harmless.
 
 The live device is never touched by either direction. Its `deviceUids` binding stays as it is.
 

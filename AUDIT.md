@@ -153,6 +153,31 @@ The repo-only audit concluded PLACEHOLDER because no firmware or device provisio
 - **Device provisioning** (resolves §6 gap 2): `scripts/provision-device.ts` (device account, HMAC-hashed claim code, QR label, gitignored credentials header). Migration: `scripts/migrate-orgs.ts` (`docs/migration-live.md` step 7).
 - **Verified on the emulator only:** `test:org-access`, `test:firestore-org-rules`, `test:rtdb-org-rules`, `test:migrate-orgs`, `test:sprint3-e2e`. ESP32 sign-in with the provisioned credentials needs hardware verification (Gian).
 
+### 4.5 Sprint 4: notifications, maintenance, controls, admin (same branch; nothing deployed)
+
+- **Clickable demo:** `npm run demo` (`docs/demo.md`) runs the emulators, an emulator-only seed (`scripts/seed-demo.ts`, refuses non-`demo-*` projects) and Next.js. Playwright smoke tests are in `tests/e2e`.
+  - The seed telemetry is **demo data, requested for the demo**. It is deterministic, marked `demoSeed`, and fed through the real ingest pipeline. The app does not generate it.
+- **Bugs the smoke tests found (all fixed):**
+  - the header bell showed hard-coded **sample notifications** (now real alerts);
+  - the TDS tile showed `100%` purity instead of ppm (dashboard and monitoring);
+  - aquarium cards showed 0 °C / 0% without readings;
+  - the Equipment card claimed Active/On without live data;
+  - the text "X is no live data";
+  - initials included punctuation;
+  - the Automation page was **sample data with non-goldfish species** (now real per-tank schedules);
+  - a race where telemetry ingest made a concurrent caretaker/org mirror sync fall to `transitioning` (access denied);
+  - the demo needed one RTDB namespace (`DATABASE_URL`).
+- **FR15 push:**
+  - `notifyAlertRecord` sends on alert open or escalation only, to org owners plus the assigned caretakers, after their preferences. A sender interface: FCM / emulator outbox / test fake. Invalid tokens are deleted.
+  - Web side: service worker, PWA manifest, "Turn on alerts". See `docs/notifications.md`. **Real delivery is not verified** (needs a deploy and the VAPID key).
+- **FR20 maintenance:** the `logMaintenance` callable. Applied → log → recommendation applied → cleaning cycle reset (existing trigger). Per-tank history.
+- **FR17/FR19:** the `command_logs` triggers plus a 30 s `no_response` check. Command history per tank; "No response" is neutral, since the live firmware does not ack.
+- **FR18:** schedule validation (30-min feeding gap, 1–24 h, Asia/Manila), "Next scheduled", and a real Automation page. The device runs the schedules (`docs/firmware-changes.md` §11). Scheduled acks carry `source: "schedule"` (additive).
+- **FR13 admin side:** the platform-admin Rules Editor (validate, preview, approve with a citation, export) through audited callables.
+- **FR22:** audit-log viewer (owner: own org; admin: all orgs plus security events).
+- **Co-owners:** `setMemberRole`, owner removal, the ≥1-owner guard, `coOwnerUids` in the mirror and RTDB rules.
+- **Verified on the emulator only:** `test:sprint4-functions`, `test:org-access`, `test:firestore-org-rules`, `test:rtdb-org-rules`, `test:sprint4-e2e`, `test:smoke`. **Needs hardware:** scheduled actions, acks, NTP and offline behaviour (Gian).
+
 ### Mocks and simulators found
 
 | Location | What it is | Reaches prod? |

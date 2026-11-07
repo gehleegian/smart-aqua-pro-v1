@@ -151,6 +151,14 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 | `status` | `"done"` \| `"failed"` | |
 | `executedAt` | number | **Must be the server timestamp** `{".sv":"timestamp"}` (rule: `== now`) |
 | `error` | string ≤ 200 chars | optional, normally sent with `failed` |
+| `source` | `"app"` \| `"schedule"` | **new in Sprint 4, additive, optional.** Absent or `"app"` = an ack for `commands/latest` |
+| `type` | `"feed_now"` \| `"set_filter_state"` \| `"set_light_state"` | **new, required when `source` is `"schedule"`** |
+| `state` | `"Active"` \| `"Inactive"` \| `"On"` \| `"Off"` | new, optional (light/filter) |
+
+**Scheduled actions (Sprint 4, FR18/FR19).** When the device runs a schedule entry on its own (§3 `control`), it acks it too, so it appears in the command log:
+- `source: "schedule"`, a `type`, and a `commandId` that starts with `schedule-` (for example `schedule-feed_now-<epoch seconds>`).
+- The rules accept a `schedule-*` id without a matching `commands/latest`. Every other ack must still match `commands/latest/commandId`.
+- Old firmware that never sends `source` is unaffected.
 
 **Who can write:**
 - Only a principal with `principalType: device` that is listed in `deviceUids` for this aquarium, and only while the aquarium is `active`.
@@ -160,7 +168,9 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 **What the UI shows** (`getCommandStatus()`, `COMMAND_ACK_TIMEOUT_MS = 30_000`):
 - **Pending** ("Waiting for device"): sent, no matching ack yet.
 - **Done** or **Failed**: a matching ack arrived.
-- **No response**: no matching ack 30 s after `requestedAt`.
+- **No response**: no matching ack 30 s after `requestedAt`. Shown in neutral grey with an explanation, not as an error: the live firmware does not ack yet.
+
+**Command log (Sprint 4).** Cloud Functions copy every `commands/latest` write and every ack into Firestore `command_logs/{aquariumId}_{commandId}`: type, state, requestedBy (uid and name), requestedAt, `status` `pending → done | failed | no_response`, executedAt, error, `source`. A scheduled check marks `no_response` after 30 s; a late ack still turns it into `done` (with `lateAck: true`). Only functions write the log; the tank's members read it.
 
 ---
 

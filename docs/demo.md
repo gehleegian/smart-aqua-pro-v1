@@ -39,3 +39,12 @@ Options:
 `npm run test:smoke` runs the same stack on its own project (`demo-smartaqua-smoke`, port 3100, `--no-live`) and clicks through the key flows (`tests/e2e/smoke.spec.ts`). Screenshots go to `docs/screens/`, which is gitignored except the curated `doc-*.png` used in the docs.
 
 The emulator ports are fixed (`firebase.json`), so stop `npm run demo` before running the smoke tests.
+
+## Screens (from the smoke tests)
+
+| | |
+|---|---|
+| ![Empty state for a new account](screens/doc-empty-state.png) | ![Setup wizard: fish and bioload preview](screens/doc-setup-wizard-fish.png) |
+| ![Team: co-owners and caretakers](screens/doc-team.png) | ![Log maintenance from an Applied recommendation](screens/doc-log-maintenance.png) |
+| ![Tank: maintenance and command history](screens/doc-monitoring-tank-history.png) | ![Alerts and notification preferences](screens/doc-notification-settings.png) |
+| ![Admin rules editor with preview](screens/doc-rules-editor.png) | ![Owner audit log](screens/doc-audit-log-owner.png) |

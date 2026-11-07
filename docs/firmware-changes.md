@@ -268,3 +268,36 @@ grant_type=refresh_token&refresh_token=<refreshToken>
 - [ ] **Readings outside the profile limits:** Aquarium 1 reads 26.5 °C, pH 8.1 and a water level around 16 %. Are these real, or does the probe need calibrating?
 - [ ] **Device token:** how is it minted and stored? It must not be in the sketch or in git. Note the token's lifetime and how it is refreshed.
 - [ ] **Firmware in the repo:** commit the firmware (without secrets) to `firmware/`, so future changes can be reviewed and applied directly.
+
+## 11. Run the schedules on the device (Sprint 4, FR18)
+
+The owner edits the schedule in the app. It is written to the existing `devices/{aquariumId}/control` node (`docs/device-contract.md` §3): `mode`, `automationEnabled`, `feedingTimes` (`"HH:mm"` list, at least 30 min apart), `lightOnTime`, `lightOffTime`, `filtrationStartTime`, `filtrationRuntimeHours` (1–24). **All times are Asia/Manila (UTC+8, no daylight saving).** The app only stores the schedule; **the device runs it**.
+
+1. **Local clock from NTP.** Use `configTime(8 * 3600, 0, "pool.ntp.org", "time.google.com")` (already needed for §2) and `getLocalTime(&tm)`. Do not run any schedule until the clock is set (year ≥ 2026).
+2. **Keep running without Wi-Fi.** Cache the last `control` in `Preferences` (NVS) every time it changes, and load it at boot. The ESP32 RTC keeps time between NTP syncs, so schedules continue through a Wi-Fi drop. On reconnect, re-read `control`.
+3. **Fire each event once.** Check about every 10–20 s. Remember the last fired `HH:mm` per event (in RAM, plus NVS for feeding) so a reboot inside the same minute does not feed twice. If the device was off at the scheduled minute, **do not** feed late: skip the missed feeding. The light and the filter should go to the state they should be in now.
+4. **Only in automation mode.** Run the schedule only when `mode == "automation"` and `automationEnabled == true`. Manual commands (§4) always work.
+5. **Ack every scheduled action**, so it appears in the app's command log:
+   ```cpp
+   void ackScheduled(const char *type, const char *state, bool ok, const String &err) {
+     FirebaseJson ack;
+     ack.set("commandId", String("schedule-") + type + "-" + String((uint32_t)time(nullptr)));
+     ack.set("status", ok ? "done" : "failed");
+     ack.set("executedAt/.sv", "timestamp");
+     ack.set("source", "schedule");
+     ack.set("type", type);                       // feed_now | set_light_state | set_filter_state
+     if (state) ack.set("state", state);          // On/Off or Active/Inactive
+     if (!ok && err.length()) ack.set("error", err.substring(0, 200));
+     Firebase.RTDB.setJSON(&fbdo, ("devices/" + aquariumId + "/commandAck/latest").c_str(), &ack);
+   }
+   ```
+   - Offline: queue up to ~20 acks in RAM and send them when Wi-Fi is back. `executedAt` is then the upload time; that is acceptable for now.
+   - The `source`, `type` and `state` fields are additive. Old acks (§4) do not change.
+
+- [ ] Schedules fire at the right Manila time (compare with a phone clock).
+- [ ] Unplug the router for 10 minutes across a feeding time: the feed still happens, and its ack shows in the app after reconnecting.
+- [ ] A reboot during a scheduled minute does not feed twice.
+- [ ] Manual mode: no scheduled actions run.
+
+**Requires physical hardware verification.** None of this has been run on a device yet.
+

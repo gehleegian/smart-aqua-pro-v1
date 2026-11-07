@@ -1,6 +1,6 @@
 # SmartAqua Pro: Access Model (Organizations, Device Claiming, Caretakers)
 
-**Status:** implemented and tested on the emulator only (Sprint 3, `feat/device-pipeline`). Nothing is deployed. This model replaces the manuscript's two-role Admin/User model; §1–§5 are written so the team can paste them into Chapter 2.
+**Status:** implemented and tested on the emulator only (Sprints 3–4, `feat/device-pipeline`). Nothing is deployed. This model replaces the manuscript's two-role Admin/User model; §1–§5 are written so the team can paste them into Chapter 2.
 
 ---
 
@@ -11,10 +11,12 @@ SmartAqua Pro has three roles. An account can hold a different role in different
 | Role | How someone gets it | Scope |
 |---|---|---|
 | **Platform Admin** | The existing `Admin` account role, mapped to the `platformAdmin: true` Firebase Auth custom claim | The whole system, **read-only**, plus suspending and reactivating organizations and user accounts |
-| **Organization Owner** | Signs up on their own. Their **first successful device claim creates their organization** (a personal one named after them, or a name they type such as "Davao Pet Shop") | Every aquarium in their organization, its profiles, thresholds, schedules and team |
+| **Organization Owner** | Signs up on their own. Their **first successful device claim creates their organization** (a personal one named after them, or a name they type such as "Davao Pet Shop"). An owner can also **promote a caretaker to co-owner** (Sprint 4) | Every aquarium in their organization, its profiles, thresholds, schedules and team. An org can have several owners and **always keeps at least one** |
 | **Caretaker** | **Only** by accepting an Owner's invite link | Only the aquariums the Owner assigned to them |
 
 A new account that has no organization and no accepted invite can access nothing. The app shows two ways in: **Add your first device** or **Waiting for an invite**. Open sign-up is therefore safe.
+
+A **caretaker may also claim a device of their own.** That always creates or uses *their own* organization, where they are the owner. A caretaker can never claim into the org they care for; adding devices there stays owner-only.
 
 An **organization** is the unit of ownership and isolation. An aquarium belongs to exactly one organization, and data from different organizations is never mixed.
 
@@ -27,15 +29,20 @@ An **organization** is the unit of ownership and isolation. An aquarium belongs 
 | View organization list (all orgs) | ✅ | ❌ | ❌ | ❌ |
 | Suspend or reactivate an organization | ✅ (audited) | ❌ | ❌ | ❌ |
 | Create an organization or assign devices | ❌ | ✅ by claiming a device | ❌ | ✅ first claim creates one |
-| Claim (add) a device | ❌ | ✅ | ❌ (not into the org they care for) | ✅ |
+| Claim (add) a device | ❌ | ✅ | ❌ into the org they care for; ✅ into their own org | ✅ |
 | View aquarium profile, live readings, history | ✅ all (read-only) | ✅ every tank in the org | ✅ assigned tanks | ❌ |
 | View alerts, recommendations, maintenance, reports | ✅ all (read-only) | ✅ | ✅ assigned tanks | ❌ |
 | Mark alert read; apply or dismiss a recommendation | ❌ | ✅ | ✅ assigned tanks | ❌ |
+| Log maintenance (`logMaintenance`) | ❌ | ✅ | ✅ assigned tanks | ❌ |
+| Read maintenance history and command log | ✅ all (read-only) | ✅ | ✅ assigned tanks | ❌ |
+| Receive push alerts for a tank | ❌ | ✅ every tank (per prefs) | ✅ assigned tanks (per prefs) | ❌ |
 | Send a device command (feed now, light, filter) | ❌ | ✅ | ✅ assigned tanks | ❌ |
 | Edit profile, thresholds, setup | ❌ | ✅ | ❌ | ❌ |
 | Edit schedules and automation (`control`) | ❌ | ✅ | ❌ | ❌ |
 | Invite, reassign or remove caretakers | ❌ | ✅ | ❌ | ❌ |
-| Read the org's audit log | ✅ | ✅ own org | ❌ | ❌ |
+| Promote to co-owner, demote, or remove an owner (≥1 owner kept) | ❌ | ✅ | ❌ | ❌ |
+| Read the org's audit log | ✅ all orgs, plus security events | ✅ own org | ❌ | ❌ |
+| Edit and approve rules and species defaults | ✅ (audited) | ❌ | ❌ | ❌ |
 
 Every row is enforced twice: once by Firestore and Realtime Database **security rules** (tested in the emulator), and once by the **callables** that perform the change. The app only hides controls; it is never the security boundary.
 
@@ -94,7 +101,26 @@ provision-device.ts                1. Wi-Fi setup: join the
 - **Reassign** (`updateCaretakerAssignments`) sets exactly which tanks a caretaker sees.
 - **Remove** (`removeMember`) deletes the membership and takes the caretaker off every tank. Access ends **immediately**: Firestore at the commit, and the RTDB mirror before the call returns. Their past actions (commands, applied recommendations, audit entries) stay in the logs.
 - **Revoke** (`revokeInvite`) cancels a pending link.
-- An organization always keeps at least one Owner; an Owner cannot be removed.
+- An organization always keeps at least one Owner (§4a).
+
+## 4a. Co-owners (Sprint 4)
+
+`setMemberRole({ orgId, uid, role })` (Owner only):
+- **Promote** a caretaker to `owner`. They see and manage every tank, and their tank assignments are cleared.
+- **Demote** an owner to `caretaker`. They start with no tanks until an owner assigns some.
+
+`removeMember` now also removes an owner.
+
+**Both refuse anything that would leave the org with no owner** (`failed-precondition`, "An organization must keep at least one owner").
+
+**Primary owner.** Each aquarium keeps one `ownerId`: the legacy single-owner field the RTDB mirror and older clients use. When the member losing owner rights is a tank's `ownerId`, the tank moves to the acting owner, or to another remaining owner when owners change their own role. The audit log records `movedAquariumIds`.
+
+**Access.**
+- Firestore rules already grant every `owner` member.
+- The RTDB mirror gets `coOwnerUids { uid: true }` (all owners except `ownerUid`), and the RTDB rules accept it wherever they accept `ownerUid`.
+- The mirror is re-synced before the callable returns, so a promotion or demotion takes effect at once.
+
+Every change is audited: `member.promote`, `member.demote`, `member.remove`.
 
 ## 5. Why there is an access mirror in the Realtime Database
 
@@ -105,6 +131,7 @@ authorization/aquariums/{aquariumId}
   ownerUid:      <owner uid>
   orgId:         <organization id>
   caretakerUids: { <uid>: true, … }   only caretakers who are still members
+  coOwnerUids:   { <uid>: true, … }   the org's other owners (Sprint 4)
   state:         active | suspended | revoked | transitioning
   deviceUids:    { esp32-SAQ-XXXX-XXXX: true }
 deviceBindings/{deviceUid}: aquariumId           the device reads only its own entry
@@ -125,8 +152,18 @@ deviceBindings/{deviceUid}: aquariumId           the device reads only its own e
 | `invites/{tokenHash}` | orgId, email (lower-case), role `caretaker`, aquariumIds[], tokenHash, expiresAt (48 h), usedAt, usedBy, revokedAt, createdBy, createdAt | functions |
 | `audit_logs/{id}` | actor, action, target, orgId, details, at | functions |
 | `claim_attempts/{uid}` | failures[] (timestamps, last hour) | functions |
+| `maintenance_actions/{id}` | aquariumId, orgId, type, actionType (`cleaning` when it resets the cycle), resetsCleaningCycle, waterChangePercent, notes, performedAt, performedBy, performedByName, performedByRole, recommendationId, ruleId, createdAt | `logMaintenance` |
+| `command_logs/{aquariumId}_{commandId}` | aquariumId, orgId, type, state, requestedBy {uid, displayName}, requestedAt, status (`pending`\|`done`\|`failed`\|`no_response`), executedAt, error, source (`app`\|`schedule`) | functions |
+| `users/{uid}/fcmTokens/{id}`, `users/{uid}/notificationPrefs/default` | see `docs/notifications.md` | the user |
 
-- **Audit actions:** `device.claim`, `invite.create`, `invite.accept`, `invite.revoke`, `member.remove`, `member.assignments`, `org.suspend`, `org.reactivate`, `org.migrate`.
+- **Audit actions:**
+  - `device.claim`
+  - `invite.create`, `invite.accept`, `invite.revoke`
+  - `member.remove`, `member.assignments`, `member.promote`, `member.demote`
+  - `maintenance.log`
+  - `org.suspend`, `org.reactivate`, `org.migrate`
+  - `rule.create|update|approve`, `species.create|update|approve` (with `orgId: null`)
+- **Audit viewer (Sprint 4):** owners see their org's log, filterable by action and person. The platform admin sees all orgs plus `security_audit_events`.
 - Platform-admin **role** changes keep using the existing `updateUserRoleTrusted` callable, which now also sets or clears the `platformAdmin` claim.
 - User suspension keeps using the existing `revokeUserAccount` callable. Both of those write to `security_audit_events`.
 - Timestamps on the new documents are epoch milliseconds.
@@ -144,12 +181,17 @@ Reads always go through `orgId`. An Owner queries `aquariums where orgId == X`; 
 | `removeMember` | Owner | `{ orgId, uid }` |
 | `updateCaretakerAssignments` | Owner | `{ orgId, uid, aquariumIds }` |
 | `setOrganizationStatus` | Platform Admin | `{ orgId, status: 'active'\|'suspended', reason? }` |
+| `setMemberRole` | Owner | `{ orgId, uid, role: 'owner'\|'caretaker' }` |
+| `logMaintenance` | Owner, assigned caretaker | `{ aquariumId, type, waterChangePercent?, notes?, performedAt, recommendationId? }` |
+| `saveRuleConfig` / `approveRuleConfig` | Platform Admin | `{ kind: 'rule'\|'species', id, data }` / `{ kind, id }` |
 
-Source: `functions/src/orgAccess.ts`. Tests:
-- `npm run test:org-access` (callables)
+Sources: `functions/src/orgAccess.ts`, `maintenance.ts`, `commandLog.ts`, `notifications.ts`, `ruleAdmin.ts`. Tests:
+- `npm run test:org-access` (callables, including co-owners)
+- `test:sprint4-functions` (maintenance, command log, notifications, rules editor)
 - `test:firestore-org-rules` and `test:rtdb-org-rules` (isolation)
 - `test:migrate-orgs`
-- `test:sprint3-e2e` (the full flow on the emulator suite)
+- `test:sprint3-e2e` and `test:sprint4-e2e` (full flows on the emulator suite)
+- `test:smoke` (Playwright, the app in a browser)
 
 ## 8. Operations
 
@@ -161,7 +203,8 @@ Source: `functions/src/orgAccess.ts`. Tests:
 **Migrate existing data:** `npm run migrate:orgs -- --dry-run`, then without `--dry-run`. See `docs/migration-live.md` step 7.
 
 **Not yet:**
-- invite email sending
-- promoting a caretaker to co-owner (one Owner per org today)
-- deleting an organization
-- the mobile app (it still queries by `ownerId`, which the new rules deny; mobile sync is a later sprint)
+- invite email sending (Sprint 5)
+- deleting an organization (future)
+- the mobile app (it still queries by `ownerId`, which the new rules deny). It must be updated before go-live (`docs/migration-live.md` §7a).
+
+**Notifications:** see `docs/notifications.md`.
