@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import LoadingState from '../components/ui/LoadingState';
 import StatusMessage from '../components/ui/StatusMessage';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import ThresholdReview from '../components/condition/ThresholdReview';
@@ -110,7 +111,7 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
     );
   }
   if (loadError) return <StatusMessage variant="error">{loadError}</StatusMessage>;
-  if (!aquarium) return <p className="text-slate-300">Loading aquarium…</p>;
+  if (!aquarium) return <LoadingState label="Loading aquarium..." />;
 
   const stepIndex = STEPS.indexOf(step);
   const validate = (target: StepName): string => {

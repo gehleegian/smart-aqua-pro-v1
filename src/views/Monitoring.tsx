@@ -1,4 +1,5 @@
 import { Card, CardContent } from '../components/ui/Card';
+import LoadingState from '../components/ui/LoadingState';
 import { AdminMonitoringView } from '../components/monitoring/AdminMonitoringView';
 import { AquariumDetailsView } from '../components/monitoring/AquariumDetailsView';
 import { AutomationSettingsModal } from '../components/monitoring/AutomationSettingsModal';
@@ -68,7 +69,8 @@ export default function Monitoring() {
   }
 
   if (!monitoring.automationSettings || !monitoring.manualActions) {
-    return null;
+    // The selected tank is still resolving (never a blank page).
+    return <LoadingState label="Loading aquarium..." />;
   }
 
   return (

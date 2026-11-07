@@ -371,6 +371,7 @@ export default function Layout() {
 
   return (
     <div className="smart-aqua-app min-h-screen bg-slate-950 text-slate-100" data-theme={theme}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <Sidebar
         currentPage={currentPage}
         onNavigate={handleNavigate}
@@ -399,7 +400,7 @@ export default function Layout() {
           onThemeToggle={handleThemeToggle}
           onNavigate={handleNavigate}
         />
-        <main className="p-4 md:p-6">
+        <main id="main-content" tabIndex={-1} className="p-4 focus:outline-none md:p-6">
           {pageContent}
         </main>
       </div>

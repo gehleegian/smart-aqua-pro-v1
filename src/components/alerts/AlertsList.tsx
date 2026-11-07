@@ -48,10 +48,12 @@ export function AlertsList({
                   <button
                     type="button"
                     onClick={() => onToggleAlert(alert.id)}
+                    aria-expanded={expanded}
+                    aria-controls={`alert-details-${alert.id}`}
                     className="flex w-full items-start justify-between gap-4 text-left"
                   >
                     <div className="flex gap-3">
-                      <Icon className="mt-0.5 h-5 w-5 text-teal-200" />
+                      <Icon className="mt-0.5 h-5 w-5 text-teal-200" aria-hidden="true" />
                       <div>
                         <p className="font-medium text-white">{alert.tankName}{alert.title ? ` · ${alert.title}` : ''}</p>
                         <p className="mt-1 text-sm text-slate-400">{alert.message}</p>
@@ -62,19 +64,19 @@ export function AlertsList({
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Badge variant={badge.variant}>{badge.label}</Badge>
-                      <ChevronDown className={`h-4 w-4 text-slate-400 ${expanded ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-4 w-4 text-slate-400 ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
                     </div>
                   </button>
 
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 pl-8 text-xs text-slate-400">
-                    <span>Severity: <span className="text-slate-200">{alert.type}</span></span>
+                    <span>Severity: <span className="font-semibold uppercase text-slate-200">{alert.type}</span></span>
                     {alert.occurrences !== undefined ? <span>Occurrences: <span className="text-slate-200">{alert.occurrences}</span></span> : null}
                     <span>Last seen: <span className="text-slate-200">{formatRelativeTime(alert.lastDetectedAt)}</span></span>
                     {alert.origin === 'client' ? <span>(browser-evaluated; not stored)</span> : null}
                   </div>
 
                   {expanded ? (
-                    <div className="mt-4 space-y-3 border-t border-slate-600/30 pt-4">
+                    <div id={`alert-details-${alert.id}`} className="mt-4 space-y-3 border-t border-slate-600/30 pt-4">
                       {alert.recommendation ? (
                         <div className="rounded-lg border border-slate-600/30 bg-slate-950/35 p-3 text-sm">
                           <p className="font-medium text-white">
@@ -92,7 +94,7 @@ export function AlertsList({
                       <p className="text-xs text-slate-400">{alert.resolvedAt ? 'Resolved' : 'Last detected'} {formatAlertTimestamp(alert)}</p>
                       {!alert.acknowledgedAt && !alert.resolvedAt ? (
                         <Button size="sm" variant="secondary" onClick={() => onAcknowledgeAlert(alert.id)}>
-                          <Check className="h-4 w-4" />
+                          <Check className="h-4 w-4" aria-hidden="true" />
                           Acknowledge
                         </Button>
                       ) : null}

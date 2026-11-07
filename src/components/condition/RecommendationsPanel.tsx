@@ -4,6 +4,7 @@ import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
 import StatusMessage from '../ui/StatusMessage';
 import type { Recommendation } from '../../types/recommendation';
 import Badge from '../ui/Badge';
+import { SeverityBadge } from './ConditionBadges';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -35,7 +36,7 @@ export function RecommendationsPanel({ aquariumId, aquariumName }: { aquariumId:
                   <p className="font-medium text-white">{item.title}</p>
                   <div className="flex gap-2">
                     {item.ruleStatus === 'draft' ? <Badge variant="info">Draft rule</Badge> : null}
-                    <Badge variant={item.severity === 'critical' ? 'danger' : 'warning'}>{item.severity}</Badge>
+                    <SeverityBadge severity={item.severity} />
                   </div>
                 </div>
                 <p className="mt-1 text-sm text-slate-300">{item.issueDetected}</p>
