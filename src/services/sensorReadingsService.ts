@@ -92,6 +92,7 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
   }
 
   const reading = value as Record<string, unknown>;
+  if (reading.waterLevelReadingValid === false) return null; // This legacy view requires a complete reading.
   const recordedAtEpoch = readNumber(reading.recordedAtEpoch);
   const temperatureC = readNumber(reading.temperatureC);
   const waterLevelPercent = readNumber(reading.waterLevelPercent);
@@ -149,6 +150,10 @@ export function buildSensorReadingDocument(options: {
   telemetry: DeviceTelemetry;
   source?: SensorReadingSource;
 }): SensorReadingDocument {
+  if (options.telemetry.waterLevelReadingValid === false || typeof options.telemetry.waterLevelPercent !== 'number' ||
+      !Number.isFinite(options.telemetry.waterLevelPercent)) {
+    throw new Error('Cannot store a complete sensor reading without a valid water level.');
+  }
   const recordedAtEpoch = Number.isFinite(options.telemetry.updatedAt)
     ? options.telemetry.updatedAt
     : Date.now();

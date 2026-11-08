@@ -1,5 +1,13 @@
 # Aquarium 1 supervised Arduino test
 
+**Prepared profile-level update; not yet activated on hardware.** Empty remains
+27.0 cm; the new 100% target comes from operational litres and internal tank
+dimensions. Do not upload until final dimensions/volume are validated and the
+updated RTDB schema is deployed. See `../../docs/security/profile-water-level.md`
+for calculation, clearance limits, partial-telemetry behavior and activation order.
+The older 20.2 cm-full notes below describe the previous reference-span firmware,
+not the profile-based path enabled in the current prepared source.
+
 Open `Aquarium1Device.ino` in Arduino IDE. Keep `Config.h` in the same folder.
 This is an integration-test candidate, not a completed unattended aquarium
 controller. Live registration, focused claiming rules and the local claiming

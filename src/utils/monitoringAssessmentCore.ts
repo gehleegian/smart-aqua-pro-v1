@@ -194,7 +194,10 @@ export function evaluateTelemetryValidity(
   }
   const turbidity = sensorValidity('turbidity', raw.turbidity, raw.turbidityReadingValid,
     'turbidityReadingValid', { requireFlags });
-  const waterLevel = sensorValidity('waterLevel', raw.waterLevelPercent, undefined, null, { waterPresent });
+  const waterLevel = raw.waterLevelReadingValid === false
+    ? { status: 'invalid' as const, reason: 'waterLevelReadingValid is false' }
+    : sensorValidity('waterLevel', raw.waterLevelPercent, raw.waterLevelReadingValid,
+        raw.waterLevelReadingValid === undefined ? null : 'waterLevelReadingValid', { waterPresent });
   const all = [temperature, ph, tds, turbidity, waterLevel];
   return { temperature, ph, tds, turbidity, waterLevel, allValid: all.every((item) => item.status !== 'invalid') };
 }
@@ -890,6 +893,8 @@ export function conditionSignature(result: EngineResult): string {
 export const CONDITION_SUMMARY_MAX_AGE_MS = 5 * 60_000 + TELEMETRY_STALE_MS;
 
 export type ConditionSummary = {
+  /** Geometry used by the server for a profile-based level (Aquarium 1 only). */
+  waterLevelTargetHeightCm?: number;
   overall: ConditionSeverity | 'unavailable';
   perParameter: ParameterResult[];
   matchedRules: MatchedRule[];

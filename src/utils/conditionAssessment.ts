@@ -12,6 +12,7 @@ import {
   type TelemetrySource,
 } from './monitoringAssessmentCore.ts';
 import type { AquariumEngineState, RuleConfigSnapshot } from '../services/ruleConfigService';
+import { withWaterLevelProfile, waterLevelSummaryMatches } from './waterLevelProfile.ts';
 
 type AquariumLike = {
   species?: unknown;
@@ -53,7 +54,7 @@ export function evaluateAquariumReading(
   if (!thresholds || !ruleConfig) return null;
   const species = selectSpeciesConfig(aquarium, ruleConfig.speciesById);
   const bioloadLevel = serverBioload ?? computeBioload(aquarium, species?.bioloadBandsGPerL)?.level ?? null;
-  return evaluateAquarium(reading, thresholds, ruleConfig.rules, {
+  return evaluateAquarium(reading ? withWaterLevelProfile(aquarium, reading) : null, thresholds, ruleConfig.rules, {
     hasFiltrationSystem: aquarium.hasFiltrationSystem,
     fishCount: aquarium.fishCount,
     bioloadLevel,
@@ -81,7 +82,8 @@ export function assessAquarium(options: {
     return toConditionAssessment(UNAVAILABLE, { source: 'unavailable', assessedAt: now, origin: 'none' });
   }
   const condition = options.engineState?.condition;
-  if (source === 'live' && condition && now - condition.evaluatedAt <= CONDITION_SUMMARY_MAX_AGE_MS) {
+  if (source === 'live' && condition && now - condition.evaluatedAt <= CONDITION_SUMMARY_MAX_AGE_MS &&
+      waterLevelSummaryMatches(options.aquarium, options.reading, condition)) {
     return toConditionAssessment(condition, { source, assessedAt: condition.evaluatedAt, origin: 'server' });
   }
   const result = evaluateAquariumReading(options.aquarium, options.reading, options.ruleConfig, options.engineState?.bioloadLevel ?? null);

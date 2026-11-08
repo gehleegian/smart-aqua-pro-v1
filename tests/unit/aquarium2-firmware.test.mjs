@@ -19,7 +19,9 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   assert.match(a1Config, /POWER_SENSOR_ANALOG = true/);
   assert.match(config, /POWER_SIGNAL_ON_V = 0\.0f/);
   assert.match(a1Config, /POWER_SIGNAL_ON_V = 2\.515f/);
-  for (const file of ['ScheduleLogic.h', 'ScheduleLogicTests.h', 'FeederConfig.h', 'EchoFilter.h', 'PowerSignal.h']) {
+  assert.match(a1Config, /PROFILE_LEVEL_ENABLED = true/);
+  assert.match(config, /PROFILE_LEVEL_ENABLED = false/);
+  for (const file of ['ScheduleLogic.h', 'ScheduleLogicTests.h', 'FeederConfig.h', 'EchoFilter.h', 'PowerSignal.h', 'WaterLevel.h']) {
     assert.equal(await readFile(new URL(`Aquarium2Device/${file}`, root), 'utf8'),
       await readFile(new URL(`Aquarium1Device/${file}`, root), 'utf8'));
   }

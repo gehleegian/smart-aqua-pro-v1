@@ -63,7 +63,7 @@ export function UserAquariumList({
               </div>
               <p className="mt-2 text-sm text-slate-400">
                 {aquarium.hasFreshTelemetry
-                  ? `${aquarium.temp.toFixed(1)} °C · ${formatWaterLevel(aquarium.level)} level · ${typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm TDS` : 'TDS --'}`
+                  ? `${aquarium.temp.toFixed(1)} °C · ${formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry !== false)} level · ${typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm TDS` : 'TDS --'}`
                   : 'Waiting for valid telemetry'}
               </p>
               {aquarium.automationSettings?.enabled && nextScheduledText(getAutomationSettings(aquarium), now) ? (

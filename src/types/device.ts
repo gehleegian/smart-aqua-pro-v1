@@ -11,6 +11,7 @@ import {
   type TelemetryValidity,
 } from '../utils/monitoringAssessmentCore.ts';
 import type { SystemMode } from './monitoring';
+import { resolveWaterLevel, withWaterLevelProfile, type LevelProfileInput, type WaterLevelProfile } from '../utils/waterLevelProfile.ts';
 
 export type DeviceCommandType =
   | 'feed_now'
@@ -27,7 +28,9 @@ export interface DeviceTelemetry {
   lightState?: 'On' | 'Off';
   temperatureC: number;
   temperatureReadingValid?: boolean;
-  waterLevelPercent: number;
+  waterLevelPercent?: number;
+  waterLevelReadingValid?: boolean;
+  waterLevelTargetHeightCm?: number;
   waterPresent?: boolean;
   tdsPpm?: number;
   tdsPercent?: number;
@@ -76,6 +79,7 @@ export interface DeviceTelemetryLogEntry {
 }
 
 export interface DeviceControlProfile {
+  waterLevelProfile?: WaterLevelProfile;
   mode: SystemMode;
   automationEnabled: boolean;
   feedingTimes: string[];
@@ -245,7 +249,8 @@ export function getDeviceTelemetryStatusText(state: DeviceTelemetryState) {
 
 export function getFreshTelemetrySnapshot(
   telemetry: DeviceTelemetry | null | undefined,
-  now = Date.now()
+  now = Date.now(),
+  profile?: LevelProfileInput
 ) {
   if (getDeviceTelemetryState(telemetry, now) !== 'live' || !telemetry) {
     return null;
@@ -254,13 +259,15 @@ export function getFreshTelemetrySnapshot(
   if (
     typeof telemetry.temperatureC !== 'number' ||
     !Number.isFinite(telemetry.temperatureC) ||
-    typeof telemetry.waterLevelPercent !== 'number' ||
-    !Number.isFinite(telemetry.waterLevelPercent)
+    (telemetry.waterLevelReadingValid !== false &&
+      (typeof telemetry.waterLevelPercent !== 'number' || !Number.isFinite(telemetry.waterLevelPercent)))
   ) {
     return null;
   }
 
-  const validity = evaluateTelemetryValidity(telemetry as unknown as Record<string, unknown>);
+  const level = resolveWaterLevel(profile, telemetry);
+  const validity = evaluateTelemetryValidity(withWaterLevelProfile(profile, telemetry as unknown as Record<string, unknown>));
+  const levelValid = level.valid && validity.waterLevel.status === 'valid';
   const purityPercent = getTelemetryPurityPercent(telemetry);
   const tdsValid = validity.tds.status === 'valid';
   const tdsPercent = tdsValid && purityPercent !== null && purityPercent >= 0 && purityPercent <= 100
@@ -273,7 +280,9 @@ export function getFreshTelemetrySnapshot(
 
   return {
     temperatureC: telemetry.temperatureC,
-    waterLevelPercent: telemetry.waterLevelPercent,
+    waterLevelPercent: levelValid ? telemetry.waterLevelPercent! : NaN,
+    hasFreshWaterLevelTelemetry: levelValid,
+    waterLevelMessage: !level.valid ? level.message : validity.waterLevel.reason || level.message,
     waterPresent,
     hasFreshTemperatureTelemetry: validity.temperature.status === 'valid',
     tdsPpm: tdsValid ? getTelemetryTdsPpm(telemetry) : null,

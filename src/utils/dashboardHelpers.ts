@@ -83,7 +83,7 @@ export function mergeDashboardAquariums(
   return aquariums.map((aquarium) => {
     const telemetry = deviceShadows[aquarium.id]?.telemetry;
     const telemetryState = getDeviceTelemetryState(telemetry, now);
-    const snapshot = getFreshTelemetrySnapshot(telemetry, now);
+    const snapshot = getFreshTelemetrySnapshot(telemetry, now, aquarium);
 
     const nextAquarium: Aquarium = {
       ...aquarium,
@@ -120,6 +120,8 @@ export function mergeDashboardAquariums(
       telemetrySource: snapshot ? 'live' : 'unavailable',
       fishCount: nextAquarium.fishCount ?? 0,
       hasFreshTelemetry: Boolean(snapshot),
+      hasFreshWaterLevelTelemetry: Boolean(snapshot?.hasFreshWaterLevelTelemetry),
+      waterLevelMessage: snapshot?.waterLevelMessage,
       hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
       hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
       hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
@@ -237,7 +239,9 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
 
   const live = tank.hasFreshTelemetry;
   const temperature = getSensorDisplay(tank.sensorValidity, 'temperature', live, () => `${tank.temp.toFixed(1)}\u00B0C`);
-  const waterLevel = getSensorDisplay(tank.sensorValidity, 'waterLevel', live, () => formatWaterLevel(tank.level));
+  const waterLevel = tank.hasFreshWaterLevelTelemetry === false
+    ? { value: '--', status: tank.waterLevelMessage || 'No valid water-level reading', isError: true }
+    : getSensorDisplay(tank.sensorValidity, 'waterLevel', live, () => formatWaterLevel(tank.level));
   const tds = getSensorDisplay(tank.sensorValidity, 'tds', live, () =>
     typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm` : `${tank.quality}%`);
   const ph = getSensorDisplay(tank.sensorValidity, 'ph', live, () =>

@@ -80,6 +80,7 @@ mobileTest('web and mobile adapters produce identical assessments', () => {
     { temperatureReadingValid: false }, { tdsReadingValid: false },
     { updatedAt: now - 60_000 }, { updatedAt: now - 60_001 },
     { online: false }, { updatedAt: undefined }, { updatedAt: NaN },
+    { waterLevelReadingValid: false, waterLevelPercent: undefined },
     { powerStatus: 'Power Interruption' }, { temperatureC: NaN }, { waterLevelPercent: undefined },
   ]) {
     const device = deviceFrom(patch);

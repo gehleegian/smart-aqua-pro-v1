@@ -446,3 +446,41 @@ test('CLEAN-05 an incomplete profile has no schedule rather than a guessed one',
   const cleaning = await cleaningOf();
   assert.deepEqual([cleaning.status, cleaning.reason, cleaning.nextCleaningDue], ['unavailable', 'bioload_unknown', null]);
 });
+
+test('LEVEL-01 profile-based level and its server summary record the current target', async () => {
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({
+    deviceId: 'SAQ-7K3M-9R2X', tankLengthCm: 50, tankWidthCm: 30, tankHeightCm: 25,
+    workingWaterVolumeLiters: 9,
+  });
+  const result = await send({ waterLevelPercent: 80, waterLevelReadingValid: true, waterLevelTargetHeightCm: 6 });
+  assert.equal(result.ingested, true);
+  const row = (await flatRows())[0];
+  assert.equal(row.validity.waterLevel, 'valid');
+  assert.equal(row.waterLevelTargetHeightCm, 6);
+  assert.equal((await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()?.condition.waterLevelTargetHeightCm, 6);
+});
+
+test('LEVEL-02 invalid or obsolete profile level keeps other sensors and never raises low-water advice', async () => {
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({
+    deviceId: 'SAQ-7K3M-9R2X', tankLengthCm: 50, tankWidthCm: 30, tankHeightCm: 25,
+    workingWaterVolumeLiters: 10.5,
+  });
+  const result = await send({ waterLevelPercent: 2, waterLevelReadingValid: true, waterLevelTargetHeightCm: 6 });
+  assert.equal(result.ingested, true);
+  const row = (await flatRows())[0];
+  assert.equal(row.waterLevelReadingValid, false);
+  assert.equal(row.validity.waterLevel, 'invalid');
+  assert.equal(row.validity.temperature, 'valid');
+  assert.equal(row.parameterStatus.waterLevelPercent, 'unavailable');
+  const waterAdvice = (await recommendations()).filter(rec => rec.parameter === 'waterLevelPercent');
+  assert.ok(waterAdvice.every(rec => rec.ruleId === 'sensor_fault'));
+});
+
+test('LEVEL-03 explicit missing level remains missing in history, not fabricated zero', async () => {
+  const result = await send({ waterLevelPercent: undefined, waterPresent: undefined, waterLevelReadingValid: false });
+  assert.equal(result.ingested, true);
+  const row = (await flatRows())[0];
+  assert.equal(row.waterLevelPercent, undefined);
+  assert.equal(row.validity.waterLevel, 'invalid');
+  assert.equal(row.validity.temperature, 'valid');
+});

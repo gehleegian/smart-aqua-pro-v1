@@ -5,11 +5,13 @@ import {
   onValue,
   ref,
   set,
+  update,
   type DatabaseReference,
 } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, rtdb } from '../firebase';
 import { normalizeTelemetry } from '../utils/deviceTelemetryParser';
+import { getWaterLevelControl, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
 import {
@@ -174,8 +176,21 @@ export async function syncDeviceControlProfile(
   if (getActiveMembership()?.role === 'caretaker') {
     return;
   }
-  await assertRealtimeDeviceAccess(aquariumId, 'control');
-  await set(child(deviceRootRef, 'control'), profile);
+  const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
+  await set(child(deviceRootRef, 'control'), {
+    ...profile,
+    waterLevelProfile: getWaterLevelControl(aquarium as LevelProfileInput),
+  });
+}
+
+export async function syncWaterLevelProfile(aquariumId: string): Promise<void> {
+  const root = getDeviceRootRef(aquariumId);
+  if (!root) return;
+  const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
+  if (aquarium.deviceId !== 'SAQ-7K3M-9R2X') return;
+  const control = child(root, 'control');
+  if (!(await get(control)).exists()) return;
+  await update(control, { waterLevelProfile: getWaterLevelControl(aquarium as LevelProfileInput) });
 }
 
 export async function publishDeviceCommand(command: DeviceCommandRequest): Promise<void> {

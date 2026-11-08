@@ -649,6 +649,34 @@ test('TURBIDITY categorical readings are device-only and enum validated', async 
   await assertFails(set(ref(deviceDatabase('device-b'), path), { ...TELEMETRY, turbidityState: 'Clear' }));
 });
 
+test('LEVEL profile geometry permits only measurable, capacity-valid owner configuration', async () => {
+  const profile = { tankLengthCm: 50, tankWidthCm: 30, tankHeightCm: 25, workingWaterVolumeLiters: 9 };
+  const path = `devices/${AQUARIUM_A}/control`;
+  await assertSucceeds(set(ref(humanDatabase('user-a'), path), { ...CONTROL, waterLevelProfile: profile }));
+  for (const patch of [{ tankLengthCm: 0 }, { tankWidthCm: '30' }, { tankHeightCm: 1 },
+    { workingWaterVolumeLiters: 15 }, { workingWaterVolumeLiters: null }, { arbitrary: true }]) {
+    await assertFails(set(ref(humanDatabase('user-a'), path), { ...CONTROL, waterLevelProfile: { ...profile, ...patch } }));
+  }
+  await assertFails(set(ref(humanDatabase('user-b'), path), { ...CONTROL, waterLevelProfile: profile }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...CONTROL, waterLevelProfile: profile }));
+});
+
+test('LEVEL explicitly invalid level preserves other telemetry but cannot pretend to be a measurement', async () => {
+  const path = `devices/${AQUARIUM_A}/telemetry`;
+  const partial = { ...TELEMETRY, waterLevelReadingValid: false };
+  delete partial.waterLevelPercent; delete partial.waterPresent;
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), partial));
+  const value = (await get(ref(humanDatabase('user-a'), path))).val();
+  if (value.waterLevelPercent !== undefined || value.temperatureC !== TELEMETRY.temperatureC) throw new Error('Partial telemetry corrupted');
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelPercent: 0 }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelReadingValid: true }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterPresent: true }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelTargetHeightCm: 8 }));
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), { ...TELEMETRY, waterLevelReadingValid: true, waterLevelTargetHeightCm: 6 }));
+  await assertFails(set(ref(humanDatabase('user-a'), path), partial));
+  await assertFails(set(ref(deviceDatabase('device-b'), path), partial));
+});
+
 test('PARENT-05 parent and multi-location writes cannot bypass child rules', async () => {
   const database = humanDatabase('user-a');
   await assertFails(

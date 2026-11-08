@@ -15,6 +15,7 @@ import {
   type TelemetryValidity,
 } from './shared/monitoringAssessmentCore.js';
 import { evaluateTelemetryValidity } from './shared/monitoringAssessmentCore.js';
+import { withWaterLevelProfile, type LevelProfileInput } from './shared/waterLevelProfile.js';
 import {
   advanceCleaning,
   applyAlertOperations,
@@ -47,6 +48,7 @@ export const MAX_FUTURE_SKEW_MS = 5 * 60_000;
 
 const TELEMETRY_FIELDS = [
   'temperatureC', 'temperatureReadingValid', 'waterLevelPercent', 'waterPresent',
+  'waterLevelReadingValid', 'waterLevelTargetHeightCm',
   'tdsPpm', 'tdsPercent', 'tdsReadingValid', 'turbidity', 'turbidityReadingValid',
   'ph', 'phReadingValid', 'filterState', 'equipmentStatus', 'powerStatus', 'mainsPresent', 'online',
 ] as const;
@@ -148,8 +150,9 @@ export async function ingestTelemetry(
   const species = selectSpeciesConfig(aquarium, config.speciesById);
   const thresholds = resolveThresholds(species, readAquariumOverrides(aquarium));
   const bioload = computeBioload(aquarium, species?.bioloadBandsGPerL);
-  const validity = evaluateTelemetryValidity(raw);
-  const result = evaluateAquarium(raw, thresholds, config.rules, {
+  const checkedReading = withWaterLevelProfile(aquarium as LevelProfileInput, raw);
+  const validity = evaluateTelemetryValidity(checkedReading);
+  const result = evaluateAquarium(checkedReading, thresholds, config.rules, {
     hasFiltrationSystem: typeof aquarium.hasFiltrationSystem === 'boolean' ? aquarium.hasFiltrationSystem : undefined,
     bioloadLevel: bioload?.level ?? null,
     fishCount: typeof aquarium.fishCount === 'number' ? aquarium.fishCount : undefined,
@@ -163,7 +166,7 @@ export async function ingestTelemetry(
   const stateRef = engineStateRef(firestore, aquariumId);
   const deviceId = readString(aquarium.deviceUid) ?? aquariumId;
   const ownerName = readString(aquarium.ownerName);
-  const telemetry = pickTelemetry(raw);
+  const telemetry = pickTelemetry(checkedReading);
 
   // The first evaluation of a cleaning cycle needs the last logged cleaning.
   const preState = readEngineState((await stateRef.get()).data());
@@ -288,7 +291,13 @@ export async function ingestTelemetry(
     }
 
     const aquariumUpdate: Record<string, unknown> = {};
-    if (sampleReason) aquariumUpdate.condition = toConditionSummary(result, now, recordedAtEpoch);
+    if (sampleReason) {
+      aquariumUpdate.condition = {
+        ...toConditionSummary(result, now, recordedAtEpoch),
+        ...(validity.waterLevel.status === 'valid' && typeof checkedReading.waterLevelTargetHeightCm === 'number'
+          ? { waterLevelTargetHeightCm: checkedReading.waterLevelTargetHeightCm } : {}),
+      };
+    }
     if (writeCleaningSummary) aquariumUpdate.cleaning = cleaning.summary;
     if ((bioload?.level ?? null) !== (aquarium.bioloadLevel ?? null)) aquariumUpdate.bioloadLevel = bioload?.level ?? null;
     if (Object.keys(aquariumUpdate).length > 0) {

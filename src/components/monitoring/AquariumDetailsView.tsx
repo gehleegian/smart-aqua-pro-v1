@@ -116,7 +116,9 @@ export function AquariumDetailsView({
               const live = aquarium.hasFreshTelemetry;
               const readings = [
                 { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
-                { label: 'Water Level', display: getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
+                { label: 'Water Level', display: live && aquarium.hasFreshWaterLevelTelemetry === false
+                  ? { value: '--', status: aquarium.waterLevelMessage || 'No valid water-level reading' }
+                  : getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
                 {
                   label: 'TDS',
                   display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>

@@ -298,7 +298,7 @@ export function useMonitoringController() {
       // Main (PR #8) removed the browser telemetry simulator: live data only.
       const telemetry = deviceShadows[aquarium.id]?.telemetry;
       const telemetryState = getDeviceTelemetryState(telemetry, telemetryNow);
-      const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow);
+      const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow, aquarium);
       // Main (PR #8): light/filter as the device reports them, when fresh.
       const manualStatus = getReportedManualStatus(getManualSystemStatus(aquarium), telemetry, telemetryNow);
       const telemetrySource: TelemetrySource = snapshot ? 'live' : 'unavailable';
@@ -332,6 +332,8 @@ export function useMonitoringController() {
         assessment,
         telemetrySource,
         hasFreshTelemetry: Boolean(snapshot),
+        hasFreshWaterLevelTelemetry: Boolean(snapshot?.hasFreshWaterLevelTelemetry),
+        waterLevelMessage: snapshot?.waterLevelMessage,
         hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
         hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
         hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),

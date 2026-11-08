@@ -37,3 +37,4 @@ constexpr bool POWER_SENSOR_ANALOG = false;
 constexpr float POWER_DIVIDER_RATIO = 5.0f; // unused in digital mode
 constexpr float POWER_SIGNAL_OFF_V = 0.0f; // uncalibrated, unused in digital mode
 constexpr float POWER_SIGNAL_ON_V = 0.0f;
+constexpr bool PROFILE_LEVEL_ENABLED = false; // Aquarium 1 only.
