@@ -76,6 +76,14 @@ Functions parameters and secrets (`CLAIM_CODE_PEPPER`, `SMARTAQUA_SUPPORT_EMAIL`
 
 ## Checks after a deploy
 
+Realtime Database also uses script-based long polling when WebSockets are
+unavailable. `security-headers.mjs` allows the RTDB HTTPS domains in `script-src`
+and `frame-src` for the polling scripts and disconnect frame, in addition to
+`connect-src`. Keep these host-restricted; do not disable CSP to restore readings.
+After changing this file, deploy a new build to Vercel (refreshing or restarting
+the ESP32 does not update the website's response headers). Verify live readings
+and the browser console after deployment, including on the affected browser.
+
 1. `curl -sI https://<domain>/ | grep -iE 'content-security-policy|strict-transport|x-frame'` shows the headers.
 2. Sign in. Dashboard live readings update: RTDB over wss works under the CSP.
 3. Settings → Turn on alerts: the service worker registers, and a test alert arrives (`docs/notifications.md` §6).
