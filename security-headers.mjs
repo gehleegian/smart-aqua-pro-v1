@@ -12,11 +12,16 @@
 // nonce middleware; inline styles by React style attributes. Both are noted
 // in docs/deploy.md as accepted risks.
 
+// RTDB's long-poll fallback loads scripts and a disconnect iframe from these
+// hosts. connect-src alone only covers its fetch/WebSocket transports.
+const FIREBASE_DATABASE_HTTP = [
+  'https://*.firebaseio.com',
+  'https://*.firebasedatabase.app',
+];
 const FIREBASE_HTTP = [
   'https://*.googleapis.com',
   'https://*.cloudfunctions.net',
-  'https://*.firebaseio.com',
-  'https://*.firebasedatabase.app',
+  ...FIREBASE_DATABASE_HTTP,
 ];
 const FIREBASE_WS = ['wss://*.firebaseio.com', 'wss://*.firebasedatabase.app'];
 const RECAPTCHA = ['https://www.google.com', 'https://www.gstatic.com', 'https://www.recaptcha.net'];
@@ -28,12 +33,12 @@ export function contentSecurityPolicy({ dev = false, emulators = false } = {}) {
     : [];
   const directives = {
     'default-src': ["'self'"],
-    'script-src': ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...RECAPTCHA],
+    'script-src': ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...RECAPTCHA, ...FIREBASE_DATABASE_HTTP],
     'style-src': ["'self'", "'unsafe-inline'"],
     'img-src': ["'self'", 'data:', 'blob:', 'https://*.googleapis.com'],
     'font-src': ["'self'", 'data:'],
     'connect-src': ["'self'", ...FIREBASE_HTTP, ...FIREBASE_WS, ...local],
-    'frame-src': ['https://*.firebaseapp.com', ...RECAPTCHA],
+    'frame-src': ['https://*.firebaseapp.com', ...RECAPTCHA, ...FIREBASE_DATABASE_HTTP],
     'worker-src': ["'self'"],
     'manifest-src': ["'self'"],
     'media-src': ["'self'", 'blob:'],
