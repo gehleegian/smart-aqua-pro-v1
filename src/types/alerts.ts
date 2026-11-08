@@ -1,3 +1,4 @@
+import type { Recommendation } from './recommendation';
 import type { Aquarium } from './aquarium';
 import type { UserData } from './user';
 
@@ -34,6 +35,16 @@ export type AquariumAlert = AlertCandidate & {
   lastDetectedAt: number;
   resolvedAt: number | null;
   acknowledgedAt: number | null;
+  /** Rule title (server alerts). */
+  title?: string;
+  /** Sampled evaluations that saw the condition (server alerts; at most one per 5 min). */
+  occurrences?: number;
+  recommendationId?: string | null;
+  ruleId?: string | null;
+  /** server = alert_records from the rules engine; client = browser fallback before the function is deployed. */
+  origin?: 'server' | 'client';
+  /** Linked recommendation (server alerts). */
+  recommendation?: Recommendation | null;
 };
 
 export type AlertsPageData = {

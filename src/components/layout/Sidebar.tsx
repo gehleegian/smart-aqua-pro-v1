@@ -13,14 +13,21 @@ import {
   LogOut,
   X,
   LifeBuoy,
+  PlusCircle,
+  UserPlus,
+  Building2,
+  ScrollText,
+  SlidersHorizontal,
+  FileBarChart,
 } from 'lucide-react';
-import type { UserRole } from '../../types/user';
-import { normalizeRole } from '../../utils/roleHelpers';
+
+/** Sprint 3: navigation follows the access role, not only the platform role. */
+export type NavRole = 'Admin' | 'owner' | 'caretaker' | 'none';
 
 interface SidebarProps {
   currentPage: string;
   onNavigate: (page: string) => void;
-  userRole: UserRole;
+  navRole: NavRole;
   onLogout: () => void;
   isOpen: boolean;
   onClose: () => void;
@@ -32,32 +39,39 @@ type MenuItem = {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
+  roles: NavRole[];
 };
 
 const menuGroups: { label: string; items: MenuItem[] }[] = [
   {
     label: 'Overview',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User'] },
-      { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['User'] },
-      { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['User'] },
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'owner', 'caretaker', 'none'] },
+      { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['owner', 'caretaker'] },
+      { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['owner', 'caretaker'] },
     ],
   },
   {
     label: 'Manage',
     items: [
-      { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['User'] },
-      { id: 'automation', label: 'Automation', icon: Cpu, roles: ['User'] },
-      { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['User'] },
+      { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['owner'] },
+      { id: 'add-device', label: 'Add Device', icon: PlusCircle, roles: ['owner', 'caretaker', 'none'] },
+      { id: 'team', label: 'Team', icon: UserPlus, roles: ['owner'] },
+      { id: 'audit', label: 'Audit Log', icon: ScrollText, roles: ['owner'] },
+      { id: 'automation', label: 'Automation', icon: Cpu, roles: ['owner'] },
+      { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['owner', 'caretaker'] },
+      { id: 'reports', label: 'Reports', icon: FileBarChart, roles: ['owner', 'caretaker'] },
+      { id: 'organizations', label: 'Organizations', icon: Building2, roles: ['Admin'] },
       { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
+      { id: 'rules', label: 'Rules Editor', icon: SlidersHorizontal, roles: ['Admin'] },
+      { id: 'admin-audit', label: 'Audit Log', icon: ScrollText, roles: ['Admin'] },
     ],
   },
   {
     label: 'Account',
     items: [
-      { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'User'] },
-      { id: 'support', label: 'Support', icon: LifeBuoy, roles: ['Admin', 'User'] },
+      { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin', 'owner', 'caretaker', 'none'] },
+      { id: 'support', label: 'Support', icon: LifeBuoy, roles: ['Admin', 'owner', 'caretaker', 'none'] },
     ],
   },
 ];
@@ -67,14 +81,13 @@ const insetFocus = 'focus-visible:outline-offset-[-2px]';
 export default function Sidebar({
   currentPage,
   onNavigate,
-  userRole,
+  navRole,
   onLogout,
   isOpen,
   onClose,
   collapsed,
   onToggleCollapsed,
 }: SidebarProps) {
-  const normalizedRole = normalizeRole(userRole);
 
   const renderBrand = (showText: boolean) => (
     <div className="flex items-center gap-3">
@@ -93,7 +106,7 @@ export default function Sidebar({
   const renderNav = (showLabels: boolean) => (
     <nav aria-label="Main" className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
       {menuGroups.map((group) => {
-        const items = group.items.filter((item) => item.roles.includes(normalizedRole));
+        const items = group.items.filter((item) => item.roles.includes(navRole));
 
         if (items.length === 0) {
           return null;

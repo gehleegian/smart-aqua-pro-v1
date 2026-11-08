@@ -2,11 +2,17 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getDatabase } from 'firebase-admin/database';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
+import { getStorage } from 'firebase-admin/storage';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineString } from 'firebase-functions/params';
+import { onValueWritten } from 'firebase-functions/v2/database';
+import { defineBoolean, defineSecret, defineString } from 'firebase-functions/params';
+import { setGlobalOptions } from 'firebase-functions/v2';
+import { FUNCTIONS_REGION, RTDB_TRIGGER_REGION } from './region.js';
+import { ADMIN_MFA_MESSAGE, adminMfaSatisfied } from './mfaPolicy.js';
 import {
   reconcileAuthorization,
   ensureUserVerificationPolicy,
@@ -23,6 +29,34 @@ import {
   type MutationActor,
   type TrustedMutationDependencies,
 } from './trustedMutations.js';
+import { ingestTelemetry } from './telemetryIngest.js';
+import {
+  acceptInvite as acceptInviteCore,
+  claimDevice as claimDeviceCore,
+  createInvite as createInviteCore,
+  removeMember as removeMemberCore,
+  revokeInvite as revokeInviteCore,
+  setMemberRole as setMemberRoleCore,
+  setOrganizationStatus as setOrganizationStatusCore,
+  updateCaretakerAssignments as updateCaretakerAssignmentsCore,
+  type OrgActor,
+  type OrgDependencies,
+} from './orgAccess.js';
+import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
+import { logMaintenance as logMaintenanceCore } from './maintenance.js';
+import { approveRuleConfig as approveRuleConfigCore, saveRuleConfig as saveRuleConfigCore } from './ruleAdmin.js';
+import { markUnansweredCommands, recordAck, recordCommand } from './commandLog.js';
+import {
+  createFcmSender,
+  createOutboxSender,
+  notifyAlert,
+  notifyCleaningRecommendation,
+  type NotificationSender,
+} from './notifications.js';
+import { generateReportForMember, generateScheduledReports, type ReportDependencies } from './reports/generate.js';
+
+// Must run before any function below is defined (docs/migration-live.md §2).
+setGlobalOptions({ region: FUNCTIONS_REGION });
 
 if (getApps().length === 0) {
   initializeApp();
@@ -45,10 +79,23 @@ const supportEmail = defineString('SMARTAQUA_SUPPORT_EMAIL', {
 
 type CallableData = Record<string, unknown>;
 
+// Sprint 5: false until every platform admin has enrolled TOTP (docs/migration-live.md §8).
+const requirePlatformAdminMfa = defineBoolean('REQUIRE_PLATFORM_ADMIN_MFA', {
+  default: false,
+  description: 'Refuse platform-admin callable requests whose sign-in did not use a TOTP second factor.',
+});
+
+function assertAdminMfa(request: CallableRequest<CallableData>) {
+  if (request.auth && !adminMfaSatisfied(request.auth.token as Parameters<typeof adminMfaSatisfied>[0], requirePlatformAdminMfa.value())) {
+    throw new HttpsError('permission-denied', ADMIN_MFA_MESSAGE);
+  }
+}
+
 function requireCallableActor(request: CallableRequest<CallableData>): MutationActor {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Authentication is required.');
   }
+  assertAdminMfa(request);
 
   return {
     uid: request.auth.uid,
@@ -187,6 +234,124 @@ export const revokeUserAccount = onCall<CallableData>(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Sprint 3: organizations, device claiming, caretaker invites (orgAccess.ts)
+// ---------------------------------------------------------------------------
+
+// HMAC pepper for device claim codes. Set with
+// `firebase functions:secrets:set CLAIM_CODE_PEPPER`; the emulator reads
+// functions/.secret.local (gitignored). Never commit it.
+const claimCodePepper = defineSecret('CLAIM_CODE_PEPPER');
+
+function requireOrgActor(request: CallableRequest<CallableData>): OrgActor {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication is required.');
+  }
+  const token = request.auth.token;
+  if (token.principalType === 'device') {
+    throw new HttpsError('permission-denied', 'Devices cannot call this operation.');
+  }
+  assertAdminMfa(request);
+  return {
+    uid: request.auth.uid,
+    email: typeof token.email === 'string' ? token.email : null,
+    emailVerified: token.email_verified === true,
+    platformAdmin: token.platformAdmin === true,
+  };
+}
+
+function orgDependencies(): OrgDependencies {
+  return { ...trustedMutationDependencies, claimCodePepper: claimCodePepper.value() };
+}
+
+function orgCallable<T>(
+  name: string,
+  handler: (dependencies: OrgDependencies, actor: OrgActor, data: CallableData) => Promise<T>
+) {
+  return onCall<CallableData>({ ...callableOptions, secrets: [claimCodePepper] }, async (request) => {
+    const actor = requireOrgActor(request);
+    try {
+      const result = await handler(orgDependencies(), actor, request.data ?? {});
+      logger.info(`${name} completed.`, { actorUid: actor.uid });
+      return result;
+    } catch (error) {
+      return callableFailure(error);
+    }
+  });
+}
+
+export const claimDevice = orgCallable('claimDevice', (deps, actor, data) =>
+  claimDeviceCore(deps, actor, {
+    deviceId: data.deviceId,
+    claimCode: data.claimCode,
+    aquariumName: data.aquariumName,
+    orgName: data.orgName,
+    orgId: data.orgId,
+  })
+);
+
+export const createInvite = orgCallable('createInvite', (deps, actor, data) =>
+  createInviteCore(deps, actor, { orgId: data.orgId, email: data.email, aquariumIds: data.aquariumIds })
+);
+
+export const acceptInvite = orgCallable('acceptInvite', (deps, actor, data) =>
+  acceptInviteCore(deps, actor, { token: data.token })
+);
+
+export const revokeInvite = orgCallable('revokeInvite', (deps, actor, data) =>
+  revokeInviteCore(deps, actor, { inviteId: data.inviteId })
+);
+
+export const removeMember = orgCallable('removeMember', (deps, actor, data) =>
+  removeMemberCore(deps, actor, { orgId: data.orgId, uid: data.uid })
+);
+
+export const setMemberRole = orgCallable('setMemberRole', (deps, actor, data) =>
+  setMemberRoleCore(deps, actor, { orgId: data.orgId, uid: data.uid, role: data.role })
+);
+
+export const updateCaretakerAssignments = orgCallable('updateCaretakerAssignments', (deps, actor, data) =>
+  updateCaretakerAssignmentsCore(deps, actor, { orgId: data.orgId, uid: data.uid, aquariumIds: data.aquariumIds })
+);
+
+export const setOrganizationStatus = orgCallable('setOrganizationStatus', (deps, actor, data) =>
+  setOrganizationStatusCore(deps, actor, { orgId: data.orgId, status: data.status, reason: data.reason })
+);
+
+// Backup path for the RTDB access mirror: the callables above already sync
+// it before returning; these catch any write made another way.
+export const syncOrganizationAuthorizationMirror = onDocumentWritten(
+  { document: 'organizations/{orgId}', retry: true },
+  async (event) => {
+    if (event.data?.before.get('status') === event.data?.after.get('status')) return;
+    const aquariums = await dependencies.firestore
+      .collection('aquariums')
+      .where('orgId', '==', event.params.orgId)
+      .get();
+    for (const aquarium of aquariums.docs) {
+      await syncAquariumAuthorization(dependencies, aquarium.id);
+    }
+  }
+);
+
+export const syncMemberAuthorizationMirror = onDocumentWritten(
+  { document: 'organizations/{orgId}/members/{uid}', retry: true },
+  async (event) => {
+    const before = event.data?.before.get('role');
+    const after = event.data?.after.get('role');
+    if (before === after) return;
+    // An owner change touches every tank's coOwnerUids (Sprint 4 co-owners).
+    const byOrg = dependencies.firestore.collection('aquariums').where('orgId', '==', event.params.orgId);
+    const aquariums = await (before === 'owner' || after === 'owner'
+      ? byOrg
+      : byOrg.where('caretakerIds', 'array-contains', event.params.uid)
+    ).get();
+    for (const aquarium of aquariums.docs) {
+      await syncAquariumAuthorization(dependencies, aquarium.id);
+    }
+  }
+);
+
 export const queueSupportMessageEmail = onDocumentCreated(
   {
     document: 'support_threads/{threadId}/messages/{messageId}',
@@ -320,20 +485,29 @@ export const syncAquariumAuthorizationMirror = onDocumentWritten(
   async (event) => {
     const beforeOwner = readString(event.data?.before.get('ownerId'));
     const afterOwner = readString(event.data?.after.get('ownerId'));
+    const accessKey = (snapshot: { get(field: string): unknown } | undefined) =>
+      JSON.stringify([
+        readString(snapshot?.get('orgId')),
+        [...((snapshot?.get('caretakerIds') as string[] | undefined) ?? [])].sort(),
+      ]);
+    const ownerChanged = beforeOwner !== afterOwner;
 
     if (
       event.data?.before.exists &&
       event.data.after.exists &&
-      beforeOwner === afterOwner
+      !ownerChanged &&
+      accessKey(event.data.before) === accessKey(event.data.after)
     ) {
       return;
     }
 
     try {
+      // A caretaker/org change only narrows or widens one list; only an owner
+      // change needs the transitioning step.
       const result = await syncAquariumAuthorization(
         dependencies,
         event.params.aquariumId,
-        { transitionBeforeActivation: true }
+        { transitionBeforeActivation: ownerChanged }
       );
       logger.info('Aquarium authorization mirror synchronized.', {
         eventId: event.id,
@@ -371,5 +545,219 @@ export const reconcileAuthorizationMirror = onSchedule(
       });
       throw error;
     }
+  }
+);
+
+// Device contract decision 6 + Sprint 2 rules engine: validate, evaluate,
+// reconcile alerts/recommendations, sampled history, condition summary.
+// See docs/rule-engine.md. Firestore is written only when something changes.
+export const ingestDeviceTelemetry = onValueWritten(
+  { ref: '/devices/{aquariumId}/telemetry', region: RTDB_TRIGGER_REGION },
+  async (event) => {
+    if (!event.data.after.exists()) {
+      return;
+    }
+    const aquariumId = event.params.aquariumId;
+    const result = await ingestTelemetry({ firestore: dependencies.firestore }, aquariumId, event.data.after.val());
+    if (!result.ingested) {
+      logger.warn('Telemetry not ingested.', { aquariumId, reason: result.reason });
+    } else if (result.firestoreWrites > 0) {
+      logger.info('Telemetry evaluated.', {
+        aquariumId,
+        classification: result.classification,
+        sampleReason: result.sampleReason,
+        alertOperations: result.alertOperations,
+        firestoreWrites: result.firestoreWrites,
+      });
+    }
+  }
+);
+
+// Every minute: device_offline alerts from a stale RTDB updatedAt (60 s window).
+export const checkDeviceHeartbeat = onSchedule(
+  { schedule: 'every 1 minutes', retryCount: 0, maxInstances: 1, timeoutSeconds: 50 },
+  async () => {
+    const result = await checkDeviceHeartbeats(dependencies);
+    if (result.opened > 0 || result.resolved > 0) {
+      logger.info('Device heartbeat changes.', result);
+    }
+  }
+);
+
+// Daily: next-cleaning schedule and cleaning_due recommendations.
+export const checkCleaningSchedule = onSchedule(
+  { schedule: 'every day 06:00', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 300 },
+  async () => {
+    const result = await runDailyCleaningCheck({ firestore: dependencies.firestore });
+    logger.info('Cleaning schedule check completed.', result);
+  }
+);
+
+// A logged cleaning starts a new cleaning cycle (logging UI arrives in Sprint 4;
+// maintenance_actions are trusted-writes only until then).
+export const onMaintenanceActionLogged = onDocumentCreated(
+  { document: 'maintenance_actions/{actionId}' },
+  async (event) => {
+    const action = event.data?.data();
+    if (!action || action.actionType !== 'cleaning' || typeof action.aquariumId !== 'string') {
+      return;
+    }
+    await refreshCleaningSchedule({ firestore: dependencies.firestore }, action.aquariumId, { resolvePendingCleaning: true });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Sprint 4: maintenance logging, command log, push notifications
+// ---------------------------------------------------------------------------
+
+// FR20: owners and assigned caretakers log maintenance; a linked
+// recommendation becomes 'applied'; a cleaning starts a new cleaning cycle
+// through onMaintenanceActionLogged above.
+export const logMaintenance = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    const result = await logMaintenanceCore({ firestore: dependencies.firestore }, actor, {
+      aquariumId: data.aquariumId,
+      type: data.type,
+      waterChangePercent: data.waterChangePercent,
+      notes: data.notes,
+      performedAt: data.performedAt,
+      recommendationId: data.recommendationId,
+    });
+    logger.info('logMaintenance completed.', { actorUid: actor.uid, aquariumId: result.aquariumId });
+    return result;
+  } catch (error) {
+    return callableFailure(error);
+  }
+});
+
+// FR17/FR19: command_logs from the RTDB latest command and acknowledgement.
+export const logDeviceCommand = onValueWritten(
+  { ref: '/devices/{aquariumId}/commands/latest', region: RTDB_TRIGGER_REGION },
+  async (event) => {
+    if (!event.data.after.exists()) return;
+    const result = await recordCommand({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
+    if (!result.recorded && result.reason !== 'duplicate') logger.warn('Command not logged.', { aquariumId: event.params.aquariumId, reason: result.reason });
+  }
+);
+
+export const logDeviceCommandAck = onValueWritten(
+  { ref: '/devices/{aquariumId}/commandAck/latest', region: RTDB_TRIGGER_REGION },
+  async (event) => {
+    if (!event.data.after.exists()) return;
+    const result = await recordAck({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
+    if (!result.updated && result.reason !== 'already_final') logger.warn('Command ack not logged.', { aquariumId: event.params.aquariumId, reason: result.reason });
+  }
+);
+
+// Pending commands with no acknowledgement after 30 s become no_response.
+// Live firmware does not acknowledge yet (docs/firmware-changes.md §5), so
+// until it does every command ends as no_response; the app shows that neutrally.
+export const checkCommandAcks = onSchedule(
+  { schedule: 'every 1 minutes', retryCount: 0, maxInstances: 1, timeoutSeconds: 50 },
+  async () => {
+    const result = await markUnansweredCommands({ firestore: dependencies.firestore });
+    if (result.marked > 0) logger.info('Commands without acknowledgement.', result);
+  }
+);
+
+// FR15: FCM cannot be emulated; in the Functions emulator the sender writes
+// dev_notification_outbox instead (docs/notifications.md).
+let notificationSender: NotificationSender | null = null;
+function sender() {
+  notificationSender ??= process.env.FUNCTIONS_EMULATOR === 'true'
+    ? createOutboxSender(dependencies.firestore)
+    : createFcmSender(getMessaging());
+  return notificationSender;
+}
+
+export const notifyAlertRecord = onDocumentWritten(
+  { document: 'alert_records/{alertId}', retry: false },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return;
+    const requestedAt = after.get('notifyRequestedAt');
+    // Most writes are repeats (occurrences/lastSeenAt): nothing new to send.
+    if (typeof requestedAt !== 'number' || after.get('notifiedForRequestAt') === requestedAt || after.get('status') === 'resolved') return;
+    const result = await notifyAlert({ firestore: dependencies.firestore, sender: sender() }, event.params.alertId);
+    if (result.sent) {
+      logger.info('Alert notification sent.', { alertId: event.params.alertId, recipients: result.targeted.length, delivered: result.delivered, failed: result.failures.length });
+    }
+  }
+);
+
+export const notifyCleaningReminder = onDocumentCreated(
+  { document: 'recommendations/{recommendationId}' },
+  async (event) => {
+    const ruleId = event.data?.get('ruleId');
+    if (ruleId !== 'cleaning_due' && ruleId !== 'cleaning_due_early') return;
+    await notifyCleaningRecommendation({ firestore: dependencies.firestore, sender: sender() }, event.params.recommendationId);
+  }
+);
+
+// FR13 admin side: rules & species editor (platform admin only, audited).
+export const saveRuleConfig = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    return await saveRuleConfigCore({ firestore: dependencies.firestore }, actor, { kind: data.kind, id: data.id, data: data.data });
+  } catch (error) {
+    return callableFailure(error);
+  }
+});
+
+export const approveRuleConfig = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  try {
+    const data = request.data ?? {};
+    return await approveRuleConfigCore({ firestore: dependencies.firestore }, actor, { kind: data.kind, id: data.id });
+  } catch (error) {
+    return callableFailure(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 5: monitoring reports with PDF and CSV export (FR21)
+// ---------------------------------------------------------------------------
+function reportDependencies(): ReportDependencies {
+  return { firestore: dependencies.firestore, bucket: getStorage().bucket() };
+}
+
+// On demand: owners and assigned caretakers of the tank (requireAquariumMember).
+export const generateMonitoringReport = onCall<CallableData>(
+  { ...callableOptions, timeoutSeconds: 120, memory: '512MiB' },
+  async (request) => {
+    const actor = requireOrgActor(request);
+    try {
+      const data = request.data ?? {};
+      const result = await generateReportForMember(reportDependencies(), actor, {
+        aquariumId: data.aquariumId,
+        reportType: data.reportType,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      logger.info('Monitoring report generated.', { actorUid: actor.uid, aquariumId: result.aquariumId, reportId: result.reportId });
+      return result;
+    } catch (error) {
+      return callableFailure(error);
+    }
+  }
+);
+
+// Weekly (Monday 07:00) and monthly (1st, 07:00) reports, Asia/Manila time.
+export const weeklyMonitoringReports = onSchedule(
+  { schedule: '0 7 * * 1', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 540, memory: '512MiB' },
+  async () => {
+    const result = await generateScheduledReports(reportDependencies(), 'weekly');
+    logger.info('Weekly monitoring reports.', result);
+  }
+);
+
+export const monthlyMonitoringReports = onSchedule(
+  { schedule: '0 7 1 * *', timeZone: 'Asia/Manila', retryCount: 1, maxInstances: 1, timeoutSeconds: 540, memory: '512MiB' },
+  async () => {
+    const result = await generateScheduledReports(reportDependencies(), 'monthly');
+    logger.info('Monthly monitoring reports.', result);
   }
 );

@@ -62,6 +62,26 @@ zone or freeze readings to bypass mounting limitations.
 
 ## Activation deliberately pending
 
+## Integration with the newer main branch
+
+The integration keeps the newer owner/caretaker access model, tank screens,
+sensor-validation policy, 60-second freshness window, and Firestore-loaded rules
+engine. Only water-level behavior is extended. Web, mobile and server share the
+same profile validation. An explicitly invalid or obsolete target is a sensor
+fault, never a low-water observation; valid readings from other sensors remain
+available. The server records level validity and target metadata in sampled
+history and its condition summary. Clients ignore an old-geometry summary until
+its target matches, falling back to the existing rules engine in the meantime.
+Historical values remain measurements at their original time, not recalculated
+against a later profile. No live rules, accounts, profiles, commands or firmware
+are changed by the Git merge itself.
+
+Before activation, deploy the reviewed water-level changes to the ingest
+function as well as RTDB validation. This is required so the server recognizes
+partial readings and does not evaluate an obsolete target as current water level.
+
+## Pending physical configuration
+
 The stored Aquarium 1 dimensions were 9 x 10 x 9 cm with 10 L operational volume,
 which is physically impossible (capacity 0.81 L). Owner confirmed these dimensions
 are unfinished. No final dimensions have been guessed, saved or used on hardware.
@@ -85,6 +105,14 @@ readings/new fields would be rejected. Activation order is:
 
 This implementation turn does not deploy rules, change live profile/registry
 data, issue equipment commands, upload firmware or push/merge GitHub branches.
+
+The subsequent integration/merge is a source-only operation: it does not deploy
+Firebase or upload devices. Integration checks include 161 selected web unit and
+parity checks, all 31 mobile tests, isolated RTDB legacy/organization security
+tests and server-ingestion regressions (including partial/obsolete water levels).
+Web/mobile types and changed-source lint, plus the Functions build, are checked.
+Two existing Windows-specific test-harness failures (CRLF trigger scanning and a
+file-URL path in the rule-matrix test) are excluded, not changed by this feature.
 
 ## Verification evidence
 

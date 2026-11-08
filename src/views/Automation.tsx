@@ -1,192 +1,85 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { CalendarClock, Fish, Settings, Sun, Wind, Zap } from 'lucide-react';
+import { useRuleConfig } from '../hooks/useRuleConfig';
+import { useNow } from '../hooks/useNow';
+import { auth } from '../firebase';
+import { getAquariumsByOwner } from '../services/aquariumService';
+import { requestTankFocus } from '../services/tankFocus';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
-import StatusMessage from '../components/ui/StatusMessage';
-import Toggle from '../components/ui/Toggle';
 import Badge from '../components/ui/Badge';
-import { Fish, Sun, Wind, Zap, Settings, AlertTriangle } from 'lucide-react';
+import Button from '../components/ui/Button';
+import StatusMessage from '../components/ui/StatusMessage';
+import { getAutomationSettings } from '../utils/monitoringHelpers';
+import { nextScheduledText, SCHEDULE_TIME_ZONE } from '../utils/schedule';
+import type { Aquarium } from '../types/aquarium';
 
-const feedingSchedules = [
-  { id: 1, tank: 'Tropical Tank A', time: '8:00 AM', amount: '5g', enabled: true },
-  { id: 2, tank: 'Tropical Tank A', time: '6:00 PM', amount: '5g', enabled: true },
-  { id: 3, tank: 'Goldfish Tank B', time: '9:00 AM', amount: '3g', enabled: true },
-  { id: 4, tank: 'Cichlid Tank C', time: '7:30 AM', amount: '4g', enabled: false },
-  { id: 5, tank: 'Breeding Tank D', time: '8:00 AM', amount: '6g', enabled: true },
-  { id: 6, tank: 'Breeding Tank D', time: '12:00 PM', amount: '4g', enabled: true },
-  { id: 7, tank: 'Breeding Tank D', time: '6:00 PM', amount: '6g', enabled: true },
-];
+/**
+ * FR18 (Sprint 4): every tank's saved schedule, replacing the old sample
+ * page. Owners edit a schedule in Monitoring (the existing editor, which
+ * writes the device's control profile). The device runs the schedule itself.
+ */
+export default function Automation({ onNavigate }: { onNavigate?: (page: string) => void }) {
+  const ruleConfig = useRuleConfig();
+  const rules = [...ruleConfig.rules].sort((a, b) => a.parameter.localeCompare(b.parameter) || a.priority - b.priority);
+  const now = useNow();
+  const [aquariums, setAquariums] = useState<Aquarium[] | null>(null);
+  const [error, setError] = useState('');
 
-const lightingConfig = [
-  { tank: 'Tropical Tank A', onTime: '6:00 AM', offTime: '10:00 PM', brightness: 80, status: 'on' },
-  { tank: 'Goldfish Tank B', onTime: '7:00 AM', offTime: '9:00 PM', brightness: 60, status: 'on' },
-  { tank: 'Cichlid Tank C', onTime: '6:00 AM', offTime: '10:00 PM', brightness: 90, status: 'off' },
-  { tank: 'Breeding Tank D', onTime: '6:00 AM', offTime: '11:00 PM', brightness: 100, status: 'on' },
-];
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    let cancelled = false;
+    getAquariumsByOwner(uid)
+      .then((items) => { if (!cancelled) setAquariums(items); })
+      .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Schedules could not be loaded.'); });
+    return () => { cancelled = true; };
+  }, []);
 
-const filterConfig = [
-  { tank: 'Tropical Tank A', runtime: '8 hrs/day', speed: 'Medium', active: true },
-  { tank: 'Goldfish Tank B', runtime: '6 hrs/day', speed: 'Low', active: true },
-  { tank: 'Cichlid Tank C', runtime: '10 hrs/day', speed: 'High', active: true },
-  { tank: 'Breeding Tank D', runtime: '12 hrs/day', speed: 'High', active: true },
-];
-
-const automationRules = [
-  { id: 1, condition: 'IF Temperature > 28°C', action: 'Turn on cooling fan', enabled: true },
-  { id: 2, condition: 'IF Water Level < 70%', action: 'Trigger water refill alert', enabled: true },
-  { id: 3, condition: 'IF Water Purity (TDS Level) < 80%', action: 'Increase filter runtime by 2hrs', enabled: true },
-  { id: 4, condition: 'IF pH < 6.5 OR pH > 7.8', action: 'Send alert notification', enabled: true },
-  { id: 6, condition: 'IF Power outage detected', action: 'Send SMS/Email alert', enabled: true },
-];
-
-const bioloadProfiles = [
-  {
-    level: 'High',
-    color: 'red',
-    description: 'Large/messy fish species (e.g., Goldfish, Cichlids, Plecos)',
-    examples: ['Goldfish', 'Oscar', 'Pleco', 'Flowerhorn'],
-    feedingFreq: '3x daily',
-    filterSpeed: 'High',
-    waterChange: 'Weekly (30%)',
-    monitoring: 'Every 15 min',
-  },
-  {
-    level: 'Medium',
-    color: 'amber',
-    description: 'Moderate waste-producing community fish',
-    examples: ['Guppies', 'Mollies', 'Platies', 'Swordtails'],
-    feedingFreq: '2x daily',
-    filterSpeed: 'Medium',
-    waterChange: 'Bi-weekly (25%)',
-    monitoring: 'Every 30 min',
-  },
-  {
-    level: 'Low',
-    color: 'emerald',
-    description: 'Small, clean species (e.g., Tetras, Shrimps)',
-    examples: ['Neon Tetra', 'Cherry Shrimp', 'Betta', 'Corydoras'],
-    feedingFreq: '1-2x daily',
-    filterSpeed: 'Low',
-    waterChange: 'Monthly (20%)',
-    monitoring: 'Every 60 min',
-  },
-];
-
-export default function Automation() {
-  const [feedingEnabled, setFeedingEnabled] = useState<Record<number, boolean>>(
-    Object.fromEntries(feedingSchedules.map((s) => [s.id, s.enabled]))
-  );
-  const [rulesEnabled, setRulesEnabled] = useState<Record<number, boolean>>(
-    Object.fromEntries(automationRules.map((r) => [r.id, r.enabled]))
-  );
+  const edit = (aquariumId: string) => {
+    requestTankFocus(aquariumId);
+    onNavigate?.('monitoring');
+  };
 
   return (
     <div className="space-y-6">
       <StatusMessage variant="warning">
-        Sample data: this page is not connected to your aquariums yet, and changes here are not saved.
+        Times are {SCHEDULE_TIME_ZONE} (UTC+8). The device runs these schedules on its own clock and keeps them running if Wi-Fi drops;
+        that behaviour needs the firmware update and hardware testing (docs/firmware-changes.md §11).
       </StatusMessage>
-
-      <Card>
-        <CardHeader>
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Fish className="h-5 w-5 text-teal-200" />
-            Feeding Schedule
-          </h3>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Tank</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Time</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Toggle</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feedingSchedules.map((schedule) => (
-                  <tr key={schedule.id} className="border-b border-slate-700/50">
-                    <td className="py-3 px-4 text-sm text-white">{schedule.tank}</td>
-                    <td className="py-3 px-4 text-sm text-slate-300">{schedule.time}</td>
-                    <td className="py-3 px-4 text-sm text-slate-300">{schedule.amount}</td>
-                    <td className="py-3 px-4">
-                      <Badge variant={feedingEnabled[schedule.id] ? 'success' : 'default'}>
-                        {feedingEnabled[schedule.id] ? 'Active' : 'Disabled'}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Toggle
-                        checked={feedingEnabled[schedule.id]}
-                        label={`${schedule.tank} feeding at ${schedule.time}`}
-                        onChange={() => setFeedingEnabled({ ...feedingEnabled, [schedule.id]: !feedingEnabled[schedule.id] })}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <h3 className="text-base font-semibold text-white flex items-center gap-2">
-              <Sun className="w-5 h-5 text-amber-400" />
-              Lighting Control
-            </h3>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {lightingConfig.map((light) => (
-                <div key={light.tank} className="bg-slate-700/30 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white">{light.tank}</span>
-                    <Badge variant={light.status === 'on' ? 'success' : 'default'}>
-                      {light.status === 'on' ? 'ON' : 'OFF'}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                    <span>ON: {light.onTime}</span>
-                    <span>OFF: {light.offTime}</span>
-                    <span>Brightness: {light.brightness}%</span>
-                  </div>
-                  <div className="mt-2 w-full bg-slate-600 rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${light.brightness}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h3 className="text-base font-semibold text-white flex items-center gap-2">
-              <Wind className="w-5 h-5 text-blue-400" />
-              Filtration Control
-            </h3>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filterConfig.map((filter) => (
-                <div key={filter.tank} className="bg-slate-700/30 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white">{filter.tank}</span>
-                    <Badge variant={filter.active ? 'success' : 'default'}>
-                      {filter.active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-slate-400">
-                    <span>Runtime: {filter.runtime}</span>
-                    <span>Speed: {filter.speed}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {aquariums === null && !error ? <p className="text-sm text-slate-400">Loading schedules…</p> : null}
+        {aquariums?.length === 0 ? <p className="text-sm text-slate-400">No aquariums yet.</p> : null}
+        {aquariums?.map((aquarium) => {
+          const saved = Boolean(aquarium.automationSettings);
+          const settings = getAutomationSettings(aquarium);
+          const next = saved && settings.enabled ? nextScheduledText(settings, now) : '';
+          return (
+            <Card key={aquarium.id}>
+              <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+                  <CalendarClock className="h-5 w-5 text-teal-200" aria-hidden="true" /> {aquarium.name}
+                </h3>
+                <Badge variant={!saved ? 'default' : settings.enabled ? 'success' : 'warning'}>
+                  {!saved ? 'No schedule saved' : settings.enabled ? 'Automation on' : 'Automation off'}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {saved ? (
+                  <dl className="grid gap-2 sm:grid-cols-3">
+                    <div><dt className="flex items-center gap-1 text-xs text-slate-400"><Fish className="h-3.5 w-3.5" aria-hidden="true" /> Feeding</dt><dd className="text-white">{settings.feedingTimes.join(', ')}</dd></div>
+                    <div><dt className="flex items-center gap-1 text-xs text-slate-400"><Sun className="h-3.5 w-3.5" aria-hidden="true" /> Light</dt><dd className="text-white">{settings.lightOnTime && settings.lightOffTime ? `${settings.lightOnTime}–${settings.lightOffTime}` : 'Not set'}</dd></div>
+                    <div><dt className="flex items-center gap-1 text-xs text-slate-400"><Wind className="h-3.5 w-3.5" aria-hidden="true" /> Filter</dt><dd className="text-white">{settings.filtrationStartTime} for {settings.filtrationRuntimeHours} h</dd></div>
+                  </dl>
+                ) : <p className="text-slate-400">This tank has no saved schedule yet.</p>}
+                {next ? <p className="text-teal-100">{next}</p> : null}
+                <Button size="sm" variant="secondary" onClick={() => edit(aquarium.id)}>
+                  <Settings className="h-4 w-4" aria-hidden="true" /> {saved ? 'Edit schedule' : 'Set up schedule'}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Card>
@@ -197,81 +90,41 @@ export default function Automation() {
           </h3>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {automationRules.map((rule) => (
-              <div key={rule.id} className="flex items-center justify-between gap-4 bg-slate-700/30 rounded-lg p-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-lg bg-slate-600 flex items-center justify-center">
-                    <Settings className="w-4 h-4 text-slate-300" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-teal-200">{rule.condition}</p>
-                    <p className="text-xs text-slate-400">→ {rule.action}</p>
-                  </div>
-                </div>
-                <Toggle
-                  checked={rulesEnabled[rule.id]}
-                  label={rule.condition}
-                  onChange={() => setRulesEnabled({ ...rulesEnabled, [rule.id]: !rulesEnabled[rule.id] })}
-                />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-400" />
-            Bioload-Based Fish Classification
-          </h3>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {bioloadProfiles.map((profile) => (
-              <div key={profile.level} className={`border rounded-xl p-5 ${
-                profile.color === 'red' ? 'border-red-500/30 bg-red-500/5' :
-                profile.color === 'amber' ? 'border-amber-500/30 bg-amber-500/5' :
-                'border-emerald-500/30 bg-emerald-500/5'
-              }`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <Badge variant={profile.color === 'red' ? 'danger' : profile.color === 'amber' ? 'warning' : 'success'}>
-                    {profile.level} Bioload
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-400 mb-3">{profile.description}</p>
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-xs text-slate-400">Example Species:</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {profile.examples.map((fish) => (
-                        <span key={fish} className="px-2 py-0.5 bg-slate-700/50 rounded text-xs text-slate-300">{fish}</span>
-                      ))}
+          <p className="mb-3 text-xs text-slate-400">
+            Live IF-THEN rules from Firestore (read-only here). Thresholds come from the species defaults plus any per-aquarium overrides.
+          </p>
+          {ruleConfig.error ? <p className="mb-3 text-sm text-amber-300">{ruleConfig.error}</p> : null}
+          {!ruleConfig.loaded ? (
+            <p className="text-sm text-slate-400">Loading rules...</p>
+          ) : rules.length === 0 ? (
+            <p className="text-sm text-slate-400">No rules are stored yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {rules.map((rule) => (
+                <div key={rule.ruleId} className="flex items-start justify-between gap-4 rounded-lg bg-slate-700/30 p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-600">
+                      <Settings className="h-4 w-4 text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-teal-200">{rule.title}</p>
+                      <p className="text-xs text-slate-400">
+                        IF {rule.parameter} {rule.condition.op} {rule.condition.ref ?? JSON.stringify(rule.condition.value)}
+                        {rule.condition.marginPct ? ` +${rule.condition.marginPct}%` : ''}
+                        {rule.extraChecks.map((check) => ` AND ${check.field} ${check.op} ${String(check.value)}`).join('')}
+                        {' '}THEN {rule.severity}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-300">→ {rule.action}</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-slate-400">Feeding</p>
-                      <p className="text-white font-medium">{profile.feedingFreq}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">Filter Speed</p>
-                      <p className="text-white font-medium">{profile.filterSpeed}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">Water Change</p>
-                      <p className="text-white font-medium">{profile.waterChange}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">Monitoring</p>
-                      <p className="text-white font-medium">{profile.monitoring}</p>
-                    </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
+                    <span className={rule.status === 'draft' ? 'text-teal-200' : 'text-emerald-300'}>{rule.status}</span>
+                    <span className="text-slate-500">{rule.enabled ? 'enabled' : 'disabled'}</span>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

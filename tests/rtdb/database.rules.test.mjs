@@ -5,7 +5,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { get, ref, remove, set, update } from 'firebase/database';
+import { get, ref, remove, serverTimestamp, set, update } from 'firebase/database';
 
 const PROJECT_ID = 'demo-smartaqua-rtdb-auth';
 const AQUARIUM_A = 'aquarium-a';
@@ -82,6 +82,10 @@ function baseFixture() {
           deviceUids: { 'device-b': true },
         },
       },
+    },
+    deviceBindings: {
+      'device-a': AQUARIUM_A,
+      'device-b': AQUARIUM_B,
     },
     devices: {
       [AQUARIUM_A]: {
@@ -687,4 +691,147 @@ test('PARENT-05 parent and multi-location writes cannot bypass child rules', asy
       [`authorization/users/user-a/role`]: 'Admin',
     })
   );
+});
+
+
+// --- Sprint 1: device contract additions (docs/device-contract.md) ---
+
+// Exact shape the current live firmware sends for Aquarium 1 (2026-11-06).
+const LIVE_FIRMWARE_TELEMETRY = Object.freeze({
+  equipmentStatus: 'Unknown',
+  filterState: 'Inactive',
+  online: true,
+  ph: 8.116076,
+  powerStatus: 'Unknown',
+  tdsReadingValid: false,
+  temperatureC: 26.5,
+  temperatureReadingValid: true,
+  updatedAt: 1793978486622,
+  waterLevelPercent: 15.72354,
+  waterPresent: true,
+});
+
+function ackFor(commandId, overrides = {}) {
+  return Object.fromEntries(
+    Object.entries({ commandId, status: 'done', executedAt: serverTimestamp(), ...overrides })
+      .filter(([, value]) => value !== undefined)
+  );
+}
+
+const COMMAND_A_ID = `feed_now-${AQUARIUM_A}`;
+
+test('CONTRACT-01 the current live firmware telemetry payload remains valid', async () => {
+  const database = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), LIVE_FIRMWARE_TELEMETRY));
+});
+
+test('CONTRACT-02 telemetry accepts the new validity flags and a server-timestamp updatedAt', async () => {
+  const database = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), {
+    ...TELEMETRY,
+    phReadingValid: true,
+    turbidityReadingValid: false,
+    updatedAt: serverTimestamp(),
+  }));
+});
+
+test('CONTRACT-03 validity flags must be booleans, and other devices cannot write them', async () => {
+  const database = deviceDatabase('device-a');
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, phReadingValid: 'yes' }));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, turbidityReadingValid: 1 }));
+  await assertFails(set(ref(deviceDatabase('device-b'), `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, phReadingValid: true }));
+});
+
+test('CONTRACT-04 telemetry accepts the optional mainsPresent boolean (new, additive) and nothing else for it', async () => {
+  const database = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: false }));
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: true, powerStatus: 'Online' }));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: 'no' }));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: 0 }));
+  await assertFails(set(ref(deviceDatabase('device-b'), `devices/${AQUARIUM_A}/telemetry`), { ...TELEMETRY, mainsPresent: false }));
+});
+
+test('ACK-01 the bound device acknowledges the current command with a server timestamp', async () => {
+  const database = deviceDatabase('device-a');
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertSucceeds(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`),
+    ackFor(COMMAND_A_ID, { status: 'failed', error: 'feeder motor timeout' })));
+  await assertSucceeds(get(ref(humanDatabase('user-a'), `devices/${AQUARIUM_A}/commandAck/latest`)));
+  await assertSucceeds(get(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`)));
+});
+
+test('ACK-02 a mismatched commandId is denied', async () => {
+  const database = deviceDatabase('device-a');
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`), ackFor('feed_now-stale')));
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(`feed_now-${AQUARIUM_B}`)));
+});
+
+test('ACK-03 another aquarium\'s device cannot acknowledge or read Aquarium A commands', async () => {
+  const database = deviceDatabase('device-b');
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertFails(get(ref(database, `devices/${AQUARIUM_A}/commandAck/latest`)));
+});
+
+test('ACK-04 humans cannot write acknowledgements; non-owners cannot read them', async () => {
+  await assertFails(set(ref(humanDatabase('user-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertFails(set(ref(humanDatabase('user-b'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertFails(set(ref(humanDatabase('admin-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  // A human UID listed in deviceUids without the device claim is still not a device.
+  await assertFails(set(ref(humanDatabase('listed-human'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertFails(get(ref(humanDatabase('user-b'), `devices/${AQUARIUM_A}/commandAck/latest`)));
+  await assertFails(get(ref(anonymousDatabase(), `devices/${AQUARIUM_A}/commandAck/latest`)));
+});
+
+test('ACK-05 acknowledgement payloads are validated', async () => {
+  const path = `devices/${AQUARIUM_A}/commandAck/latest`;
+  const database = deviceDatabase('device-a');
+  for (const ack of [
+    ackFor(COMMAND_A_ID, { executedAt: 1792224000000 }),
+    ackFor(COMMAND_A_ID, { status: 'pending' }),
+    ackFor(COMMAND_A_ID, { status: undefined }),
+    ackFor(COMMAND_A_ID, { executedAt: undefined }),
+    ackFor(COMMAND_A_ID, { error: 'x'.repeat(201) }),
+    ackFor(COMMAND_A_ID, { extra: true }),
+  ]) {
+    await assertFails(set(ref(database, path), ack));
+  }
+  await assertFails(set(ref(database, `devices/${AQUARIUM_A}/commandAck/other`), ackFor(COMMAND_A_ID)));
+});
+
+test('ACK-06 web command writes and device acks live on separate paths', async () => {
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertSucceeds(set(ref(humanDatabase('user-a'), `devices/${AQUARIUM_A}/commands/latest`),
+    commandFor(AQUARIUM_A, 'user-a', { commandId: 'feed_now-next', requestedAt: 1792224001000 })));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const ack = (await get(ref(context.database(), `devices/${AQUARIUM_A}/commandAck/latest`))).val();
+    if (ack?.commandId !== COMMAND_A_ID) throw new Error('command write overwrote the acknowledgement');
+  });
+  // The device cannot write into commands/ at all.
+  await assertFails(set(ref(deviceDatabase('device-a'), `devices/${AQUARIUM_A}/commands/latest/status`), 'done'));
+  // The old ack no longer matches the new command, so it cannot be re-written for it.
+  await assertFails(set(ref(deviceDatabase('device-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor('feed_now-next')));
+});
+
+test('ACK-07 a revoked aquarium blocks device acknowledgements', async () => {
+  await mutateFixture(`authorization/aquariums/${AQUARIUM_A}/state`, 'revoked');
+  await assertFails(set(ref(deviceDatabase('device-a'), `devices/${AQUARIUM_A}/commandAck/latest`), ackFor(COMMAND_A_ID)));
+});
+
+test('BIND-01 a device reads only its own binding', async () => {
+  await assertSucceeds(get(ref(deviceDatabase('device-a'), 'deviceBindings/device-a')));
+  await assertFails(get(ref(deviceDatabase('device-a'), 'deviceBindings/device-b')));
+  await assertFails(get(ref(deviceDatabase('device-b'), 'deviceBindings/device-a')));
+  await assertFails(get(ref(deviceDatabase('device-a'), 'deviceBindings')));
+});
+
+test('BIND-02 humans cannot read bindings, and nobody can write them from a client', async () => {
+  // Same UID string as a device but without the device claim.
+  await assertFails(get(ref(humanDatabase('device-a'), 'deviceBindings/device-a')));
+  await assertFails(get(ref(humanDatabase('user-a'), 'deviceBindings/device-a')));
+  await assertFails(get(ref(humanDatabase('admin-a'), 'deviceBindings/device-a')));
+  await assertFails(get(ref(anonymousDatabase(), 'deviceBindings/device-a')));
+  await assertFails(set(ref(deviceDatabase('device-a'), 'deviceBindings/device-a'), AQUARIUM_B));
+  await assertFails(set(ref(humanDatabase('user-a'), 'deviceBindings/device-a'), AQUARIUM_A));
+  await assertFails(set(ref(humanDatabase('admin-a'), 'deviceBindings/device-c'), AQUARIUM_A));
 });

@@ -1,7 +1,26 @@
+import { securityHeaders } from './security-headers.mjs';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Keeps `next dev` from appending its own block to the project's AGENTS.md.
   agentRules: false,
+  poweredByHeader: false,
+  // Sprint 5: CSP, HSTS, frame-ancestors and friends on every route
+  // (security-headers.mjs). The dev server also gets them, so the Playwright
+  // smoke tests run under the same policy.
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: securityHeaders({
+        dev: process.env.NODE_ENV !== 'production',
+        emulators: process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true',
+      }),
+    }];
+  },
+  // npm run demo builds into its own folder so it never mixes with a real build.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  // No dev-tools badge in demo screenshots.
+  ...(process.env.NEXT_DIST_DIR ? { devIndicators: false } : {}),
   // The repository's ignored local .env may still use the Vite-era names.
   // Firebase web config is public client configuration, so map those values
   // into Next's explicitly exposed NEXT_PUBLIC names for local development.

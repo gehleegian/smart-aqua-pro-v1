@@ -1,3 +1,4 @@
+import { consumeTankFocus } from '../services/tankFocus';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '../firebase';
 import {
@@ -18,6 +19,7 @@ import type {
 } from '../types/aquarium';
 import {
   buildDeviceControlProfile,
+  getDeviceCommandStatus,
   getDeviceTelemetryState,
   getDeviceTelemetryStatusText,
   getFreshTelemetrySnapshot,
@@ -36,7 +38,9 @@ import type { UserData, UserRole } from '../types/user';
 import {
   buildMonitoringOwners,
   defaultAutomationSettings,
+  deviceProfileSettings,
   getAutomationSettings,
+  hasSavedSchedule,
   getManualActionDisplay,
   getManualActionKey,
   getManualSystemStatus,
@@ -44,10 +48,8 @@ import {
   prepareAutomationSettings,
   systemStatusConfig,
 } from '../utils/monitoringHelpers';
-import {
-  assessAquariumCondition,
-  type AssessmentTelemetry,
-} from '../utils/monitoringAssessment';
+import { assessAquarium } from '../utils/conditionAssessment';
+import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -65,7 +67,7 @@ export function useMonitoringController() {
   >({});
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] = useState('');
-  const [selectedAquariumId, setSelectedAquariumId] = useState('');
+  const [selectedAquariumId, setSelectedAquariumId] = useState(() => consumeTankFocus());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [systemError, setSystemError] = useState('');
@@ -288,36 +290,25 @@ export function useMonitoringController() {
     }
   }, [deviceShadows, savingMode, selectedAquariumId, systemMode]);
 
+  const ruleConfig = useRuleConfig();
+  const engineStates = useAquariumEngineStates(useMemo(() => aquariums.map((aquarium) => aquarium.id), [aquariums]));
+
   const liveAquariums = useMemo<MonitoringAquarium[]>(() => {
     return aquariums.map((aquarium) => {
+      // Main (PR #8) removed the browser telemetry simulator: live data only.
       const telemetry = deviceShadows[aquarium.id]?.telemetry;
       const telemetryState = getDeviceTelemetryState(telemetry, telemetryNow);
       const snapshot = getFreshTelemetrySnapshot(telemetry, telemetryNow, aquarium);
+      // Main (PR #8): light/filter as the device reports them, when fresh.
       const manualStatus = getReportedManualStatus(getManualSystemStatus(aquarium), telemetry, telemetryNow);
       const telemetrySource: TelemetrySource = snapshot ? 'live' : 'unavailable';
-      const assessmentTelemetry: AssessmentTelemetry | null = snapshot
-        ? {
-            temperatureC: snapshot.temperatureC,
-            temperatureValid: snapshot.hasFreshTemperatureTelemetry,
-            waterLevelPercent: snapshot.waterLevelPercent,
-            waterLevelValid: snapshot.hasFreshWaterLevelTelemetry,
-            tdsPpm: snapshot.tdsPpm,
-            tdsPurityPercent: snapshot.tdsPercent,
-            tdsValid: snapshot.hasFreshPurityTelemetry,
-            ph: snapshot.ph,
-            phValid: snapshot.hasFreshPhTelemetry,
-            turbidity: snapshot.turbidity,
-            turbidityValid: snapshot.hasFreshTurbidityTelemetry,
-            filterState: snapshot.filterState,
-            equipmentStatus: snapshot.equipmentStatus,
-            powerStatus: snapshot.powerStatus,
-          }
-        : null;
-      const assessment = assessAquariumCondition({
-        profile: aquarium,
-        telemetry: assessmentTelemetry,
+      const assessment = assessAquarium({
+        aquarium: aquarium as unknown as Record<string, unknown>,
+        reading: snapshot && telemetry ? telemetry as unknown as Record<string, unknown> : null,
         source: telemetrySource,
-        assessedAt: telemetryNow,
+        now: telemetryNow,
+        ruleConfig,
+        engineState: engineStates[aquarium.id] ?? null,
       });
 
       return {
@@ -325,7 +316,8 @@ export function useMonitoringController() {
         turbidityState: snapshot?.turbidityState,
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
-        tdsPpm: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPpm ?? aquarium.tdsPpm : aquarium.tdsPpm,
+        // TDS ppm stands on its own (firmware may send ppm without the legacy purity %).
+        tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
         ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
         turbidity: snapshot?.hasFreshTurbidityTelemetry
           ? snapshot.turbidity ?? aquarium.turbidity
@@ -348,10 +340,12 @@ export function useMonitoringController() {
         hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
         hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
         telemetryState,
+        sensorValidity: snapshot?.validity ?? null,
+        commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], telemetryNow),
         manualStatus,
       };
     });
-  }, [aquariums, deviceShadows, telemetryNow]);
+  }, [aquariums, deviceShadows, engineStates, ruleConfig, telemetryNow]);
 
   const ownerCards = useMemo(
     () => buildMonitoringOwners(liveAquariums, users),
@@ -561,7 +555,7 @@ export function useMonitoringController() {
 
       const profile = buildDeviceControlProfile({
         aquarium,
-        automationSettings: nextSettings || getAutomationSettings(aquarium),
+        automationSettings: deviceProfileSettings(aquarium, nextSettings),
         mode: nextMode,
       });
 
@@ -918,7 +912,7 @@ export function useMonitoringController() {
   return {
     aquariums: liveAquariums,
     automationDraft,
-    automationEnabled: Boolean(automationSettings?.enabled),
+    automationEnabled: hasSavedSchedule(selectedAquarium) && Boolean(automationSettings?.enabled),
     automationError,
     automationSettings,
     error,

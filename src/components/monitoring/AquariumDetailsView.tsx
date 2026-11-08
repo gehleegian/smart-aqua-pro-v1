@@ -1,5 +1,12 @@
-import { ArrowLeft, RefreshCw, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, RefreshCw, Settings, Wrench } from 'lucide-react';
+import { CommandHistory, CommandStatusBadge } from './CommandHistory';
+import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
+import { MaintenanceHistory } from '../maintenance/MaintenanceHistory';
+import { nextScheduledText } from '../../utils/schedule';
+import { useNow } from '../../hooks/useNow';
 import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
+import { getSensorDisplay } from '../../utils/sensorDisplay';
 import type { AutomationSettings } from '../../types/aquarium';
 import type {
   AssessmentSeverity,
@@ -11,13 +18,14 @@ import type {
 import {
   formatAutomationTimes,
   formatAutomationTime,
-  getQualityLabel,
 } from '../../utils/monitoringHelpers';
 import {
   formatBiomass,
   formatEstimatedBioload,
 } from '../../utils/aquariumProfileCalculations';
 import Badge from '../ui/Badge';
+import { DraftThresholdsBadge, ParameterStatusBadge } from '../condition/ConditionBadges';
+import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -38,6 +46,8 @@ interface AquariumDetailsViewProps {
   onManualAction: (field: SystemField) => void;
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
+  /** Sprint 3: false for a caretaker (commands only; schedules are owner-only). */
+  canManage?: boolean;
   onRefresh: () => void;
 }
 
@@ -58,8 +68,11 @@ export function AquariumDetailsView({
   onManualAction,
   onModeChange,
   onOpenAutomationEditor,
+  canManage = true,
   onRefresh,
 }: AquariumDetailsViewProps) {
+  const [logging, setLogging] = useState(false);
+  const now = useNow();
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -99,61 +112,28 @@ export function AquariumDetailsView({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            <Reading
-              label="Temperature"
-              value={
-                aquarium.hasFreshTemperatureTelemetry
-                  ? `${aquarium.temp.toFixed(1)} C`
-                  : '--'
-              }
-              status={
-                aquarium.hasFreshTemperatureTelemetry
-                  ? 'Live telemetry'
-                  : 'Waiting for telemetry'
-              }
-            />
-            <Reading
-              label="Water Level"
-              value={formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry ?? aquarium.hasFreshTelemetry)}
-              status={!aquarium.hasFreshTelemetry ? 'Waiting for telemetry' : aquarium.waterLevelMessage || 'Live telemetry'}
-            />
-            <Reading
-              label="TDS Quality"
-              value={
-                aquarium.hasFreshPurityTelemetry
-                  ? typeof aquarium.tdsPpm === 'number'
-                    ? `${Math.round(aquarium.tdsPpm)} ppm`
-                    : getQualityLabel(aquarium.quality, aquarium.tdsPpm)
-                  : '--'
-              }
-              status={
-                aquarium.hasFreshPurityTelemetry
-                  ? getQualityLabel(aquarium.quality, aquarium.tdsPpm)
-                  : aquarium.hasFreshTelemetry ? 'No validated TDS conversion from device' : 'Waiting for telemetry'
-              }
-            />
-            <Reading
-              label="pH Level"
-              value={
-                aquarium.hasFreshPhTelemetry && typeof aquarium.ph === 'number'
-                  ? aquarium.ph.toFixed(1)
-                  : '--'
-              }
-              status={aquarium.hasFreshPhTelemetry ? 'Live telemetry' : aquarium.hasFreshTelemetry ? 'No valid pH supplied by device' : 'Waiting for telemetry'}
-            />
-            <Reading
-              label="Turbidity"
-              value={
-                aquarium.turbidityState ?? (aquarium.hasFreshTurbidityTelemetry && typeof aquarium.turbidity === 'number'
-                  ? `${aquarium.turbidity.toFixed(0)} NTU`
-                  : '--')
-              }
-              status={
-                aquarium.turbidityState ? 'Live Clear/Cloudy comparison; not NTU' : aquarium.hasFreshTurbidityTelemetry
-                  ? 'Live telemetry'
-                  : aquarium.hasFreshTelemetry ? 'No valid turbidity supplied by device' : 'Waiting for telemetry'
-              }
-            />
+            {(() => {
+              const live = aquarium.hasFreshTelemetry;
+              const readings = [
+                { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
+                { label: 'Water Level', display: live && aquarium.hasFreshWaterLevelTelemetry === false
+                  ? { value: '--', status: aquarium.waterLevelMessage || 'No valid water-level reading' }
+                  : getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
+                {
+                  label: 'TDS',
+                  display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
+                    typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
+                },
+                { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
+                // Main (PR #8): a Clear/Cloudy module reports a category, never invented NTU.
+                aquarium.turbidityState && live
+                  ? { label: 'Turbidity', display: { value: aquarium.turbidityState, status: 'Live Clear/Cloudy comparison; not NTU' } }
+                  : { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
+              ];
+              return readings.map(({ label, display }) => (
+                <Reading key={label} label={label} value={display.value} status={display.status} />
+              ));
+            })()}
             <Reading
               label="Power Status"
               value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
@@ -178,12 +158,15 @@ export function AquariumDetailsView({
             <div>
               <h3 className="text-lg font-semibold text-white">Condition Assessment</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Profile-based assessment using rule set {aquarium.assessment.ruleVersion}. Guidance only; maintenance actions require your review.
+                Rule-based assessment ({aquarium.assessment.ruleVersion}). Guidance only; maintenance actions require your review.
               </p>
             </div>
-            <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
-              {aquarium.assessment.overallSeverity}
-            </Badge>
+            <div className="flex flex-wrap gap-2">
+              <DraftThresholdsBadge draft={aquarium.assessment.draft} />
+              <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
+                {aquarium.assessment.overallSeverity}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -192,7 +175,7 @@ export function AquariumDetailsView({
               <div key={item.parameter} className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium text-white">{item.label}</p>
-                  <Badge variant={getSeverityVariant(item.severity)}>{item.severity}</Badge>
+                  <ParameterStatusBadge item={item} />
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-400">{item.message}</p>
               </div>
@@ -216,6 +199,8 @@ export function AquariumDetailsView({
           ) : null}
         </CardContent>
       </Card>
+
+      {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} aquariumName={aquarium.name} /> : null}
 
       <Card>
         <CardHeader>
@@ -284,7 +269,8 @@ export function AquariumDetailsView({
                 <button
                   key={mode}
                   type="button"
-                  disabled={savingMode || controlsDisabled}
+                  disabled={savingMode || controlsDisabled || !canManage}
+                  title={canManage ? undefined : 'Only the owner changes the mode'}
                   onClick={() => onModeChange(mode)}
                   className={`flex-1 rounded-md px-3 py-2 text-sm ${
                     systemMode === mode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
@@ -298,6 +284,11 @@ export function AquariumDetailsView({
             <p className="mb-4 text-xs text-slate-400">
               Manual controls work while automation is enabled. Light and filter overrides last until the next scheduled change.
             </p>
+            {aquarium.commandStatus !== 'none' ? (
+              <p className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-300" role="status">
+                Last command: <CommandStatusBadge status={aquarium.commandStatus} />
+              </p>
+            ) : null}
             <div className="space-y-3">
               {(['feeder', 'light', 'filter'] as SystemField[]).map((field) => (
                 <div key={field} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
@@ -323,27 +314,57 @@ export function AquariumDetailsView({
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-white">Automation</h3>
-              <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={onOpenAutomationEditor}>
-                <Settings className="h-4 w-4" />
-                Edit
-              </Button>
+              {canManage ? (
+                <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={onOpenAutomationEditor}>
+                  <Settings className="h-4 w-4" />
+                  Edit
+                </Button>
+              ) : (
+                <span className="text-xs text-slate-400">Owner only</span>
+              )}
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 text-sm">
-              <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
-              <Row label="Schedule time zone" value="UTC+8" />
-              <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
-              <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
-              <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
-              <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
-            </div>
-            <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
-              {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
-            </Button>
+            {aquarium.automationSettings ? (
+              <div className="space-y-3 text-sm">
+                <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
+                <Row label="Schedule time zone" value="UTC+8" />
+                <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
+                <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
+                <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
+                <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <Row label="Status" value="No schedule set" />
+                <p className="text-slate-400">
+                  {canManage ? 'Nothing runs automatically. Use Edit to set feeding, light and filter times.' : 'Nothing runs automatically. An owner can set a schedule.'}
+                </p>
+              </div>
+            )}
+            {aquarium.automationSettings && automationEnabled && nextScheduledText(automationSettings, now) ? (
+              <p className="mt-4 text-sm text-teal-100">{nextScheduledText(automationSettings, now)}</p>
+            ) : null}
+            <p className="mt-2 text-xs text-slate-400">Times are Asia/Manila. The device runs the schedule on its own clock, even if Wi-Fi drops.</p>
+            {canManage && aquarium.automationSettings ? (
+              <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
+                {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
       </div>
+
+      {aquarium.telemetrySource !== 'simulated' ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <MaintenanceHistory
+            aquariumId={aquarium.id}
+            action={<Button size="sm" onClick={() => setLogging(true)}><Wrench className="h-4 w-4" aria-hidden="true" /> Log maintenance</Button>}
+          />
+          <CommandHistory aquariumId={aquarium.id} />
+        </div>
+      ) : null}
+      {logging ? <LogMaintenanceModal aquariumId={aquarium.id} aquariumName={aquarium.name} recommendation={null} onClose={() => setLogging(false)} /> : null}
     </div>
   );
 }

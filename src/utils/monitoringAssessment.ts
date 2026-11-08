@@ -1,6 +1,5 @@
 export {
-  assessAquariumCondition,
-  MONITORING_RULE_VERSION,
-  MONITORING_SEVERITY_MARGINS,
+  evaluateAquarium,
+  toConditionAssessment,
 } from './monitoringAssessmentCore.ts';
-export type { AssessmentTelemetry } from './monitoringAssessmentCore.ts';
+export type { AssessmentTelemetry, EngineResult } from './monitoringAssessmentCore.ts';

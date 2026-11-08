@@ -6,8 +6,13 @@ import type {
   DashboardTankStat,
 } from '../../types/dashboard';
 import { getManualSystemStatus } from '../../utils/monitoringHelpers';
+import Badge from '../ui/Badge';
 import { Card, CardHeader } from '../ui/Card';
 import { SummaryGrid } from './SummaryGrid';
+import { ConditionPanel } from '../condition/ConditionPanel';
+import { DraftThresholdsBadge, OverallConditionBadge } from '../condition/ConditionBadges';
+import { NextCleaningCard } from '../condition/NextCleaningCard';
+import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 
 interface UserDashboardViewProps {
   liveDataWarning: ReactNode;
@@ -45,20 +50,31 @@ function formatUpdatedAgo(updatedAt: number, now: number) {
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 }
 
+// Ranges come from the effective thresholds in Firestore (species defaults +
+// per-aquarium overrides); nothing is hard-coded here.
+const READING_PARAMETER: Record<string, 'temperatureC' | 'waterLevelPercent' | 'tdsPpm' | 'ph' | 'turbidity'> = {
+  Temperature: 'temperatureC',
+  'Water Level': 'waterLevelPercent',
+  'Water Purity (TDS)': 'tdsPpm',
+  'pH Level': 'ph',
+  Turbidity: 'turbidity',
+};
+
+/** The owner changed this range away from the species default. */
+function isCustomRange(title: string, tank: DashboardAquarium) {
+  const key = READING_PARAMETER[title];
+  return Boolean(key && tank.customThresholds?.includes(key));
+}
+
 function getReadingRange(title: string, tank: DashboardAquarium) {
-  if (title === 'Temperature') {
-    return `Range ${tank.minTemp}–${tank.maxTemp}°C`;
-  }
-
-  if (title === 'Water Level') {
-    return `Min ${tank.minLevel}%`;
-  }
-
-  if (title === 'Water Purity (TDS)' && typeof tank.tdsPpm !== 'number') {
-    return `Min ${tank.minQuality}%`;
-  }
-
-  return '';
+  const values = tank.thresholds?.values;
+  const key = READING_PARAMETER[title];
+  const range = key ? values?.[key] : undefined;
+  if (!range) return '';
+  const unit = { temperatureC: '°C', waterLevelPercent: '%', tdsPpm: ' ppm', ph: '', turbidity: ' NTU' }[key!];
+  if (range.min !== undefined && range.max !== undefined) return `Range ${range.min}–${range.max}${unit}`;
+  if (range.min !== undefined) return `Min ${range.min}${unit}`;
+  return `Max ${range.max}${unit}`;
 }
 
 function DevicePill({ tank, now }: { tank: DashboardAquarium; now: number }) {
@@ -135,7 +151,10 @@ function ReadingCard({ stat, tank }: { stat: DashboardTankStat; tank: DashboardA
         </p>
       )}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-3 text-xs">
-        <span className="text-slate-300">{range}</span>
+        <span className="inline-flex items-center gap-2 text-slate-300">
+          {range}
+          {range && isCustomRange(stat.title, tank) && <Badge variant="info">Custom</Badge>}
+        </span>
         {hasValue && (
           <span
             className={`inline-flex items-center gap-1.5 ${
@@ -190,10 +209,13 @@ export function UserDashboardView({
   onSelectTank,
 }: UserDashboardViewProps) {
   const equipmentStatus = getManualSystemStatus(selectedTank);
+  // Without live telemetry the stored states are only the last values set in
+  // the app, not what the equipment is doing, so they are not shown as fact.
+  const live = selectedTank.hasFreshTelemetry;
   const equipment = [
-    { label: 'Filter', state: equipmentStatus.filter, icon: Filter },
-    { label: 'Light', state: equipmentStatus.light, icon: Lightbulb },
-    { label: 'Feeder', state: equipmentStatus.feeder, icon: Utensils },
+    { label: 'Filter', state: live ? equipmentStatus.filter : 'Unknown', icon: Filter },
+    { label: 'Light', state: live ? equipmentStatus.light : 'Unknown', icon: Lightbulb },
+    { label: 'Feeder', state: live ? equipmentStatus.feeder : 'Unknown', icon: Utensils },
   ];
   const readings = stats.filter((stat) => stat.title !== SYSTEM_STATUS_TITLE);
 
@@ -218,7 +240,11 @@ export function UserDashboardView({
             <h3 className="truncate text-base font-semibold text-white">{selectedTank.name}</h3>
           )}
         </div>
-        <DevicePill tank={selectedTank} now={telemetryNow} />
+        <div className="flex flex-wrap items-center gap-2">
+          <DraftThresholdsBadge draft={selectedTank.assessment.draft || Boolean(selectedTank.thresholds && selectedTank.thresholds.status === 'draft')} />
+          {selectedTank.telemetryState === 'live' ? <OverallConditionBadge severity={selectedTank.assessment.overallSeverity} /> : null}
+          <DevicePill tank={selectedTank} now={telemetryNow} />
+        </div>
       </div>
 
       {liveDataWarning}
@@ -230,6 +256,13 @@ export function UserDashboardView({
           <ReadingCard key={stat.title} stat={stat} tank={selectedTank} />
         ))}
       </section>
+
+      <ConditionPanel assessment={selectedTank.assessment} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RecommendationsPanel aquariumId={selectedTank.id} aquariumName={selectedTank.name} />
+        <NextCleaningCard cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow} />
+      </div>
 
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">

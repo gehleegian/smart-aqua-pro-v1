@@ -1,3 +1,4 @@
+# SUPERSEDED (Sprint 3): docs/rule-matrix.md is the recommendation sign-off document for the adviser. Kept for history; do not edit.
 recommendation_rule_id,parameter_or_event,severity,trigger_summary,maintenance_title,ordered_action_steps,rationale,required_user_response,prohibited_automatic_action,context_conditions,status,approved_by,approval_date,approval_reference
 REC-TURB-WARN-001,turbidity,WARNING,TBD,Inspect aquarium clarity and filtration,"Candidate only: inspect filtration; check for excess food; remove visible waste",Older manuscript example; not a complete approved rule,TBD,Do not automatically replace water or clean the filter,TBD,CANDIDATE_REQUIRES_APPROVAL,,,,
 REC-LEVEL-WARN-001,water_level,WARNING,TBD,Investigate low water level,"Candidate only: check for leakage or evaporation before adding properly prepared water",Older manuscript example; not a complete approved rule,TBD,Do not automatically add or replace water,TBD,CANDIDATE_REQUIRES_APPROVAL,,,,

@@ -92,6 +92,7 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
   }
 
   const reading = value as Record<string, unknown>;
+  if (reading.waterLevelReadingValid === false) return null; // This legacy view requires a complete reading.
   const recordedAtEpoch = readNumber(reading.recordedAtEpoch);
   const temperatureC = readNumber(reading.temperatureC);
   const waterLevelPercent = readNumber(reading.waterLevelPercent);
@@ -133,6 +134,9 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
         : undefined,
     powerStatus: normalizeDevicePowerStatus(reading.powerStatus),
     ph: readNumber(reading.ph),
+    phReadingValid: typeof reading.phReadingValid === 'boolean' ? reading.phReadingValid : undefined,
+    turbidityReadingValid:
+      typeof reading.turbidityReadingValid === 'boolean' ? reading.turbidityReadingValid : undefined,
     online: readBoolean(reading.online, true),
     recordedAt: readRecordedAtLabel(reading.recordedAt, recordedAtEpoch),
     recordedAtEpoch,

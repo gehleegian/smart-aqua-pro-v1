@@ -31,10 +31,12 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
 
   return {
     temperatureC,
+    // Validity flags pass through unchanged; a missing flag is resolved by
+    // evaluateTelemetryValidity() according to REQUIRE_SENSOR_VALIDITY_FLAGS.
     temperatureReadingValid:
       typeof telemetry.temperatureReadingValid === 'boolean'
         ? telemetry.temperatureReadingValid
-        : true,
+        : undefined,
     waterLevelPercent,
     waterLevelReadingValid: typeof telemetry.waterLevelReadingValid === 'boolean' ? telemetry.waterLevelReadingValid : undefined,
     waterLevelTargetHeightCm: readTelemetryNumber(telemetry.waterLevelTargetHeightCm),
@@ -43,6 +45,8 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid,
     turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
+    turbidityReadingValid:
+      typeof telemetry.turbidityReadingValid === 'boolean' ? telemetry.turbidityReadingValid : undefined,
     turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy' || telemetry.turbidityState === 'Unknown'
       ? telemetry.turbidityState : undefined,
     ammoniaPpm: Number.isFinite(ammoniaPpm) ? ammoniaPpm : undefined,
@@ -60,7 +64,9 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
         ? telemetry.equipmentStatus
         : undefined,
     powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
+    ...(typeof telemetry.mainsPresent === 'boolean' ? { mainsPresent: telemetry.mainsPresent } : {}),
     ph: readTelemetryNumber(telemetry.ph),
+    phReadingValid: typeof telemetry.phReadingValid === 'boolean' ? telemetry.phReadingValid : undefined,
     updatedAt,
     online: typeof telemetry.online === 'boolean' ? telemetry.online : true,
   };

@@ -1,99 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import { getAlertsPageData } from '../services/alertsService';
+import { isRealtimeDatabaseConfigured, subscribeToDeviceShadow } from '../services/deviceService';
 import type {
-  AlertCategory,
-  AlertSeverity,
   AlertSeverityFilter,
   AlertStatusFilter,
   AquariumAlert,
 } from '../types/alerts';
 import type { Aquarium } from '../types/aquarium';
+import type { DeviceShadow } from '../types/device';
 import type { UserRole } from '../types/user';
 import {
+  buildAlertCandidates,
   buildDistribution,
   buildSummaryCounts,
   filterAlerts,
   getAlertPanelTitle,
   getAlertStatus,
+  getErrorMessage,
   sortAlertsByRecency,
+  syncAlertHistory,
 } from '../utils/alertsHelpers';
+import { mapDashboardAquariums, mergeDashboardAquariums } from '../utils/dashboardHelpers';
+import { markAlertRead, subscribeToAlertRecords } from '../services/alertRecordsService';
+import { subscribeToRecommendations } from '../services/recommendationsService';
+import type { Recommendation } from '../types/recommendation';
+import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
-function makeAlert(
-  aquarium: Aquarium,
-  category: AlertCategory,
-  type: AlertSeverity,
-  message: string,
-  suffix: string
-): AquariumAlert {
-  const now = Date.now();
-
-  return {
-    id: `${aquarium.id}:${suffix}`,
-    fingerprint: `${aquarium.id}:${category}:${suffix}`,
-    aquariumId: aquarium.id,
-    tankName: aquarium.name,
-    ownerName: aquarium.ownerName,
-    type,
-    category,
-    message,
-    firstDetectedAt: now,
-    lastDetectedAt: now,
-    acknowledgedAt: null,
-    resolvedAt: null,
-  };
-}
-
-function buildStaticAlerts(aquariums: Aquarium[]) {
-  return sortAlertsByRecency(
-    aquariums.flatMap((aquarium) => {
-      const alerts: AquariumAlert[] = [];
-
-      if (aquarium.temp < aquarium.minTemp || aquarium.temp > aquarium.maxTemp) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'temperature',
-            'warning',
-            `${aquarium.name} temperature is outside the configured range.`,
-            'temperature'
-          )
-        );
-      }
-
-      if (aquarium.level < aquarium.minLevel) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'water_level',
-            aquarium.level <= Math.max(aquarium.minLevel - 10, 0) ? 'critical' : 'warning',
-            `${aquarium.name} water level is below the minimum threshold.`,
-            'water-level'
-          )
-        );
-      }
-
-      const qualityWarning =
-        typeof aquarium.tdsPpm === 'number'
-          ? aquarium.tdsPpm > 500
-          : aquarium.quality < aquarium.minQuality;
-
-      if (qualityWarning) {
-        alerts.push(
-          makeAlert(
-            aquarium,
-            'water_quality',
-            'warning',
-            `${aquarium.name} water purity needs attention.`,
-            'water-quality'
-          )
-        );
-      }
-
-      return alerts;
-    })
-  );
-}
+const ALERT_REFRESH_MS = 5000;
 
 export function useAlertsController() {
   const [aquariums, setAquariums] = useState<Aquarium[]>([]);
@@ -104,6 +38,9 @@ export function useAlertsController() {
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deviceShadows, setDeviceShadows] = useState<Record<string, DeviceShadow>>({});
+  const [liveDataError, setLiveDataError] = useState('');
+  const [telemetryNow, setTelemetryNow] = useState(() => Date.now());
 
   const loadAlerts = useCallback(async () => {
     try {
@@ -130,7 +67,6 @@ export function useAlertsController() {
 
       setUserRole(data.userProfile.role);
       setAquariums(data.aquariums);
-      setAlerts(buildStaticAlerts(data.aquariums));
     } catch (loadError) {
       console.error(loadError);
       setError('Failed to load alerts.');
@@ -149,6 +85,109 @@ export function useAlertsController() {
     return () => window.clearTimeout(loadTimer);
   }, [loadAlerts]);
 
+  const aquariumSubscriptionKey = useMemo(
+    () => JSON.stringify(aquariums.map((aquarium) => aquarium.id).sort()),
+    [aquariums]
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTelemetryNow(Date.now()), ALERT_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const aquariumIds = JSON.parse(aquariumSubscriptionKey) as string[];
+    if (aquariumIds.length === 0) return;
+
+    if (!isRealtimeDatabaseConfigured()) {
+      const timer = window.setTimeout(
+        () => setLiveDataError('Realtime Database is not configured. Live device data is unavailable.'),
+        0
+      );
+      return () => window.clearTimeout(timer);
+    }
+
+    const unsubscribers = aquariumIds.map((aquariumId) =>
+      subscribeToDeviceShadow(
+        aquariumId,
+        (shadow) => setDeviceShadows((prev) => ({ ...prev, [aquariumId]: shadow })),
+        {
+          onError: (subscriptionError) =>
+            setLiveDataError(
+              getErrorMessage(subscriptionError, `Live device data for aquarium ${aquariumId} is unavailable.`)
+            ),
+        }
+      )
+    );
+
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
+  }, [aquariumSubscriptionKey]);
+
+  // Server alerts: alert_records written by the rules engine (dedup, cooldown,
+  // auto-resolve), with their linked recommendations.
+  const [serverAlerts, setServerAlerts] = useState<Record<string, AquariumAlert[]>>({});
+  const [recommendations, setRecommendations] = useState<Record<string, Recommendation>>({});
+  useEffect(() => {
+    if (aquariums.length === 0) return;
+    const unsubscribers = aquariums.flatMap((aquarium) => [
+      subscribeToAlertRecords(
+        aquarium,
+        (records) => setServerAlerts((prev) => ({ ...prev, [aquarium.id]: records })),
+        (subscriptionError) => setLiveDataError(getErrorMessage(subscriptionError, 'Stored alerts are unavailable.'))
+      ),
+      subscribeToRecommendations(aquarium.id, (items) =>
+        setRecommendations((prev) => {
+          const next = { ...prev };
+          for (const item of items) next[item.id] = item;
+          return next;
+        })
+      ),
+    ]);
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
+  }, [aquariums]);
+
+  const ruleConfig = useRuleConfig();
+  const engineStates = useAquariumEngineStates(useMemo(() => aquariums.map((aquarium) => aquarium.id), [aquariums]));
+
+  // Browser fallback, only for aquariums the rules engine has not evaluated yet
+  // (no server condition summary and no stored alerts). Same engine and rules;
+  // invalid readings never raise water-condition alerts.
+  const fallbackAquariumIds = useMemo(
+    () => new Set(aquariums
+      .filter((aquarium) => !engineStates[aquarium.id]?.condition && (serverAlerts[aquarium.id]?.length ?? 0) === 0)
+      .map((aquarium) => aquarium.id)),
+    [aquariums, engineStates, serverAlerts]
+  );
+  const alertCandidates = useMemo(
+    () => buildAlertCandidates(
+      mergeDashboardAquariums(mapDashboardAquariums(aquariums), deviceShadows, telemetryNow, ruleConfig, engineStates)
+    ).filter((candidate) => fallbackAquariumIds.has(candidate.aquariumId)),
+    [aquariums, deviceShadows, telemetryNow, ruleConfig, engineStates, fallbackAquariumIds]
+  );
+
+  const [clientAlerts, setClientAlerts] = useState<AquariumAlert[]>([]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setClientAlerts((prev) => syncAlertHistory(prev, alertCandidates, telemetryNow).map((alert) => ({ ...alert, origin: 'client' as const })));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [alertCandidates, telemetryNow]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = Object.values(serverAlerts).flat().map((alert) => ({
+        ...alert,
+        recommendation: alert.recommendationId ? recommendations[alert.recommendationId] ?? null : null,
+      }));
+      setAlerts(sortAlertsByRecency([...stored, ...clientAlerts.filter((alert) => fallbackAquariumIds.has(alert.aquariumId))]));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [serverAlerts, recommendations, clientAlerts, fallbackAquariumIds]);
+
   const filteredAlerts = useMemo(
     () => filterAlerts(alerts, selectedSeverity, selectedStatus),
     [alerts, selectedSeverity, selectedStatus]
@@ -160,6 +199,17 @@ export function useAlertsController() {
   const summaryCounts = useMemo(() => buildSummaryCounts(alerts), [alerts]);
 
   const acknowledgeAlert = (alertId: string) => {
+    const target = alerts.find((alert) => alert.id === alertId);
+    if (target?.origin === 'server') {
+      void markAlertRead(alertId).catch((ackError) => {
+        console.error(ackError);
+        setError('Could not mark the alert as read.');
+      });
+      return;
+    }
+    setClientAlerts((prev) =>
+      prev.map((alert) => (alert.id === alertId ? { ...alert, acknowledgedAt: Date.now() } : alert))
+    );
     setAlerts((prev) =>
       prev.map((alert) =>
         alert.id === alertId ? { ...alert, acknowledgedAt: Date.now() } : alert
@@ -172,7 +222,7 @@ export function useAlertsController() {
     distribution: buildDistribution(alerts),
     error,
     filteredAlerts,
-    liveDataError: '',
+    liveDataError,
     loading,
     openAlertCount: alerts.filter((alert) => getAlertStatus(alert) === 'active').length,
     panelTitle: getAlertPanelTitle(userRole),

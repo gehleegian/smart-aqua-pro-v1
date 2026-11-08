@@ -125,6 +125,23 @@ function adminDatabase() {
   }).firestore();
 }
 
+function engineAlert(aquariumId) {
+  return {
+    alert_id: `alert-engine-${aquariumId}`, aquarium_id: aquariumId, device_id: aquariumId, type: 'Water temperature above range',
+    message: 'Temperature 25 °C is above the 24 °C maximum.', severity: 'warning', isRead: false, status: 'active',
+    triggered_at: new Date(0), resolved_at: null, ruleId: 'temp_high_warning', recommendationId: 'rec-a',
+    parameter: 'temperatureC', dedupKey: `${aquariumId}:temperatureC`, occurrences: 1, lastSeenAt: 1,
+  };
+}
+
+function recommendation(aquariumId, ownerId) {
+  return {
+    aquariumId, ownerId, alertId: 'alert-engine-a', ruleId: 'temp_high_warning', ruleStatus: 'draft', parameter: 'temperatureC',
+    severity: 'warning', title: 'Water temperature above range', issueDetected: 'x', action: 'y', basis: 'z', preCheck: 'w',
+    readingSnapshot: { temperatureC: 25 }, status: 'pending', createdAt: 1, resolvedAt: null, resolvedBy: null,
+  };
+}
+
 async function seed() {
   await environment.withSecurityRulesDisabled(async (context) => {
     const database = context.firestore();
@@ -165,6 +182,15 @@ async function seed() {
         aquarium_id: AQUARIUM_A,
         isRead: false,
       }),
+      setDoc(doc(database, 'alert_records', 'alert-engine-a'), engineAlert(AQUARIUM_A)),
+      setDoc(doc(database, 'alert_records', 'alert-engine-b'), engineAlert(AQUARIUM_B)),
+      setDoc(doc(database, 'recommendations', 'rec-a'), recommendation(AQUARIUM_A, USER_A)),
+      setDoc(doc(database, 'recommendations', 'rec-b'), recommendation(AQUARIUM_B, USER_B)),
+      setDoc(doc(database, 'recommendations', 'rec-a-resolved'), { ...recommendation(AQUARIUM_A, USER_A), status: 'resolved', resolvedBy: 'system', resolvedAt: 1 }),
+      setDoc(doc(database, 'maintenance_actions', 'clean-a'), { aquariumId: AQUARIUM_A, actionType: 'cleaning', performedAt: 1, performedBy: USER_A }),
+      setDoc(doc(database, 'maintenance_actions', 'clean-b'), { aquariumId: AQUARIUM_B, actionType: 'cleaning', performedAt: 1, performedBy: USER_B }),
+      setDoc(doc(database, 'species', 'goldfish'), { name: 'Goldfish', status: 'draft', source: 'TBD', approvedBy: null, approvedAt: null }),
+      setDoc(doc(database, 'rules', 'temp_high_warning'), { parameter: 'temperatureC', severity: 'warning', status: 'draft' }),
     ]);
   });
 }
@@ -204,8 +230,11 @@ test('FS-01 verified owner retains normal aquarium access while unblocked', asyn
   await assertSucceeds(batch.commit());
 });
 
-test('FS-01A1 verified owner can query only their aquariums', async () => {
-  const snapshot = await assertSucceeds(
+// Sprint 3: list queries must filter on orgId (tests/firestore/org-access.rules.test.mjs).
+// The pre-migration ownerId query is denied, which is why migrate-orgs runs
+// before these rules are deployed (docs/migration-live.md).
+test('FS-01A1 the legacy ownerId list query is denied after the org model', async () => {
+  await assertFails(
     getDocs(
       query(
         collection(userDatabase(), 'aquariums'),
@@ -213,8 +242,6 @@ test('FS-01A1 verified owner can query only their aquariums', async () => {
       )
     )
   );
-
-  assert.deepEqual(snapshot.docs.map((entry) => entry.id), [AQUARIUM_A]);
 });
 
 test('FS-01A2 owner query cannot request another users aquariums', async () => {
@@ -266,7 +293,10 @@ test('FS-01B2 explicitly exempt legacy owner can query only their aquariums', as
     );
   });
   const database = userDatabase(USER_A, false);
-  const snapshot = await assertSucceeds(
+  // Direct reads keep working for an exempt legacy owner; list queries need orgId.
+  await assertSucceeds(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
+  await assertFails(getDoc(doc(database, 'aquariums', AQUARIUM_B)));
+  await assertFails(
     getDocs(
       query(
         collection(database, 'aquariums'),
@@ -274,8 +304,6 @@ test('FS-01B2 explicitly exempt legacy owner can query only their aquariums', as
       )
     )
   );
-
-  assert.deepEqual(snapshot.docs.map((entry) => entry.id), [AQUARIUM_A]);
 });
 
 test('FS-01C missing policy fails closed for an unverified owner', async () => {
@@ -382,13 +410,16 @@ test('FS-06 a user security block denies the blocked account', async () => {
   );
 });
 
-test('FS-07 Admin can read the directory but not live aquarium records', async () => {
+// Sprint 3 access model: the platform admin reads everything, writes nothing.
+test('FS-07 platform admin reads the directory and live aquarium records but cannot write them', async () => {
   const database = adminDatabase();
   await assertSucceeds(
     getDocs(query(collection(database, 'aquarium_directory'), where('ownerId', '==', USER_A)))
   );
-  await assertFails(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
-  await assertFails(getDoc(doc(database, 'alert_records', 'alert-a')));
+  await assertSucceeds(getDoc(doc(database, 'aquariums', AQUARIUM_A)));
+  await assertSucceeds(getDoc(doc(database, 'alert_records', 'alert-a')));
+  await assertFails(updateDoc(doc(database, 'aquariums', AQUARIUM_A), { name: 'Admin edit' }));
+  await assertFails(updateDoc(doc(database, 'alert_records', 'alert-a'), { isRead: true }));
 });
 
 test('FS-08 clients cannot read or write trusted workflow collections', async () => {
@@ -402,7 +433,8 @@ test('FS-08 clients cannot read or write trusted workflow collections', async ()
   assert.ok(true);
 });
 
-test('FS-09 even a complete profile cannot bypass trusted physical-device claiming', async () => {
+// Sprint 3: aquariums are created only by the claimDevice callable.
+test('FS-09 clients cannot create aquariums directly, even with a complete profile', async () => {
   const database = userDatabase();
   const aquariumId = 'aquarium-profile-create';
   const { bioload: _legacyBioload, ...profileAquarium } = aquarium;
@@ -763,4 +795,86 @@ test('FS-23 user and admin can independently hide only their own conversation co
       visibleToAdmin: false,
     })
   );
+});
+
+// ---------------- Sprint 2: rules engine collections ----------------
+
+test('FS-30 species and rules are readable by signed-in users and writable by no client', async () => {
+  for (const database of [userDatabase(), adminDatabase()]) {
+    await assertSucceeds(getDoc(doc(database, 'species', 'goldfish')));
+    await assertSucceeds(getDocs(collection(database, 'rules')));
+  }
+  await assertFails(getDoc(doc(userDatabase(USER_A, false), 'species', 'goldfish')));
+  await assertFails(getDoc(doc(environment.unauthenticatedContext().firestore(), 'rules', 'temp_high_warning')));
+  for (const database of [userDatabase(), adminDatabase()]) {
+    await assertFails(updateDoc(doc(database, 'species', 'goldfish'), { status: 'approved' }));
+    await assertFails(setDoc(doc(database, 'rules', 'new_rule'), { parameter: 'ph', severity: 'warning' }));
+    await assertFails(updateDoc(doc(database, 'rules', 'temp_high_warning'), { enabled: false }));
+  }
+});
+
+test('FS-31 owners read only their own recommendations, alerts and maintenance actions', async () => {
+  const database = userDatabase();
+  await assertSucceeds(getDoc(doc(database, 'recommendations', 'rec-a')));
+  await assertSucceeds(getDocs(query(collection(database, 'recommendations'), where('aquariumId', '==', AQUARIUM_A))));
+  await assertSucceeds(getDoc(doc(database, 'alert_records', 'alert-engine-a')));
+  await assertSucceeds(getDocs(query(collection(database, 'alert_records'), where('aquarium_id', '==', AQUARIUM_A))));
+  await assertSucceeds(getDoc(doc(database, 'maintenance_actions', 'clean-a')));
+  await assertFails(getDoc(doc(database, 'recommendations', 'rec-b')));
+  await assertFails(getDocs(query(collection(database, 'recommendations'), where('aquariumId', '==', AQUARIUM_B))));
+  await assertFails(getDocs(collection(database, 'recommendations')));
+  await assertFails(getDoc(doc(database, 'alert_records', 'alert-engine-b')));
+  await assertFails(getDoc(doc(database, 'maintenance_actions', 'clean-b')));
+  await assertSucceeds(getDoc(doc(adminDatabase(), 'recommendations', 'rec-a')), 'the platform admin reads (Sprint 3)');
+  await assertFails(updateDoc(doc(adminDatabase(), 'recommendations', 'rec-a'), { status: 'applied', resolvedAt: Date.now(), resolvedBy: ADMIN_A }));
+});
+
+test('FS-32 the owner can mark a pending recommendation applied or dismissed, and nothing else', async () => {
+  const database = userDatabase();
+  await assertSucceeds(updateDoc(doc(database, 'recommendations', 'rec-a'), { status: 'applied', resolvedAt: Date.now(), resolvedBy: USER_A }));
+  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'recommendations', 'rec-a'), recommendation(AQUARIUM_A, USER_A)));
+  await assertSucceeds(updateDoc(doc(database, 'recommendations', 'rec-a'), { status: 'dismissed', resolvedAt: Date.now(), resolvedBy: USER_A }));
+});
+
+test('FS-33 recommendation updates are denied outside the allowed transition', async () => {
+  const database = userDatabase();
+  const ref = doc(database, 'recommendations', 'rec-a');
+  const now = Date.now();
+  await assertFails(updateDoc(ref, { status: 'resolved', resolvedAt: now, resolvedBy: USER_A }), 'resolved is system-only');
+  await assertFails(updateDoc(ref, { status: 'pending', resolvedAt: now, resolvedBy: USER_A }));
+  await assertFails(updateDoc(ref, { status: 'applied', resolvedAt: now, resolvedBy: USER_B }), 'cannot stamp another user');
+  await assertFails(updateDoc(ref, { status: 'applied', resolvedAt: now, resolvedBy: 'system' }));
+  await assertFails(updateDoc(ref, { status: 'applied', resolvedAt: now - 3_600_000, resolvedBy: USER_A }), 'backdated');
+  await assertFails(updateDoc(ref, { status: 'applied', resolvedAt: String(now), resolvedBy: USER_A }));
+  await assertFails(updateDoc(ref, { status: 'applied', resolvedAt: now, resolvedBy: USER_A, action: 'edited' }), 'other fields');
+  await assertFails(updateDoc(ref, { severity: 'critical' }));
+  await assertFails(updateDoc(doc(database, 'recommendations', 'rec-a-resolved'), { status: 'applied', resolvedAt: now, resolvedBy: USER_A }), 'only pending');
+  await assertFails(updateDoc(doc(userDatabase(USER_B), 'recommendations', 'rec-a'), { status: 'applied', resolvedAt: now, resolvedBy: USER_B }));
+  await assertFails(updateDoc(doc(adminDatabase(), 'recommendations', 'rec-a'), { status: 'applied', resolvedAt: now, resolvedBy: ADMIN_A }));
+});
+
+test('FS-34 only the functions create recommendations, alerts and maintenance actions; nobody deletes them', async () => {
+  for (const database of [userDatabase(), adminDatabase()]) {
+    await assertFails(setDoc(doc(database, 'recommendations', 'forged'), recommendation(AQUARIUM_A, USER_A)));
+    await assertFails(setDoc(doc(database, 'alert_records', 'forged'), engineAlert(AQUARIUM_A)));
+    await assertFails(setDoc(doc(database, 'maintenance_actions', 'forged'), { aquariumId: AQUARIUM_A, actionType: 'cleaning', performedAt: 1 }));
+    await assertFails(deleteDoc(doc(database, 'recommendations', 'rec-a')));
+    await assertFails(deleteDoc(doc(database, 'alert_records', 'alert-engine-a')));
+  }
+  await assertFails(getDoc(doc(userDatabase(), 'aquariums', AQUARIUM_A, 'engine', 'state')), 'engine state is functions-only');
+});
+
+test('FS-35 alert_records: the owner may only flip isRead; engine fields are protected', async () => {
+  const database = userDatabase();
+  await assertSucceeds(updateDoc(doc(database, 'alert_records', 'alert-engine-a'), { isRead: true }));
+  await assertFails(updateDoc(doc(database, 'alert_records', 'alert-engine-a'), { occurrences: 0 }));
+  await assertFails(updateDoc(doc(database, 'alert_records', 'alert-engine-a'), { status: 'resolved' }));
+  await assertFails(updateDoc(doc(database, 'alert_records', 'alert-engine-b'), { isRead: true }));
+});
+
+test('FS-36 owners cannot write the engine-owned aquarium fields (condition, cleaning, overrides)', async () => {
+  const database = userDatabase();
+  for (const field of ['condition', 'cleaning', 'bioloadLevel', 'thresholdOverrides']) {
+    await assertFails(updateDoc(doc(database, 'aquariums', AQUARIUM_A), { [field]: { overall: 'normal' }, updatedAt: '2026-11-07T00:00:00.000Z' }), field);
+  }
 });

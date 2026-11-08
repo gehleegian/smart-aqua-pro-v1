@@ -9,7 +9,7 @@
     "devices": {
       "$aquariumId": {
         "telemetry": {
-          ".read": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid",
+          ".read": "(auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
           ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists()",
           ".validate": "newData.hasChildren(['temperatureC', 'updatedAt', 'online']) && ((newData.child('waterLevelReadingValid').val() == false && !newData.child('waterLevelPercent').exists() && !newData.child('waterPresent').exists()) || (newData.child('waterLevelReadingValid').val() != false && newData.child('waterLevelPercent').isNumber()))",
           "temperatureC": {
@@ -45,6 +45,9 @@
           "turbidity": {
             ".validate": "newData.isNumber()"
           },
+          "turbidityReadingValid": {
+            ".validate": "newData.isBoolean()"
+          },
           "turbidityState": {
             ".validate": "newData.isString() && (newData.val() == 'Clear' || newData.val() == 'Cloudy' || newData.val() == 'Unknown')"
           },
@@ -63,8 +66,14 @@
           "powerStatus": {
             ".validate": "newData.isString() && (newData.val() == 'Online' || newData.val() == 'Offline' || newData.val() == 'Power Interruption' || newData.val() == 'Unknown')"
           },
+          "mainsPresent": {
+            ".validate": "newData.isBoolean()"
+          },
           "ph": {
             ".validate": "newData.isNumber()"
+          },
+          "phReadingValid": {
+            ".validate": "newData.isBoolean()"
           },
           "updatedAt": {
             ".validate": "newData.isNumber()"
@@ -77,8 +86,8 @@
           }
         },
         "control": {
-          ".read": "auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))",
-          ".write": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid && newData.exists()",
+          ".read": "(auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
+          ".write": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && (root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) && newData.exists()",
           ".validate": "newData.hasChildren(['mode', 'automationEnabled', 'feedingTimes', 'filtrationStartTime', 'filtrationRuntimeHours', 'manualLightState', 'manualFilterState', 'updatedAt'])",
           "mode": {
             ".validate": "newData.isString() && (newData.val() == 'manual' || newData.val() == 'automation')"
@@ -127,8 +136,8 @@
         },
         "commands": {
           "latest": {
-            ".read": "auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))",
-            ".write": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid && newData.exists() && newData.child('aquariumId').val() == $aquariumId && newData.child('requestedBy').val() == auth.uid",
+            ".read": "(auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
+            ".write": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true) && newData.exists() && newData.child('aquariumId').val() == $aquariumId && newData.child('requestedBy').val() == auth.uid",
             ".validate": "newData.hasChildren(['aquariumId', 'commandId', 'type', 'requestedAt', 'requestedBy']) && ((newData.child('type').val() == 'feed_now' && newData.child('durationMs').isNumber() && newData.child('durationMs').val() > 0 && !newData.child('state').exists()) || (newData.child('type').val() == 'set_filter_state' && (newData.child('state').val() == 'Active' || newData.child('state').val() == 'Inactive') && !newData.child('durationMs').exists()) || (newData.child('type').val() == 'set_light_state' && (newData.child('state').val() == 'On' || newData.child('state').val() == 'Off') && !newData.child('durationMs').exists()) || (newData.child('type').val() == 'sync_control' && !newData.child('state').exists() && !newData.child('durationMs').exists()))",
             "aquariumId": {
               ".validate": "newData.isString() && newData.val() == $aquariumId"
@@ -160,9 +169,44 @@
             ".write": false
           }
         },
+        "commandAck": {
+          "latest": {
+            ".read": "(auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
+            ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists() && (newData.child('commandId').val() == root.child('devices').child($aquariumId).child('commands/latest/commandId').val() || (newData.child('source').val() == 'schedule' && newData.child('commandId').isString() && newData.child('commandId').val().beginsWith('schedule-')))",
+            ".validate": "newData.hasChildren(['commandId', 'status', 'executedAt']) && (!newData.child('source').exists() || newData.child('source').val() == 'app' || newData.hasChildren(['type']))",
+            "commandId": {
+              ".validate": "newData.isString()"
+            },
+            "status": {
+              ".validate": "newData.isString() && (newData.val() == 'done' || newData.val() == 'failed')"
+            },
+            "executedAt": {
+              ".validate": "newData.isNumber() && newData.val() == now"
+            },
+            "error": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "source": {
+              ".validate": "newData.isString() && (newData.val() == 'app' || newData.val() == 'schedule')"
+            },
+            "type": {
+              ".validate": "newData.isString() && (newData.val() == 'feed_now' || newData.val() == 'set_filter_state' || newData.val() == 'set_light_state')"
+            },
+            "state": {
+              ".validate": "newData.isString() && (newData.val() == 'Active' || newData.val() == 'Inactive' || newData.val() == 'On' || newData.val() == 'Off')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".read": false,
+            ".write": false
+          }
+        },
         "history": {
           "$dateKey": {
-            ".read": "auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid",
+            ".read": "(auth != null && (auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
             "$entryId": {
               ".write": false
             }
@@ -172,6 +216,13 @@
           ".read": false,
           ".write": false
         }
+      }
+    },
+    "deviceBindings": {
+      "$deviceUid": {
+        ".read": "auth != null && auth.token.principalType == 'device' && auth.uid == $deviceUid",
+        ".write": false,
+        ".validate": "newData.isString()"
       }
     },
     "$other": {

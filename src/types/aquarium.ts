@@ -58,6 +58,8 @@ export interface ManualSystemStatus {
 }
 
 export interface Aquarium {
+  /** false when the doc has no legacy temp/level fields (show '--', not 0). */
+  hasStoredReadings?: boolean;
   id: string;
   deviceId?: string;
   deviceUid?: string;
@@ -101,9 +103,17 @@ export interface Aquarium {
   fishProfiles?: FishSpeciesProfile[];
   automationSettings?: AutomationSettings;
   manualStatus?: ManualSystemStatus;
+  /** Sprint 3: Firestore `status`; 'setup' after a claim until the wizard finishes. */
+  setupStatus?: 'setup' | 'active';
+  orgId?: string;
+  caretakerIds?: string[];
   createdAt?: string;
   updatedAt?: string;
   directorySchemaVersion?: number;
+  /** Optional explicit species config id (Firestore `species`); otherwise derived from `species`. */
+  speciesId?: string;
+  /** Admin-set per-aquarium threshold overrides (camelCase, per parameter). Wins over minTemp/maxTemp/... */
+  thresholdOverrides?: Record<string, { min?: number; max?: number }>;
 }
 
 export interface AquariumDirectoryEntry {

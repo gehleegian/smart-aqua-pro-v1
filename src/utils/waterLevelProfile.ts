@@ -27,7 +27,7 @@ export function getWaterLevelControl(profile: LevelProfileInput) {
 }
 
 export function resolveWaterLevel(profile: LevelProfileInput | undefined, telemetry: {
-  waterLevelPercent?: number; waterLevelReadingValid?: boolean; waterLevelTargetHeightCm?: number;
+  waterLevelPercent?: unknown; waterLevelReadingValid?: unknown; waterLevelTargetHeightCm?: unknown;
 }) {
   if (profile?.deviceId === AQUARIUM1_DEVICE_ID) {
     const setup = evaluateWaterLevelProfile(profile);
@@ -42,4 +42,23 @@ export function resolveWaterLevel(profile: LevelProfileInput | undefined, teleme
   const valid = telemetry.waterLevelReadingValid !== false && typeof value === 'number' &&
     Number.isFinite(value) && value >= 0 && value <= 100;
   return { valid, message: valid ? 'Live telemetry' : 'No valid water-level echo or configuration.' };
+}
+
+// Keep all other sensors intact. Never let an obsolete/missing profile target
+// reach threshold evaluation as a real water-level observation.
+export function withWaterLevelProfile(profile: LevelProfileInput | undefined, reading: Record<string, unknown>) {
+  return profile?.deviceId === AQUARIUM1_DEVICE_ID && !resolveWaterLevel(profile, reading).valid
+    ? { ...reading, waterLevelReadingValid: false }
+    : reading;
+}
+
+// A fresh server summary can still belong to the previous geometry. Fall back
+// to the same client rules engine until the server confirms this target.
+export function waterLevelSummaryMatches(profile: LevelProfileInput | undefined,
+  reading: Record<string, unknown>, summary: { waterLevelTargetHeightCm?: unknown }) {
+  if (profile?.deviceId !== AQUARIUM1_DEVICE_ID) return true;
+  return resolveWaterLevel(profile, reading).valid &&
+    typeof summary.waterLevelTargetHeightCm === 'number' &&
+    typeof reading.waterLevelTargetHeightCm === 'number' &&
+    Math.abs(summary.waterLevelTargetHeightCm - reading.waterLevelTargetHeightCm) <= 0.0001;
 }

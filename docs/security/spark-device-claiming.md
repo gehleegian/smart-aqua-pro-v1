@@ -1,3 +1,5 @@
+> **Superseded (2026-11-07):** after merging PR #8 into `feat/device-pipeline`, the team decided to keep the Cloud Functions `claimDevice` callable (claim code + organizations, `docs/access-model.md`) as the claim path, on the Blaze plan. This route and its tests stay in the repo as reference and are not wired into the app. See `docs/migration-live.md` §7·0.
+
 # Spark-compatible device claiming
 
 Status: implemented locally; live registration, rule deployment, Vercel setup,

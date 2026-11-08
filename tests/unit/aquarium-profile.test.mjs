@@ -9,7 +9,7 @@ import {
   CANONICAL_FISH_SPECIES,
   createEmptyAquariumForm,
   getFormBioloadCalculation,
-  INDOOR_GOLDFISH_PRESET,
+  buildSpeciesThresholdPreset,
   populateAquariumForm,
   validateAquariumForm,
 } from '../../src/utils/aquariumManagementHelpers.ts';
@@ -43,18 +43,26 @@ function completeForm(overrides = {}) {
   };
 }
 
-test('profile defaults use the ordinary indoor Freshwater Goldfish preset', () => {
-  const form = createEmptyAquariumForm();
-  assert.equal(form.tankType, CANONICAL_AQUARIUM_TYPE);
-  assert.equal(form.species, CANONICAL_FISH_SPECIES);
-  assert.equal(form.minTemp, INDOOR_GOLDFISH_PRESET.minTemp);
-  assert.equal(form.maxTemp, INDOOR_GOLDFISH_PRESET.maxTemp);
-  assert.equal(form.minPh, INDOOR_GOLDFISH_PRESET.minPh);
-  assert.equal(form.maxPh, INDOOR_GOLDFISH_PRESET.maxPh);
-  assert.equal(form.minLevel, INDOOR_GOLDFISH_PRESET.minLevel);
-  assert.equal(form.minQuality, INDOOR_GOLDFISH_PRESET.minQuality);
-  assert.equal(form.hasFiltrationSystem, '');
-  assert.deepEqual(form.fishWeightsG, []);
+test('profile limits come only from the stored species config (no hard-coded preset)', () => {
+  const blank = createEmptyAquariumForm();
+  assert.equal(blank.tankType, CANONICAL_AQUARIUM_TYPE);
+  assert.equal(blank.species, CANONICAL_FISH_SPECIES);
+  for (const field of ['minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel', 'minQuality']) {
+    assert.equal(blank[field], '', `${field} has no built-in default`);
+  }
+  assert.equal(blank.hasFiltrationSystem, '');
+  assert.deepEqual(blank.fishWeightsG, []);
+
+  const species = {
+    ranges: { temperatureC: { min: 19, max: 23 }, ph: { min: 6.6, max: 7.4 } },
+    minWaterLevelPercent: 72,
+  };
+  const form = createEmptyAquariumForm(species);
+  assert.deepEqual(
+    [form.minTemp, form.maxTemp, form.minPh, form.maxPh, form.minLevel],
+    ['19', '23', '6.6', '7.4', '72']
+  );
+  assert.deepEqual(buildSpeciesThresholdPreset({ ranges: {} }), { minTemp: '', maxTemp: '', minPh: '', maxPh: '', minLevel: '' });
 });
 
 test('complete canonical profile validates and builds a persistent create payload', () => {
