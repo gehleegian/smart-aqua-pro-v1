@@ -131,7 +131,9 @@ export function buildOwnerStats(ownerAquariums: MonitoringAquarium[]): OwnerStat
   const average = (field: 'temp' | 'level' | 'quality') => {
     const readings = field === 'level'
       ? liveDataAquariums.filter(aquarium => Number.isFinite(aquarium.level) && aquarium.hasFreshWaterLevelTelemetry !== false)
-      : liveDataAquariums;
+      : field === 'temp'
+        ? liveDataAquariums.filter(aquarium => aquarium.hasFreshTemperatureTelemetry && Number.isFinite(aquarium.temp))
+        : liveDataAquariums;
     return readings.length === 0
       ? 0
       : readings.reduce((sum, aquarium) => sum + aquarium[field], 0) / readings.length;

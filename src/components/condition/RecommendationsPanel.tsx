@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, ClipboardList } from 'lucide-react';
 import { useRecommendations } from '../../hooks/useRecommendations';
 import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
 import StatusMessage from '../ui/StatusMessage';
@@ -6,7 +7,7 @@ import type { Recommendation } from '../../types/recommendation';
 import Badge from '../ui/Badge';
 import { SeverityBadge } from './ConditionBadges';
 import Button from '../ui/Button';
-import { Card, CardContent, CardHeader } from '../ui/Card';
+import { Card, CardContent } from '../ui/Card';
 
 // Pending recommendations from the rules engine. Applied opens the
 // maintenance log form (FR20): logging marks the recommendation applied.
@@ -18,55 +19,69 @@ export function RecommendationsPanel({ aquariumId, aquariumName }: { aquariumId:
   const [notice, setNotice] = useState('');
 
   return (
-    <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-white">Recommendations</h3>
-        <span className="text-xs text-slate-400">{pending.length} pending</span>
-      </CardHeader>
-      <CardContent>
-        {error ? <p className="mb-3 text-sm text-amber-300">{error}</p> : null}
-        {notice ? <div className="mb-3"><StatusMessage variant="success">{notice}</StatusMessage></div> : null}
-        {pending.length === 0 ? (
-          <p className="text-sm text-slate-400">No pending recommendations.</p>
-        ) : (
-          <ul className="space-y-3">
-            {pending.map((item) => (
-              <li key={item.id} className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="font-medium text-white">{item.title}</p>
-                  <div className="flex gap-2">
-                    {item.ruleStatus === 'draft' ? <Badge variant="info">Draft rule</Badge> : null}
-                    <SeverityBadge severity={item.severity} />
+    <Card className="self-start">
+      <details key={aquariumId} className="group">
+        <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-6 py-4 transition-colors hover:bg-slate-700/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-3">
+            <ClipboardList className="h-5 w-5 shrink-0 text-teal-300" aria-hidden="true" />
+            <span className="min-w-0">
+              <span className="block text-base font-semibold text-white">Recommendations</span>
+              <span className="block text-xs text-slate-400">
+                {error ? 'Recommendations unavailable' : `${pending.length} pending`}
+              </span>
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2 text-sm text-teal-200">
+            <span className="group-open:hidden">Show</span>
+            <span className="hidden group-open:inline">Hide</span>
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
+          </span>
+        </summary>
+        <CardContent className="border-t border-slate-600/30">
+          {error ? <p className="mb-3 text-sm text-amber-300">{error}</p> : null}
+          {notice ? <div className="mb-3"><StatusMessage variant="success">{notice}</StatusMessage></div> : null}
+          {pending.length === 0 ? (
+            <p className="text-sm text-slate-400">No pending recommendations.</p>
+          ) : (
+            <ul aria-label="Pending recommendations" tabIndex={0} className="max-h-96 space-y-3 overflow-y-auto overscroll-contain rounded-sm pr-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300">
+              {pending.map((item) => (
+                <li key={item.id} className="break-words rounded-lg border border-slate-600/30 bg-slate-900/35 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-medium text-white">{item.title}</p>
+                    <div className="flex gap-2">
+                      {item.ruleStatus === 'draft' ? <Badge variant="info">Draft rule</Badge> : null}
+                      <SeverityBadge severity={item.severity} />
+                    </div>
                   </div>
-                </div>
-                <p className="mt-1 text-sm text-slate-300">{item.issueDetected}</p>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-500">Check first</dt>
-                    <dd className="text-slate-200">{item.preCheck}</dd>
+                  <p className="mt-1 text-sm text-slate-300">{item.issueDetected}</p>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div>
+                      <dt className="text-xs uppercase tracking-wide text-slate-500">Check first</dt>
+                      <dd className="text-slate-200">{item.preCheck}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs uppercase tracking-wide text-slate-500">Action</dt>
+                      <dd className="text-slate-200">{item.action}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs uppercase tracking-wide text-slate-500">Why</dt>
+                      <dd className="text-slate-300">{item.basis}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" disabled={savingId === item.id} onClick={() => { setNotice(''); setApplying(item); }}>
+                      Applied
+                    </Button>
+                    <Button size="sm" variant="secondary" disabled={savingId === item.id} onClick={() => void setStatus(item.id, 'dismissed')}>
+                      Dismiss
+                    </Button>
                   </div>
-                  <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-500">Action</dt>
-                    <dd className="text-slate-200">{item.action}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-500">Why</dt>
-                    <dd className="text-slate-300">{item.basis}</dd>
-                  </div>
-                </dl>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" disabled={savingId === item.id} onClick={() => { setNotice(''); setApplying(item); }}>
-                    Applied
-                  </Button>
-                  <Button size="sm" variant="secondary" disabled={savingId === item.id} onClick={() => void setStatus(item.id, 'dismissed')}>
-                    Dismiss
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </details>
       {applying ? (
         <LogMaintenanceModal
           aquariumId={aquariumId}

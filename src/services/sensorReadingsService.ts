@@ -105,14 +105,14 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
 
   if (
     typeof recordedAtEpoch !== 'number' ||
-    typeof temperatureC !== 'number' ||
+    (typeof temperatureC !== 'number' && reading.temperatureReadingValid !== false) ||
     typeof waterLevelPercent !== 'number'
   ) {
     return null;
   }
 
   return {
-    temperatureC,
+    temperatureC: reading.temperatureReadingValid === false ? NaN : temperatureC!,
     temperatureReadingValid: readBoolean(reading.temperatureReadingValid, true),
     waterLevelPercent,
     waterPresent: readBoolean(reading.waterPresent, true),
@@ -150,6 +150,10 @@ export function buildSensorReadingDocument(options: {
   telemetry: DeviceTelemetry;
   source?: SensorReadingSource;
 }): SensorReadingDocument {
+  if (options.telemetry.temperatureReadingValid === false || typeof options.telemetry.temperatureC !== 'number' ||
+      !Number.isFinite(options.telemetry.temperatureC)) {
+    throw new Error('Cannot store a complete sensor reading without a valid temperature.');
+  }
   if (options.telemetry.waterLevelReadingValid === false || typeof options.telemetry.waterLevelPercent !== 'number' ||
       !Number.isFinite(options.telemetry.waterLevelPercent)) {
     throw new Error('Cannot store a complete sensor reading without a valid water level.');

@@ -31,6 +31,19 @@ const TELEMETRY = Object.freeze({
   online: true,
 });
 
+test('PARTIAL-01 explicit temperature failure allows independent readings, but not unflagged omissions or invented temperatures', async () => {
+  const path = `devices/${AQUARIUM_A}/telemetry`;
+  const { temperatureC, ...other } = TELEMETRY;
+  const partial = { ...other, temperatureReadingValid: false };
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), partial));
+  await assertFails(set(ref(deviceDatabase('device-b'), path), partial));
+  await assertFails(set(ref(humanDatabase('user-a'), path), partial));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, temperatureReadingValid: null }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, temperatureReadingValid: true }));
+  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, temperatureC: 0 }));
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), TELEMETRY));
+});
+
 const CONTROL = Object.freeze({
   mode: 'automation',
   automationEnabled: true,

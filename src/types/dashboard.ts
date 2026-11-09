@@ -11,6 +11,7 @@ export type DashboardStatus = 'healthy' | 'warning';
 export type DashboardTrend = 'good' | 'warning';
 
 export type DashboardAquarium = Aquarium & {
+  turbidityState?: 'Clear' | 'Cloudy';
   status: DashboardStatus;
   assessment: AquariumConditionAssessment;
   telemetrySource: TelemetrySource;

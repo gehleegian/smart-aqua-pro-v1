@@ -22,7 +22,7 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
       : hasTdsPercent;
 
   if (
-    temperatureC === undefined ||
+    (temperatureC === undefined && telemetry.temperatureReadingValid !== false) ||
     (waterLevelPercent === undefined && telemetry.waterLevelReadingValid !== false) ||
     updatedAt === undefined
   ) {

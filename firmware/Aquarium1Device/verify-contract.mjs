@@ -20,7 +20,10 @@ const schema = rules.rules.devices.$aquariumId.telemetry;
 for (const field of fields) assert.ok(schema[field], `Unsupported telemetry field: ${field}`);
 for (const field of ['temperatureC', 'waterLevelPercent', 'online', 'updatedAt'])
   assert.ok(fields.includes(field), `Missing required field: ${field}`);
-assert.ok(!fields.includes('tdsPpm'), 'Unverified estimate must not be published as validated TDS');
+assert.match(config, /#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1/);
+assert.match(source, /telemetry\["tdsReadingValid"\] = isfinite\(tdsPpm\)/);
+assert.match(source, /if \(isfinite\(tdsPpm\)\) telemetry\["tdsPpm"\] = tdsPpm/);
+assert.ok(!fields.includes('tdsPercent'), 'A ppm comparison is not a water-purity percentage');
 assert.ok(!fields.includes('turbidity'), 'Categorical sample must not be encoded as numeric turbidity');
 assert.ok(source.includes('esp_crt_bundle_attach'));
 assert.match(source, /config\.buffer_size_tx = int\(url\.length\(\) \+ 512\)/);

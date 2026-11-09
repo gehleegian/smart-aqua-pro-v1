@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { ArrowLeft, RefreshCw, Settings, Wrench } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, RefreshCw, Settings, Wrench } from 'lucide-react';
 import { CommandHistory, CommandStatusBadge } from './CommandHistory';
 import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
 import { MaintenanceHistory } from '../maintenance/MaintenanceHistory';
 import { nextScheduledText } from '../../utils/schedule';
 import { useNow } from '../../hooks/useNow';
 import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
-import { getSensorDisplay } from '../../utils/sensorDisplay';
+import { getSensorDisplay, getTurbidityDisplay } from '../../utils/sensorDisplay';
 import type { AutomationSettings } from '../../types/aquarium';
 import type {
   AssessmentSeverity,
@@ -24,7 +24,6 @@ import {
   formatEstimatedBioload,
 } from '../../utils/aquariumProfileCalculations';
 import Badge from '../ui/Badge';
-import { DraftThresholdsBadge, ParameterStatusBadge } from '../condition/ConditionBadges';
 import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -43,6 +42,7 @@ interface AquariumDetailsViewProps {
   controlsDisabled: boolean;
   onAutomationToggle: () => void;
   onBack: () => void;
+  onOpenAssessment: () => void;
   onManualAction: (field: SystemField) => void;
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
@@ -65,6 +65,7 @@ export function AquariumDetailsView({
   controlsDisabled,
   onAutomationToggle,
   onBack,
+  onOpenAssessment,
   onManualAction,
   onModeChange,
   onOpenAutomationEditor,
@@ -80,10 +81,16 @@ export function AquariumDetailsView({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <Button variant="secondary" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={onOpenAssessment}>
+            <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+            View assessment
+          </Button>
+          <Button variant="secondary" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {systemError ? (
@@ -125,10 +132,7 @@ export function AquariumDetailsView({
                     typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
                 },
                 { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
-                // Main (PR #8): a Clear/Cloudy module reports a category, never invented NTU.
-                aquarium.turbidityState && live
-                  ? { label: 'Turbidity', display: { value: aquarium.turbidityState, status: 'Live Clear/Cloudy comparison; not NTU' } }
-                  : { label: 'Turbidity', display: getSensorDisplay(aquarium.sensorValidity, 'turbidity', live, () => typeof aquarium.turbidity === 'number' ? `${aquarium.turbidity.toFixed(0)} NTU` : '--') },
+                { label: 'Turbidity', display: getTurbidityDisplay(aquarium.sensorValidity, live, aquarium.turbidityState) },
               ];
               return readings.map(({ label, display }) => (
                 <Reading key={label} label={label} value={display.value} status={display.status} />
@@ -152,53 +156,6 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Condition Assessment</h3>
-              <p className="mt-1 text-sm text-slate-400">
-                Rule-based assessment ({aquarium.assessment.ruleVersion}). Guidance only; maintenance actions require your review.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <DraftThresholdsBadge draft={aquarium.assessment.draft} />
-              <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
-                {aquarium.assessment.overallSeverity}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2">
-            {aquarium.assessment.parameters.map((item) => (
-              <div key={item.parameter} className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-white">{item.label}</p>
-                  <ParameterStatusBadge item={item} />
-                </div>
-                <p className="mt-2 text-xs leading-5 text-slate-400">{item.message}</p>
-              </div>
-            ))}
-          </div>
-          <details className="mt-4 text-sm text-slate-400">
-            <summary className="cursor-pointer">Assessment limits and calibration</summary>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {aquarium.assessment.ruleNotes.map((note) => <li key={note}>{note}</li>)}
-            </ul>
-          </details>
-          {aquarium.assessment.recommendations.length > 0 ? (
-            <div className="mt-4 rounded-lg border border-slate-600/20 bg-slate-950/35 p-4">
-              <p className="text-sm font-medium text-white">Maintenance recommendations</p>
-              <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-slate-300">
-                {aquarium.assessment.recommendations.map((recommendation) => (
-                  <li key={recommendation}>{recommendation}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
 
       {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} aquariumName={aquarium.name} /> : null}
 

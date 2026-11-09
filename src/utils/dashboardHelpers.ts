@@ -22,7 +22,7 @@ import {
   getDeviceCommandStatus,
   type DeviceShadow,
 } from '../types/device';
-import { getSensorDisplay } from './sensorDisplay';
+import { getSensorDisplay, getTurbidityDisplay } from './sensorDisplay';
 import type {
   DashboardAquarium,
   DashboardData,
@@ -126,6 +126,7 @@ export function mergeDashboardAquariums(
       hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
       hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
       hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
+      turbidityState: snapshot?.turbidityState,
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       telemetryState,
       lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
@@ -246,8 +247,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
     typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm` : `${tank.quality}%`);
   const ph = getSensorDisplay(tank.sensorValidity, 'ph', live, () =>
     typeof tank.ph === 'number' ? tank.ph.toFixed(1) : '--');
-  const turbidity = getSensorDisplay(tank.sensorValidity, 'turbidity', live, () =>
-    typeof tank.turbidity === 'number' ? `${tank.turbidity.toFixed(0)} NTU` : '--');
+  const turbidity = getTurbidityDisplay(tank.sensorValidity, live, tank.turbidityState);
   const changeFor = (display: { isError: boolean; status: string }, parameter: string, fallback: string) =>
     display.isError ? display.status : condition(parameter)?.message || fallback;
 
@@ -288,7 +288,7 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
       title: 'Turbidity',
       value: turbidity.value,
       icon: Gauge,
-      change: changeFor(turbidity, 'turbidity', 'Waiting for telemetry'),
+      change: turbidity.status,
       trend: trend('turbidity'),
       sparkline: [],
     },

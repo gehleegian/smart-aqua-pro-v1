@@ -26,7 +26,7 @@ export type DevicePowerStatus = 'Online' | 'Offline' | 'Power Interruption' | 'U
 // documented in docs/device-contract.md.
 export interface DeviceTelemetry {
   lightState?: 'On' | 'Off';
-  temperatureC: number;
+  temperatureC?: number;
   temperatureReadingValid?: boolean;
   waterLevelPercent?: number;
   waterLevelReadingValid?: boolean;
@@ -257,8 +257,8 @@ export function getFreshTelemetrySnapshot(
   }
 
   if (
-    typeof telemetry.temperatureC !== 'number' ||
-    !Number.isFinite(telemetry.temperatureC) ||
+    (telemetry.temperatureReadingValid !== false &&
+      (typeof telemetry.temperatureC !== 'number' || !Number.isFinite(telemetry.temperatureC))) ||
     (telemetry.waterLevelReadingValid !== false &&
       (typeof telemetry.waterLevelPercent !== 'number' || !Number.isFinite(telemetry.waterLevelPercent)))
   ) {
@@ -279,7 +279,7 @@ export function getFreshTelemetrySnapshot(
   const powerStatus = derivePowerStatus(telemetry as unknown as Record<string, unknown>);
 
   return {
-    temperatureC: telemetry.temperatureC,
+    temperatureC: validity.temperature.status === 'valid' ? telemetry.temperatureC! : NaN,
     waterLevelPercent: levelValid ? telemetry.waterLevelPercent! : NaN,
     hasFreshWaterLevelTelemetry: levelValid,
     waterLevelMessage: !level.valid ? level.message : validity.waterLevel.reason || level.message,

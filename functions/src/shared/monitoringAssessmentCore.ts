@@ -173,8 +173,10 @@ export function evaluateTelemetryValidity(
 ): TelemetryValidity {
   const requireFlags = options.requireFlags ?? REQUIRE_SENSOR_VALIDITY_FLAGS;
   const waterPresent = typeof raw.waterPresent === 'boolean' ? raw.waterPresent : undefined;
-  let temperature = sensorValidity('temperature', raw.temperatureC, raw.temperatureReadingValid,
-    'temperatureReadingValid', { requireFlags });
+  let temperature = raw.temperatureReadingValid === false
+    ? { status: 'invalid' as const, reason: 'temperatureReadingValid is false' }
+    : sensorValidity('temperature', raw.temperatureC, raw.temperatureReadingValid,
+        'temperatureReadingValid', { requireFlags });
   if (temperature.status === 'valid' && waterPresent === false) {
     temperature = { status: 'invalid', reason: 'probe reports no water (waterPresent is false)' };
   }

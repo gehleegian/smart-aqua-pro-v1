@@ -6,8 +6,9 @@ import { AutomationSettingsModal } from '../components/monitoring/AutomationSett
 import { UserAquariumList } from '../components/monitoring/UserAquariumList';
 import { useMonitoringController } from '../hooks/useMonitoringController';
 import { useOrg } from '../hooks/useOrg';
+import { requestTankFocus } from '../services/tankFocus';
 
-export default function Monitoring() {
+export default function Monitoring({ onNavigate }: { onNavigate: (page: string) => void }) {
   const monitoring = useMonitoringController();
   const { isOwner } = useOrg();
   const { actions } = monitoring;
@@ -91,6 +92,12 @@ export default function Monitoring() {
         canManage={isOwner}
         onAutomationToggle={() => void actions.handleAutomationEnabledToggle()}
         onBack={actions.backToAquariums}
+        onOpenAssessment={() => {
+          if (monitoring.selectedAquarium) {
+            requestTankFocus(monitoring.selectedAquarium.id);
+            onNavigate('assessment');
+          }
+        }}
         onManualAction={(field) => void actions.handleManualAction(field)}
         onModeChange={(mode) => void actions.handleSystemModeChange(mode)}
         onOpenAutomationEditor={actions.openAutomationEditor}

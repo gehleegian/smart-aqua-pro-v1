@@ -288,14 +288,14 @@ function mapTelemetryHistoryEntry(value: unknown): DeviceTelemetryLogEntry | nul
   if (
     !recordedAt ||
     !Number.isFinite(recordedAtEpoch) ||
-    !Number.isFinite(temperatureC) ||
+    (!Number.isFinite(temperatureC) && entry.temperatureReadingValid !== false) ||
     !Number.isFinite(waterLevelPercent)
   ) {
     return null;
   }
 
   return {
-    temperatureC,
+    temperatureC: entry.temperatureReadingValid === false ? NaN : temperatureC,
     temperatureReadingValid:
       typeof entry.temperatureReadingValid === 'boolean'
         ? entry.temperatureReadingValid

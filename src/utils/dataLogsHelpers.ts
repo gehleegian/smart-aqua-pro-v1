@@ -92,7 +92,7 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
 
   if (
     !telemetry || telemetry.waterLevelReadingValid === false ||
-    typeof telemetry.temperatureC !== 'number' ||
+    (typeof telemetry.temperatureC !== 'number' && telemetry.temperatureReadingValid !== false) ||
     typeof telemetry.waterLevelPercent !== 'number'
   ) {
     return null;
@@ -110,7 +110,8 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
   const recordedAtDate = new Date(recordedAtEpoch);
 
   return {
-    temperatureC: telemetry.temperatureC,
+    temperatureC: telemetry.temperatureReadingValid === false ? NaN : telemetry.temperatureC!,
+    temperatureReadingValid: telemetry.temperatureReadingValid,
     waterLevelPercent: clampPercent(telemetry.waterLevelPercent),
     tdsPpm: getTelemetryTdsPpm(telemetry) ?? undefined,
     tdsPercent:

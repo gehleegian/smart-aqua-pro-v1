@@ -8,9 +8,13 @@ import EmptyState from '../components/ui/EmptyState';
 import { useAlertsController } from '../hooks/useAlertsController';
 import StatusMessage from '../components/ui/StatusMessage';
 import LoadingState from '../components/ui/LoadingState';
+import { useState } from 'react';
+import { filterAlertsByDate } from '../utils/alertsListPresentation';
 
 export default function Alerts() {
   const alerts = useAlertsController();
+  const [selectedDate, setSelectedDate] = useState('');
+  const datedAlerts = filterAlertsByDate(alerts.filteredAlerts, selectedDate);
 
   if (alerts.loading) {
     return <LoadingState label="Loading alerts..." />;
@@ -61,11 +65,14 @@ export default function Alerts() {
             selectedStatus={alerts.selectedStatus}
             onSelectSeverity={alerts.actions.selectSeverity}
             onSelectStatus={alerts.actions.selectStatus}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
           />
 
           <AlertsList
+            key={`${selectedDate}:${alerts.selectedSeverity}:${alerts.selectedStatus}`}
             title={alerts.panelTitle}
-            alerts={alerts.filteredAlerts}
+            alerts={datedAlerts}
             selectedAlertId={alerts.selectedAlertId}
             userRole={alerts.userRole}
             onToggleAlert={alerts.actions.toggleSelectedAlert}

@@ -1,5 +1,83 @@
 # Aquarium 1 supervised Arduino test
 
+## pH buffer-cutoff correction (2026-11-09)
+
+The owner confirmed the storage cap was removed for every buffer measurement.
+The recorded points remain unchanged: 2.438 V / 4.01, 2.287 V / 6.86 and
+2.103 V / 9.18. The prior code rejected every input outside those buffer voltages,
+which produced NaN at 2.069 V even though the same transfer curve computes 9.61.
+The prepared code now applies that curve, rejecting non-finite inputs, malformed
+calibration ordering and results outside the existing client policy (pH > 0 and
+<= 14). It never clamps or adjusts readings into the configured normal range.
+
+Outside-buffer results are extrapolations and explicitly labelled in Serial;
+they require an independent measurement/buffer check before claiming accuracy.
+`phReadingValid` is sent with each snapshot and invalid pH values are omitted.
+This does not correct probe drift, electrical interference, temperature effects,
+or an inaccurate stored calibration. Existing GPIOs, other sensor calibration,
+equipment control logic and Firebase access rules are unchanged. The schema
+already accepts the optional `phReadingValid` boolean. Requires a new firmware
+upload and physical verification; this source change does not upload a device.
+
+## TDS meter comparison (2026-11-08)
+
+Owner-corrected handheld meter comparisons: purified water approximately 0.169 V
+at 80 ppm, tap water approximately 1.304 V at 314 ppm
+(observed 1.303-1.304 V). Aquarium 1 uses an empirical linear curve through
+those references, not the previous homemade salt mapping. This is a
+two-point estimate, not certified accuracy or a manufacturer transfer curve.
+No temperature compensation is applied because reference-sample temperatures
+were not recorded. Recheck against the meter in the aquarium's actual conditions.
+
+Both reference samples were at normal temperature (numeric temperatures unknown).
+The later cold purified-water sample was 0.142 V / 60 ppm. It is recorded here
+but not merged into the normal-temperature curve. Do not use the temperatures
+of probes left in the aquarium to compensate a different cup of water.
+
+As requested on 2026-11-09, inputs outside the reference span now extrapolate
+the same curve instead of becoming unavailable. Serial labels these results
+as extrapolated and requiring a meter check; the website still shows number + ppm.
+The 0.0005 V tolerance only identifies the span given Serial rounding; it no
+longer gates publication. Non-finite, non-positive, >=3.3 V or ADC-clipped inputs,
+malformed calibration and negative/non-finite results remain unavailable.
+No negative result is clamped to zero, and no purity percentage is invented.
+The 2.455 V salt sample computes about 551 ppm, but has no confirmed meter value.
+The cold 0.142 V sample computes about 74 ppm, not the observed 60 ppm: this
+demonstrates that extending a line does not validate accuracy or compensate
+temperature. The current line approaches about 45 ppm at zero volts and cannot
+reliably quantify near-zero TDS water; a known low-ppm reference is still needed.
+Aquarium 1 enables `AQUARIUM_TDS_METER_REFERENCE_ENABLED`; Aquarium 2 now also
+enables it on the owner's 2026-11-09 confirmation of matching calibrated outputs.
+The existing Firebase ppm schema and authorization rules are unchanged.
+
+## Temperature probe recovery (2026-11-08)
+
+Failed GPIO18/GPIO19 buses are now rescanned independently, no more than once
+per 10 seconds per bus. Recovery refreshes the library's cached device count
+and reapplies 12-bit, asynchronous conversion settings before requesting a new
+conversion. Healthy buses are not repeatedly initialized. The two-probe mean
+remains invalid until both new readings pass validation; other telemetry keeps
+uploading. No calibration, relay, feeder, schedule or Firebase rules change is
+needed for this recovery patch. Requires a new firmware upload and supervised
+verification that a missed/reconnected probe recovers without resetting ESP32.
+
+## Partial-sensor telemetry fix (2026-11-08)
+
+The prepared firmware no longer stops all uploads when one temperature probe
+fails. It publishes `temperatureReadingValid=false` without `temperatureC`,
+and continues sending other current readings, relay states, `online=true`
+and a server timestamp. Both probes must recover before their mean is published.
+An invalid water level is likewise omitted with `waterLevelReadingValid=false`.
+No zero, sentinel or retained reading is substituted for a failed measurement.
+
+Rollout order: deploy updated RTDB telemetry validation, deploy/restart updated
+clients (and deploy shared Functions validation for matching server-side sensor
+fault classification), then upload firmware to a confirmed Aquarium 1 port.
+Read/write authorization and equipment control logic are unchanged. Matching
+Aquarium 2 source and mobile parsing use this same contract; neither device has
+been uploaded by this code change. Verify fresh telemetry with a temperature
+sensor error, then verify recovery with both probes working.
+
 **Prepared profile-level update; not yet activated on hardware.** Empty remains
 27.0 cm; the new 100% target comes from operational litres and internal tank
 dimensions. Do not upload until final dimensions/volume are validated and the

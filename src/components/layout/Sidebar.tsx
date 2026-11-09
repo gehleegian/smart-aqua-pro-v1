@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Activity,
+  ClipboardCheck,
   Cpu,
   Bell,
   BarChart3,
@@ -48,6 +49,7 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'owner', 'caretaker', 'none'] },
       { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['owner', 'caretaker'] },
+      { id: 'assessment', label: 'Assessment', icon: ClipboardCheck, roles: ['owner', 'caretaker'] },
       { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['owner', 'caretaker'] },
     ],
   },

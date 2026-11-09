@@ -28,8 +28,17 @@ constexpr float CLEAR_V = 0.967f, CLOUDY_V = 0.246f;
 // Midpoint separates the two tested samples, NOT a calibrated NTU threshold.
 constexpr float TURB_MID_V = (CLEAR_V + CLOUDY_V) / 2.0f;
 constexpr float TURB_HYST_V = 0.02f; // anti-flicker margin, not a water-quality rule
-constexpr float TDS_BASE_V = 0.314f, TDS_REF_V = 1.314f;
-constexpr float SALT_EQ_REF_PPM = 317.0f; // legacy homemade estimate, NOT verified TDS
+#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED
+#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 0
+#endif
+constexpr bool TDS_METER_REFERENCE_ENABLED = AQUARIUM_TDS_METER_REFERENCE_ENABLED != 0;
+// Meter comparisons are enabled only for the device checked by its owner.
+// Empirical linear estimate; extrapolation is allowed but unverified.
+constexpr float TDS_LOW_V = 0.169f, TDS_LOW_PPM = 80.0f;
+constexpr float TDS_HIGH_V = 1.304f, TDS_HIGH_PPM = 314.0f;
+// Observed sample span; half a displayed millivolt accounts for Serial rounding.
+constexpr float TDS_CHECKED_MIN_V = 0.169f - 0.0005f;
+constexpr float TDS_CHECKED_MAX_V = 1.304f + 0.0005f;
 
 OneWire bus18(18), bus19(19);
 DallasTemperature temp18(&bus18), temp19(&bus19);
@@ -37,12 +46,14 @@ bool armed = false, lightOn = false, filterOn = false;
 bool localStop = false; // optional serial DISARM stays latched until ARM/reset
 bool turbKnown = false, cloudy = false;
 float phV = NAN, tdsV = NAN, turbV = NAN, phValue = NAN;
+float tdsPpm = NAN;
 float powerSignalV = NAN, supplyV = NAN;
 PowerSignal::State measuredPower = PowerSignal::State::Unknown;
 float t18 = NAN, t19 = NAN, distanceCm = NAN, levelPct = NAN;
 bool temperaturesValid = false, levelValid = false;
 float profileTargetHeightCm = 0;
 uint32_t sampleAt = 0, lastSample = 0, lastCloud = 0, lastWifi = 0;
+uint32_t temp18RetryAt = 0, temp19RetryAt = 0;
 String idToken, refreshToken, lastCommand, serialLine;
 bool serialOverflow = false, commandBaseline = false;
 uint32_t tokenAt = 0, tokenLifetimeMs = 0, lastAuthAttempt = 0;
@@ -195,13 +206,43 @@ bool validTemperature(float value) {
   return isfinite(value) && value >= -55 && value <= 125 && value != 85.0f;
 }
 
+void recoverTemperatureProbe(DallasTemperature &probe, uint8_t pin,
+                             float previousReading, uint32_t &retryAt) {
+  // getDeviceCount() is cached by begin(). A probe missed at boot otherwise
+  // stays undiscoverable even after its power/contact has recovered.
+  const bool needsRecovery = probe.getDeviceCount() != 1 ||
+    (sampleAt != 0 && !validTemperature(previousReading));
+  const uint32_t now = millis();
+  if (!needsRecovery || now - retryAt < 10000UL) return;
+  retryAt = now;
+  Serial.printf("Temperature GPIO%u: rescanning failed probe bus.\n", pin);
+  probe.begin();
+  probe.setResolution(12);
+  probe.setWaitForConversion(false);
+  Serial.printf("Temperature GPIO%u: detected %u device(s); awaiting fresh conversion.\n",
+                pin, unsigned(probe.getDeviceCount()));
+}
+
+float meterReferencedTds(float v) {
+  if (!TDS_METER_REFERENCE_ENABLED || !isfinite(v) || v <= 0.0f || v >= 3.3f ||
+      !(TDS_HIGH_V > TDS_LOW_V) || !(TDS_HIGH_PPM > TDS_LOW_PPM)) return NAN;
+  const float result = TDS_LOW_PPM + (v - TDS_LOW_V) *
+    (TDS_HIGH_PPM - TDS_LOW_PPM) / (TDS_HIGH_V - TDS_LOW_V);
+  return isfinite(result) && result >= 0.0f ? result : NAN;
+}
+
 float fitPH(float v) {
-  if (v >= PH686_V)
-    return 4.01f + (v - PH4_V) * (6.86f - 4.01f) / (PH686_V - PH4_V);
-  return 6.86f + (v - PH686_V) * (9.18f - 6.86f) / (PH918_V - PH686_V);
+  if (!isfinite(v) || !(PH4_V > PH686_V && PH686_V > PH918_V)) return NAN;
+  const float result = v >= PH686_V
+    ? 4.01f + (v - PH4_V) * (6.86f - 4.01f) / (PH686_V - PH4_V)
+    : 6.86f + (v - PH686_V) * (9.18f - 6.86f) / (PH918_V - PH686_V);
+  // Match the existing client validity policy. Never clamp to a normal pH.
+  return isfinite(result) && result > 0.0f && result <= 14.0f ? result : NAN;
 }
 
 void sampleSensors() {
+  recoverTemperatureProbe(temp18, 18, t18, temp18RetryAt);
+  recoverTemperatureProbe(temp19, 19, t19, temp19RetryAt);
   temp18.requestTemperatures();
   temp19.requestTemperatures();
   responsiveWait(800);
@@ -215,6 +256,8 @@ void sampleSensors() {
 
   phV = voltage(PH_PIN);
   tdsV = voltage(TDS_PIN);
+  // ADC clipping cannot measure a higher concentration; never publish it as ppm.
+  tdsPpm = analogRead(TDS_PIN) >= 4095 ? NAN : meterReferencedTds(tdsV);
   turbV = voltage(TURB_PIN);
   if (POWER_SENSOR_ANALOG) {
     powerSignalV = voltage(POWER_PIN);
@@ -222,8 +265,9 @@ void sampleSensors() {
     measuredPower = PowerSignal::classify(powerSignalV, POWER_SIGNAL_OFF_V,
                                          POWER_SIGNAL_ON_V, analogRead(POWER_PIN) >= 4095);
   }
-  // No extrapolated pH is published outside the recorded buffers.
-  phValue = phV >= PH918_V && phV <= PH4_V ? fitPH(phV) : NAN;
+  // Buffer points define the transfer curve, not hard input-voltage limits.
+  // Extrapolation is identified below; its accuracy needs an independent check.
+  phValue = fitPH(phV);
   if (turbV >= 0.15f && turbV < 3.0f) {
     if (!turbKnown) cloudy = turbV < TURB_MID_V;
     else if (turbV < TURB_MID_V - TURB_HYST_V) cloudy = true;
@@ -262,7 +306,9 @@ void sampleSensors() {
   Serial.println("\n--- AQUARIUM 1 REAL SENSOR SAMPLE ---");
   Serial.printf("Temp GPIO18: %.2f C | GPIO19: %.2f C | mean: %.2f C\n",
                 t18, t19, temperaturesValid ? (t18 + t19) / 2.0f : NAN);
-  Serial.printf("pH: %.2f | input %.3f V (nan = invalid/outside buffer range)\n", phValue, phV);
+  Serial.printf("pH: %.2f | input %.3f V (%s)\n", phValue, phV,
+    !isfinite(phValue) ? "invalid: check input/probe/calibration" :
+    phV < PH918_V || phV > PH4_V ? "outside buffer span: extrapolated; verify with meter" : "within buffer span");
   Serial.printf("Turbidity: %s | GPIO35 %.3f V | module approx %.3f V\n",
                 turbKnown ? (cloudy ? "CLOUDY" : "CLEAR") : "UNKNOWN", turbV, turbV * 2);
   if (PROFILE_LEVEL_ENABLED)
@@ -270,10 +316,11 @@ void sampleSensors() {
                   distanceCm, levelPct, profileTargetHeightCm);
   else Serial.printf("Distance: %.1f cm | level %.1f %% (27.0 empty / 20.2 chosen full)\n", distanceCm, levelPct);
   Serial.printf("Ultrasonic: %u/5 valid echoes; current-batch median only\n", validEchoes);
-  if (tdsV >= TDS_BASE_V && tdsV <= TDS_REF_V) {
-    const float estimate = (tdsV - TDS_BASE_V) * SALT_EQ_REF_PPM / (TDS_REF_V - TDS_BASE_V);
-    Serial.printf("Homemade salt-equivalent estimate: %.0f ppm; NOT validated TDS | %.3f V\n", estimate, tdsV);
-  } else Serial.printf("TDS input %.3f V: outside homemade reference range; no ppm estimate.\n", tdsV);
+  if (isfinite(tdsPpm)) {
+    Serial.printf("TDS: %.0f ppm | GPIO32 %.3f V | %s; no temperature compensation\n", tdsPpm, tdsV,
+                  tdsV < TDS_CHECKED_MIN_V || tdsV > TDS_CHECKED_MAX_V
+                    ? "outside checked span: extrapolated; verify with meter" : "within checked span");
+  } else Serial.printf("TDS input %.3f V: invalid/clipped input or reference disabled; no ppm published.\n", tdsV);
   if (POWER_SENSOR_ANALOG) {
     Serial.printf("Voltage GPIO33: %.3f V | estimated DC supply: %.2f V | power: %s\n",
                   powerSignalV, supplyV, PowerSignal::label(measuredPower));
@@ -563,25 +610,26 @@ bool cloudCycle() {
   }
   if (!establishingBaseline && scheduleValid) applyScheduledFeed(control);
 
-  // Mandatory fields cannot be fabricated. Skip entire snapshot if either fails.
-  if (!temperaturesValid || (!PROFILE_LEVEL_ENABLED && !levelValid) || millis() - sampleAt > 15000) {
-    Serial.println("Telemetry withheld: missing valid temperature pair/water level/fresh sample.");
-    return true;
-  }
+  // Connection freshness is independent of sensor health. Never substitute a
+  // sentinel/old value, and never let one failed probe hide working sensors.
+  if (millis() - sampleAt > 15000) sampleSensors();
   JsonDocument telemetry;
-  telemetry["temperatureC"] = (t18 + t19) / 2.0f;
-  telemetry["temperatureReadingValid"] = true;
+  telemetry["temperatureReadingValid"] = temperaturesValid;
+  if (temperaturesValid) telemetry["temperatureC"] = (t18 + t19) / 2.0f;
+  if (!temperaturesValid) Serial.println("Temperature sensor fault: valid probe pair unavailable; other telemetry continues.");
+  telemetry["waterLevelReadingValid"] = levelValid;
   if (PROFILE_LEVEL_ENABLED) {
-    telemetry["waterLevelReadingValid"] = levelValid;
     if (profileTargetHeightCm > 0) telemetry["waterLevelTargetHeightCm"] = profileTargetHeightCm;
   }
   if (levelValid) {
     telemetry["waterLevelPercent"] = levelPct;
     telemetry["waterPresent"] = levelPct > 0;
   }
+  telemetry["phReadingValid"] = isfinite(phValue);
   if (isfinite(phValue)) telemetry["ph"] = phValue;
-  // Homemade salt equivalent is NOT calibrated TDS; do not feed it into alerts.
-  telemetry["tdsReadingValid"] = false;
+  // Publish only measured inputs within the meter-compared span; never clamp.
+  telemetry["tdsReadingValid"] = isfinite(tdsPpm);
+  if (isfinite(tdsPpm)) telemetry["tdsPpm"] = tdsPpm;
   // Two-sample comparison is categorical, never fabricated NTU.
   telemetry["turbidityState"] = turbKnown ? (cloudy ? "Cloudy" : "Clear") : "Unknown";
   telemetry["filterState"] = filterOn ? "Active" : "Inactive"; // commanded, not flow feedback

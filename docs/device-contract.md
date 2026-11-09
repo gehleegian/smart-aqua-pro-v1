@@ -1,5 +1,29 @@
 # SmartAqua Pro: Device Data Contract
 
+## Aquarium 1 TDS comparison update (2026-11-08)
+
+The prepared Aquarium 1 firmware now sends `tdsPpm` with `tdsReadingValid=true`
+only for finite inputs within its meter-compared voltage span. Reference pairs
+corrected by the owner: 0.169 V / 80 ppm and 1.304 V / 314 ppm, both at normal
+temperature. The separate cold sample (0.142 V / 60 ppm) is not merged into the
+normal-temperature curve without measured sample temperatures. Values are an
+empirical two-point linear estimate; sample temperatures were not recorded,
+so no temperature compensation or accuracy claim is made. No TDS-to-purity
+percentage is generated. Outside the checked input span, `tdsPpm` is omitted
+and `tdsReadingValid=false`. The existing schema and access rules already allow
+these fields; neither needs changing. Aquarium 2's comparison remains disabled.
+Earlier live-payload examples below describe the prior uncalibrated firmware.
+
+## Partial sensor-fault update (2026-11-08)
+
+`temperatureC` is no longer mandatory when `temperatureReadingValid=false`;
+it must be omitted in that case. A missing flag still requires a numeric value
+for legacy compatibility. A connected device continues to publish other current
+sensor readings and a fresh server `updatedAt`, rather than going offline because
+one sensor failed. The two-probe mean is published only when both probes work.
+RTDB read/write authorization is unchanged; the updated validation must be
+deployed before firmware uses this additive fault-reporting contract.
+
 This file is the single source of truth for the data the ESP32, the web and mobile apps, and the Cloud Functions exchange through Firebase.
 
 - **Status:** v1 (Sprint 1, 2026-11-06). Based on a read-only check of the live `practice-smartaqua` project on 2026-11-06, plus decisions 2–5 from the Sprint 1 brief.
