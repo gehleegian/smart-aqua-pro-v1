@@ -67,8 +67,8 @@ async function seedUser(user: OrgActor, role: 'User' | 'Admin' = 'User') {
   await syncUserAuthorization({ firestore, database }, user.uid, { cascadeAquariums: false });
 }
 
-async function addToken(uid: string, token: string) {
-  await firestore.doc(`users/${uid}/fcmTokens/${tokenIdFor(token)}`).set({ token, platform: 'web', userAgent: 'test', createdAt: clockMs, lastSeenAt: clockMs });
+async function addToken(uid: string, token: string, platform: 'web' | 'android' = 'web') {
+  await firestore.doc(`users/${uid}/fcmTokens/${tokenIdFor(token)}`).set({ token, platform, userAgent: 'test', createdAt: clockMs, lastSeenAt: clockMs });
 }
 
 async function provision(deviceId: string, code: string) {
@@ -234,6 +234,63 @@ test('NOTIFY-04 suspended org, stale requests and resolved alerts send nothing; 
   const result = await notifyAlert({ firestore, sender, now: () => clockMs }, 'suspended');
   assert.ok(result.sent);
   assert.deepEqual(result.recipients, [], 'a suspended org has no recipients');
+});
+
+// ---------------------------------------------------------------------------
+// Power outage publication -> ingest -> persisted alert -> web + Android push.
+// Offline firmware inputs and a fake sender only; no live writes or FCM sends.
+for (const device of [1, 2]) {
+  test(`NOTIFY-05 Aquarium ${device}: sensed 12V loss notifies web and Android once, then resolves on restored samples`, async () => {
+    const { firmwarePower } = await import(new URL('../../../tests/helpers/firmware-power.mjs', import.meta.url).href);
+    const present = device === 1 ? { signalV: 2.514 } : { digitalLevel: 0 };
+    const absent = device === 1 ? { signalV: 0.142 } : { digitalLevel: 1 };
+    await addToken(OWNER_A.uid, 'power-owner-web', 'web');
+    await addToken(OWNER_A.uid, 'power-owner-android', 'android');
+    await addToken(OWNER_B.uid, 'unrelated-owner-web', 'web');
+    await firestore.doc(`users/${OWNER_A.uid}/notificationPrefs/default`).set({ minSeverity: 'critical', deviceAlerts: true, mutedAquariumIds: [] });
+    const ingestPower = (input: { signalV?: number; digitalLevel?: number }) => ingestTelemetry({ firestore, now: () => clockMs }, tank1,
+      reading({ ...firmwarePower(device, input).telemetry, updatedAt: clockMs }));
+    await ingestPower(present);
+    clockMs += 1000;
+    const result = await ingestPower(absent);
+    assert.ok(result.ingested && result.alertOperations.includes('open:power'), JSON.stringify(result));
+    const alerts = (await firestore.collection('alert_records').where('aquarium_id', '==', tank1).get()).docs;
+    const alert = alerts.find((item) => item.get('parameter') === 'power');
+    assert.ok(alert, 'firmware mainsPresent=false must create a power alert');
+    assert.equal(alert.get('severity'), 'critical');
+    assert.equal(alert.get('notifyRequestedAt'), clockMs);
+    const sender = new FakeSender();
+    await notifyAlert({ firestore, sender, now: () => clockMs }, alert.id);
+    assert.deepEqual(sender.sent.map((message) => message.token).sort(), ['power-owner-android', 'power-owner-web']);
+    assert.ok(sender.sent.every((message) => message.uid === OWNER_A.uid && message.data.parameter === 'power' && message.data.aquariumId === tank1));
+    assert.ok(sender.sent.every((message) => message.title === 'CRITICAL: Tank 1' && message.body.includes('Mains power interruption')));
+    clockMs += 1000;
+    await ingestPower(absent);
+    assert.equal((await notifyAlert({ firestore, sender, now: () => clockMs }, alert.id)).sent, false);
+    assert.equal(sender.sent.length, 2, 'the same ongoing outage must not send duplicate notifications');
+    for (let index = 0; index < 3; index += 1) {
+      clockMs += 1000;
+      await ingestPower(present);
+    }
+    assert.equal((await alert.ref.get()).get('status'), 'resolved');
+    assert.equal((await notifyAlert({ firestore, sender, now: () => clockMs }, alert.id)).sent, false);
+  });
+}
+
+test('NOTIFY-06 disabling device/power alerts suppresses outage push without suppressing the stored alert', async () => {
+  await addToken(OWNER_A.uid, 'power-owner-web', 'web');
+  await addToken(OWNER_A.uid, 'power-owner-android', 'android');
+  await firestore.doc(`users/${OWNER_A.uid}/notificationPrefs/default`).set({ deviceAlerts: false });
+  const { firmwarePower } = await import(new URL('../../../tests/helpers/firmware-power.mjs', import.meta.url).href);
+  await ingestTelemetry({ firestore, now: () => clockMs }, tank1, reading(firmwarePower(2, { digitalLevel: 1 }).telemetry));
+  const alerts = (await firestore.collection('alert_records').where('aquarium_id', '==', tank1).get()).docs;
+  const alert = alerts.find((item) => item.get('parameter') === 'power');
+  assert.ok(alert);
+  const sender = new FakeSender();
+  await notifyAlert({ firestore, sender, now: () => clockMs }, alert.id);
+  assert.equal(sender.sent.length, 0);
+  assert.equal((await alert.ref.get()).get('status'), 'active');
+  assert.ok((await alert.ref.get()).get('lastNotification').skippedByPrefs >= 1);
 });
 
 // ---------------------------------------------------------------------------
