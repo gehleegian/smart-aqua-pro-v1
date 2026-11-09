@@ -25,6 +25,8 @@ const nextConfig = {
   // Firebase web config is public client configuration, so map those values
   // into Next's explicitly exposed NEXT_PUBLIC names for local development.
   env: {
+    NEXT_PUBLIC_FIREBASE_VAPID_KEY:
+      process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? process.env.VITE_FIREBASE_VAPID_KEY,
     NEXT_PUBLIC_FIREBASE_API_KEY:
       process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? process.env.VITE_FIREBASE_API_KEY,
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:

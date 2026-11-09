@@ -1,6 +1,6 @@
 # SmartAqua Pro: Push Notifications (FR15)
 
-**Status:** implemented and tested on the emulator with a fake sender (Sprint 4, `feat/device-pipeline`). **Real FCM delivery is not verified:** it needs a deployed project (§6). Nothing is deployed.
+**Status (2026-11-09):** notification functions are deployed in `practice-smartaqua`. Real web push was verified on the local website: registration saved to Aquarium 2's owner, one neutral test was accepted by FCM, and the user confirmed receipt. Android registration was also verified in the installed SmartAqua development APK for Aquarium 1's owner, and the user confirmed receipt of its neutral push test after allowing notifications in phone settings. No aquarium readings or alert records were fabricated. These are transport/receipt checks, not full rule-trigger timing tests. Expo Go does not support Android remote push.
 
 ## 1. When a notification is sent
 
@@ -46,6 +46,8 @@ Users edit these in **Settings → Alerts and notifications**. Only the user can
 - `lastSeenAt` is refreshed on each app start if alerts are already on.
 - **Invalid tokens are deleted automatically:** when FCM answers `registration-token-not-registered` or `invalid-registration-token`, the function deletes that token doc.
 - "Turn off alerts here" deletes this browser's token.
+- The UI checks the saved registration, not just OS permission. An explicit turn-off is remembered per account/device so startup refresh does not undo it. Authentication and sign-out behavior are unchanged by the registration fix.
+- Web registration waits until its service worker is activated before subscribing (first installation is asynchronous).
 - Only the user can read their tokens. Functions read them to send.
 
 ## 5. The message and what is recorded
@@ -72,6 +74,10 @@ Users edit these in **Settings → Alerts and notifications**. Only the user can
 
 **Prerequisites:** `docs/migration-live.md` §7f (VAPID public key in `NEXT_PUBLIC_FIREBASE_VAPID_KEY`, functions deployed).
 
+The VAPID key is build-time public configuration. Restart local Next.js after setting it. For Vercel, configure the variable there and redeploy; changing `.env.local` does not update the deployed site. "No active Service Worker" means the worker has not activated yet; the registration service now waits up to 15 seconds and reports an activation error instead of subscribing too early.
+
+A neutral test sent directly to one registered token verifies transport without creating an alert. An FCM message ID confirms acceptance, not a visible popup: record the recipient's confirmation separately. The 2026-11-09 web and Android tests had both. Full rule-trigger-to-notification timing and notification-tap navigation remain separate checks.
+
 1. **Desktop Chrome:** log in as an owner → Settings → **Turn on alerts** → allow. Check that `users/<uid>/fcmTokens/*` has a doc (Firebase console).
 2. **iPhone (iOS 16.4+):** open the site in Safari → Share → **Add to Home Screen** → open it from the icon → log in → Settings → Turn on alerts.
 3. **Trigger an alert** on a test tank:
@@ -87,5 +93,5 @@ Record the delivery times for the evaluation chapter.
 ## 7. Not done (later)
 
 - **Email notifications** (Sprint 5).
-- **Mobile app push:** the Android/iOS native app registers its own FCM tokens with `platform: android` and the same doc shape. That is part of mobile sync.
+- **Native iOS push:** requires APNs configuration and is not enabled. Android receipt was confirmed in the native development APK, not Expo Go; standalone release packaging and full rule-trigger timing remain separate checks.
 - **Quiet hours.**

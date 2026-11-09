@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   ALERT_COOLDOWN_MS,
   ALERT_TOUCH_INTERVAL_MS,
@@ -427,7 +428,7 @@ test('cleaning: once the interval date has passed, early triggers do not apply',
 
 test('docs/rule-matrix.md is regenerated from the seed (no drift)', async () => {
   const { execFileSync } = await import('node:child_process');
-  const generated = execFileSync(process.execPath, [new URL('../../scripts/rule-matrix.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+  const generated = execFileSync(process.execPath, [fileURLToPath(new URL('../../scripts/rule-matrix.mjs', import.meta.url))], { encoding: 'utf8' });
   const committed = readFileSync(new URL('../../docs/rule-matrix.md', import.meta.url), 'utf8');
-  assert.equal(committed, generated, 'run: node scripts/rule-matrix.mjs > docs/rule-matrix.md');
+  assert.equal(committed.replace(/\r\n/g, '\n'), generated.replace(/\r\n/g, '\n'), 'run: node scripts/rule-matrix.mjs > docs/rule-matrix.md');
 });

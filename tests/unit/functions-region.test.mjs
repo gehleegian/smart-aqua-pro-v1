@@ -6,13 +6,13 @@ import test from 'node:test';
 // Firestore and the RTDB of practice-smartaqua are in asia-southeast1, and 2nd-gen
 // database triggers must run in their database's region (docs/migration-live.md §2).
 const regionModule = new URL('../../functions/src/region.ts', import.meta.url);
-const index = readFileSync(new URL('../../functions/src/index.ts', import.meta.url), 'utf8');
+const index = readFileSync(new URL('../../functions/src/index.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 function regions(env) {
   const script = `import(${JSON.stringify(regionModule.href)}).then((m) => console.log(JSON.stringify(m)))`;
   const clean = { ...process.env };
   delete clean.FUNCTIONS_EMULATOR;
-  return JSON.parse(execFileSync('node', ['--experimental-strip-types', '--no-warnings', '-e', script], { env: { ...clean, ...env }, encoding: 'utf8' }));
+  return JSON.parse(execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '-e', script], { env: { ...clean, ...env }, encoding: 'utf8' }));
 }
 
 test('deployed functions all run in asia-southeast1, RTDB triggers included', () => {
