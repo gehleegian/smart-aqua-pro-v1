@@ -1,5 +1,18 @@
 # Aquarium 2
 
+## 12V outage push signal (2026-11-09)
+
+The sketch now publishes `mainsPresent` from the confirmed GPIO33 optocoupler
+polarity (LOW = present, HIGH = absent), using the same single digital read for
+the boolean and `powerStatus`. The power-alert rule needs this boolean; the old
+label-only payload did not activate it. Unconfirmed polarity publishes Unknown
+without a mains boolean. No GPIO, sensor calibration, relay or servo behavior was
+changed. The prepared `C:/new/Aquarium2Device` upload copy is updated too.
+
+Upload and a supervised outage/restore push-receipt test are still required.
+ESP32 and Internet power must remain available to report 12V loss; otherwise the
+existing delayed device-offline path applies. See `../../docs/notifications.md`.
+
 ## SG90 correction and pending isolation test
 
 2026-11-09 pending v4: Aquarium 2's web-controlled feeder now uses the core-3

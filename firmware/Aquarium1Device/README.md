@@ -1,5 +1,20 @@
 # Aquarium 1 supervised Arduino test
 
+## 12V outage push signal (2026-11-09)
+
+The sketch now sends `mainsPresent` from the existing analog power-presence
+classification, alongside `powerStatus`. The outage rule requires this boolean;
+the previous label-only payload could show an interruption without generating its
+power alert. Present sends true; absent sends false; unknown/ambiguous/clipped
+inputs omit the boolean. GPIO33, reference voltages, other sensor calculations and
+equipment-control behavior are unchanged. The current upload copy at
+`C:/new/Aquarium1Device/Aquarium1Device.ino` has the same targeted correction;
+its other owner-edited formatting/content was preserved.
+
+Upload and a supervised physical outage/restore receipt test are still required.
+The ESP32 and Internet must stay powered to report a 12V outage. Otherwise only
+the existing delayed device-offline alert is possible. See `../../docs/notifications.md`.
+
 ## pH buffer-cutoff correction (2026-11-09)
 
 The owner confirmed the storage cap was removed for every buffer measurement.

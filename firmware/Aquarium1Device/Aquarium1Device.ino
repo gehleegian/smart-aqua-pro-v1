@@ -635,10 +635,18 @@ bool cloudCycle() {
   telemetry["filterState"] = filterOn ? "Active" : "Inactive"; // commanded, not flow feedback
   telemetry["lightState"] = lightOn ? "On" : "Off"; // commanded relay output
   telemetry["equipmentStatus"] = "Unknown";
-  if (POWER_SENSOR_ANALOG) telemetry["powerStatus"] = PowerSignal::label(measuredPower);
-  else if (POWER_PRESENT_LEVEL == 0 || POWER_PRESENT_LEVEL == 1)
-    telemetry["powerStatus"] = digitalRead(POWER_PIN) == POWER_PRESENT_LEVEL ? "Online" : "Power Interruption";
-  else telemetry["powerStatus"] = "Unknown";
+  // Report the same measured signal to the display and the outage rule.
+  // Unknown/ambiguous inputs must not invent a confirmed mains boolean.
+  PowerSignal::State reportedPower = measuredPower;
+  if (!POWER_SENSOR_ANALOG) {
+    if (POWER_PRESENT_LEVEL == 0 || POWER_PRESENT_LEVEL == 1)
+      reportedPower = digitalRead(POWER_PIN) == POWER_PRESENT_LEVEL
+        ? PowerSignal::State::Present : PowerSignal::State::Absent;
+    else reportedPower = PowerSignal::State::Unknown;
+  }
+  telemetry["powerStatus"] = PowerSignal::label(reportedPower);
+  if (reportedPower != PowerSignal::State::Unknown)
+    telemetry["mainsPresent"] = reportedPower == PowerSignal::State::Present;
   telemetry["online"] = true;
   telemetry["updatedAt"][".sv"] = "timestamp";
   String payload;

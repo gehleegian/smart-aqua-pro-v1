@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { firmwarePower } from '../helpers/firmware-power.mjs';
 
 test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and feed storage', async () => {
   const root = new URL('../../firmware/', import.meta.url);
@@ -69,10 +70,9 @@ test('Aquarium 2 uses the observed optocoupler LOW=present, HIGH=absent mapping'
   const config = await readFile(new URL('Config.h', root), 'utf8');
   const source = await readFile(new URL('Aquarium2Device.ino', root), 'utf8');
   const activeLevel = Number(config.match(/constexpr int POWER_PRESENT_LEVEL = (-?\d+)/)?.[1]);
-  const expression = source.match(/else if \(POWER_PRESENT_LEVEL == 0 \|\| POWER_PRESENT_LEVEL == 1\)\s*telemetry\["powerStatus"\] = ([^;]+);/)?.[1];
-  assert.ok(expression, 'test the actual firmware digital mapping');
-  const evaluate = Function('digitalRead', 'POWER_PIN', 'POWER_PRESENT_LEVEL', `return ${expression};`);
-  assert.equal(evaluate(() => 0, 33, activeLevel), 'Online');
-  assert.equal(evaluate(() => 1, 33, activeLevel), 'Power Interruption');
+  assert.match(source, /digitalRead\(POWER_PIN\) == POWER_PRESENT_LEVEL/);
+  assert.equal(activeLevel, 0);
+  assert.deepEqual(firmwarePower(2, { digitalLevel: 0 }).telemetry, { powerStatus: 'Online', mainsPresent: true });
+  assert.deepEqual(firmwarePower(2, { digitalLevel: 1 }).telemetry, { powerStatus: 'Power Interruption', mainsPresent: false });
   assert.match(config, /POWER_SENSOR_ANALOG = false/);
 });

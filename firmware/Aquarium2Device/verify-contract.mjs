@@ -24,7 +24,7 @@ const rules = JSON.parse(fs.readFileSync(new URL('../../database.rules.json', im
 const fields = [...source.matchAll(/telemetry\["([^"]+)"\]/g)].map(match => match[1]);
 const schema = rules.rules.devices.$aquariumId.telemetry;
 for (const field of fields) assert.ok(schema[field], `Unsupported telemetry field: ${field}`);
-for (const field of ['temperatureC', 'waterLevelPercent', 'online', 'updatedAt'])
+for (const field of ['temperatureC', 'waterLevelPercent', 'mainsPresent', 'online', 'updatedAt'])
   assert.ok(fields.includes(field), `Missing required field: ${field}`);
 assert.match(config, /#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1/);
 assert.match(config, /POWER_SENSOR_ANALOG = false/);
@@ -46,6 +46,8 @@ assert.match(source, /armed = !localStop/);
 assert.match(source, /commandWatermarkMs = double\(time\(nullptr\)\) \* 1000.0/);
 assert.match(source, /requestedMs <= commandWatermarkMs/);
 assert.match(config, /POWER_PRESENT_LEVEL = 0/);
+assert.match(source, /telemetry\["powerStatus"\] = PowerSignal::label\(reportedPower\)/);
+assert.match(source, /if \(reportedPower != PowerSignal::State::Unknown\)\s*telemetry\["mainsPresent"\] = reportedPower == PowerSignal::State::Present/);
 assert.match(source, /POWER_PIN = 33/);
 assert.match(source, /LIGHT_PIN = 16, FILTER_PIN = 17/);
 assert.match(source, /bus18\(18\), bus19\(19\)/);

@@ -4,6 +4,48 @@
 
 ## 1. When a notification is sent
 
+### 12V power interruption (firmware correction, 2026-11-09)
+
+Both aquarium sketches now publish the existing optional `mainsPresent` boolean
+from their measured GPIO33 detector, alongside the matching `powerStatus` label.
+Previously only the label was published; the rule engine intentionally ignores a
+label without a sensed boolean, so it could not open the power-interruption alert.
+Aquarium 1 retains its observed analog references and Aquarium 2 retains its
+confirmed active-LOW optocoupler polarity. Unknown/ambiguous analog readings or
+unconfirmed digital polarity omit the boolean rather than falsely declaring power
+present or absent. A fresh telemetry PUT replaces any older signal.
+
+With the enabled `power_interruption` rule, measured absence opens the existing
+CRITICAL power alert and requests push to each authorized recipient's registered
+web/Android tokens. User preferences and aquarium muting still apply. Repeated
+samples during one outage do not repeatedly push; restoration uses the existing
+three-normal-sample alert-resolution policy. No new database field, rule threshold,
+authorization permission or backend deployment is required for this firmware fix.
+
+The updated sketch must be uploaded to each ESP32 before this takes effect.
+The ESP32 and its Internet connection must remain powered (for example through an
+already provided independent/backup supply) to report loss of the monitored 12V
+rail. If the ESP32 or router loses power too, immediate outage reporting is not
+possible; the existing 60-second heartbeat window plus a once-per-minute check can
+instead request a device-offline alert. FCM/OS delivery latency is additional.
+Do not infer a confirmed mains outage from connectivity loss alone.
+
+Offline control-flow and emulator push tests are not a physical power-loss receipt
+test. A supervised test must confirm `mainsPresent=false`, the power alert's
+`notifyRequestedAt`, sender results and visible receipt on both devices, then
+restoration. No upload, live outage, equipment command or test push is triggered by
+editing these files. Other sensor calculations and relay/feeder behavior are unchanged.
+
+Verification on 2026-11-09: all 225 web unit tests and all 14 local Sprint 4
+emulator tests passed, including both detector types through alert creation,
+web/Android fake delivery, duplicate suppression, restoration and opt-out. Both
+repository firmware builds with their real private settings and both static
+contracts passed. No physical power-loss receipt test or upload was performed.
+Read-only live checks found the power rule enabled and device alerts unmuted/on
+for both owners; the latest stored device payloads still lacked `mainsPresent`.
+Aquarium 1's owner had web/Android registrations; Aquarium 2's owner had web only.
+Those are existing registration records, not fresh delivery/permission checks.
+
 The rules engine already decides when an alert should notify. It sets `notifyRequestedAt` on the alert in `alert_records`:
 - when the alert **opens**;
 - when it **escalates** (WARNING → CRITICAL).
