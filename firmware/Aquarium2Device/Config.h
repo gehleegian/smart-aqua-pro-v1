@@ -26,15 +26,17 @@ constexpr char ENCLOSURE_ID[] = "COMPILE_CHECK_ONLY";
 constexpr char DATABASE_URL[] =
   "https://practice-smartaqua-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-// User confirmed identical wiring. Offsets and sensor references are starting
-// values copied from Aquarium 1, pending Aquarium 2 hardware verification.
+// Owner confirmed identical wiring and matching calibration outputs.
+// Reuse Aquarium 1 references; this is not an independent accuracy certification.
 constexpr float TEMP18_OFFSET_C = 0.0f;
 constexpr float TEMP19_OFFSET_C = 0.0f;
-constexpr int POWER_PRESENT_LEVEL = -1; // polarity still needs measurement
-// Preserve Aquarium 2's existing unconfirmed digital-detector behavior.
-// Do not assume its module matches Aquarium 1 without hardware confirmation.
+// Aquarium 2 uses a digital optocoupler, NOT Aquarium 1's analog divider.
+// Owner-observed GPIO33: 12V present -> 0; 12V removed -> 1 (USB retained).
+// Output side VCC must be 3.3V, OUT -> GPIO33, GND -> ESP32 GND.
+constexpr int POWER_PRESENT_LEVEL = 0; // confirmed active-LOW digital detector
 constexpr bool POWER_SENSOR_ANALOG = false;
 constexpr float POWER_DIVIDER_RATIO = 5.0f; // unused in digital mode
-constexpr float POWER_SIGNAL_OFF_V = 0.0f; // uncalibrated, unused in digital mode
+constexpr float POWER_SIGNAL_OFF_V = 0.0f; // unused; not a calibration for this device
 constexpr float POWER_SIGNAL_ON_V = 0.0f;
+#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1
 constexpr bool PROFILE_LEVEL_ENABLED = false; // Aquarium 1 only.

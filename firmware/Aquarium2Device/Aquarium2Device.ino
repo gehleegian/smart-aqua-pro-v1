@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <ESP32Servo.h>
+#include <esp32-hal-ledc.h>
 #include <Preferences.h>
 #include <esp_http_client.h>
 #include <esp_crt_bundle.h>
@@ -20,7 +20,7 @@
 // Aquarium 2 supervised integration-test firmware. No fabricated telemetry.
 constexpr uint8_t PH_PIN = 34, TDS_PIN = 32, TURB_PIN = 35;
 constexpr uint8_t TRIG_PIN = 26, ECHO_PIN = 27;
-constexpr uint8_t LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 15;
+constexpr uint8_t LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 23;
 constexpr uint8_t POWER_PIN = 33;
 constexpr float PH4_V = 2.438f, PH686_V = 2.287f, PH918_V = 2.103f;
 constexpr float EMPTY_CM = 27.0f, FULL_CM = 20.2f;
@@ -28,8 +28,17 @@ constexpr float CLEAR_V = 0.967f, CLOUDY_V = 0.246f;
 // Midpoint separates the two tested samples, NOT a calibrated NTU threshold.
 constexpr float TURB_MID_V = (CLEAR_V + CLOUDY_V) / 2.0f;
 constexpr float TURB_HYST_V = 0.02f; // anti-flicker margin, not a water-quality rule
-constexpr float TDS_BASE_V = 0.314f, TDS_REF_V = 1.314f;
-constexpr float SALT_EQ_REF_PPM = 317.0f; // legacy homemade estimate, NOT verified TDS
+#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED
+#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 0
+#endif
+constexpr bool TDS_METER_REFERENCE_ENABLED = AQUARIUM_TDS_METER_REFERENCE_ENABLED != 0;
+// Meter comparisons are enabled only for the device checked by its owner.
+// Empirical linear estimate; extrapolation is allowed but unverified.
+constexpr float TDS_LOW_V = 0.169f, TDS_LOW_PPM = 80.0f;
+constexpr float TDS_HIGH_V = 1.304f, TDS_HIGH_PPM = 314.0f;
+// Observed sample span; half a displayed millivolt accounts for Serial rounding.
+constexpr float TDS_CHECKED_MIN_V = 0.169f - 0.0005f;
+constexpr float TDS_CHECKED_MAX_V = 1.304f + 0.0005f;
 
 OneWire bus18(18), bus19(19);
 DallasTemperature temp18(&bus18), temp19(&bus19);
@@ -37,19 +46,21 @@ bool armed = false, lightOn = false, filterOn = false;
 bool localStop = false; // optional serial DISARM stays latched until ARM/reset
 bool turbKnown = false, cloudy = false;
 float phV = NAN, tdsV = NAN, turbV = NAN, phValue = NAN;
+float tdsPpm = NAN;
 float powerSignalV = NAN, supplyV = NAN;
 PowerSignal::State measuredPower = PowerSignal::State::Unknown;
 float t18 = NAN, t19 = NAN, distanceCm = NAN, levelPct = NAN;
 bool temperaturesValid = false, levelValid = false;
 float profileTargetHeightCm = 0;
 uint32_t sampleAt = 0, lastSample = 0, lastCloud = 0, lastWifi = 0;
+uint32_t temp18RetryAt = 0, temp19RetryAt = 0;
 String idToken, refreshToken, lastCommand, serialLine;
 bool serialOverflow = false, commandBaseline = false;
 uint32_t tokenAt = 0, tokenLifetimeMs = 0, lastAuthAttempt = 0;
 uint32_t cloudDelayMs = 3000;
 uint32_t lastConnectionReport = 0;
 bool authAttempted = false;
-Servo feeder;
+bool feederPwmAttached = false;
 bool feedCompleted = false;
 uint32_t lastFeedEnd = 0;
 Preferences scheduleStore;
@@ -72,6 +83,7 @@ void disarm() {
   outputsOff();
   armed = false;
   commandBaseline = false;
+  stopFeederPwm();
 }
 
 void setOutput(bool light, bool on) {
@@ -85,6 +97,43 @@ void setOutput(bool light, bool on) {
                 light ? "LIGHT" : "FILTER", on ? "ON" : "OFF");
 }
 
+// Native core-3 LEDC calls expose errors hidden by ESP32Servo's attached flag.
+// Driver readback is NOT electrical measurement or mechanical feedback.
+void stopFeederPwm() {
+  if (feederPwmAttached) {
+    if (!ledcDetach(SERVO_PIN)) Serial.println("FEED PWM ERROR: detach failed.");
+    feederPwmAttached = false;
+  }
+  digitalWrite(SERVO_PIN, LOW);
+  pinMode(SERVO_PIN, OUTPUT);
+}
+
+uint32_t feederDuty(int degrees) {
+  // Preserve the existing SG90 mapping: 135=1750us, 45=1250us.
+  const uint32_t pulseUs = 1000U + uint32_t(degrees) * 1000U / 180U;
+  return (pulseUs * 65536U + 10000U) / 20000U;
+}
+
+bool writeFeederPosition(int degrees, const char *phase) {
+  if (!feederPwmAttached || !armed || localStop || WiFi.status() != WL_CONNECTED) return false;
+  const uint32_t duty = feederDuty(degrees);
+  if (!ledcWrite(SERVO_PIN, duty)) {
+    Serial.printf("FEED PWM ERROR: %s write failed on GPIO%u.\n", phase, SERVO_PIN);
+    return false;
+  }
+  // Duty changes latch on a PWM boundary. Wait two 20ms frames, not an
+  // immediate read which can still return the previous pulse's duty.
+  responsiveWait(40);
+  if (!feederPwmAttached || !armed || localStop || WiFi.status() != WL_CONNECTED) return false;
+  const uint32_t actualHz = ledcReadFreq(SERVO_PIN);
+  const uint32_t actualDuty = ledcRead(SERVO_PIN);
+  const bool matches = actualHz == 50 && actualDuty == duty;
+  Serial.printf("FEED PWM %s GPIO%u: target=%lu ticks, driver=%lu ticks at %lu Hz; %s. Not physical feedback.\n",
+                phase, SERVO_PIN, (unsigned long)duty, (unsigned long)actualDuty,
+                (unsigned long)actualHz, matches ? "MATCH" : "ERROR");
+  return matches;
+}
+
 void runManualFeed() {
   if (!FEEDER_TEST_ENABLED || !armed || localStop) {
     Serial.println("Feed rejected: feeder not enabled or controls not ready.");
@@ -94,35 +143,37 @@ void runManualFeed() {
     Serial.println("Feed rejected: cooldown active.");
     return;
   }
-  feeder.setPeriodHertz(50);
-  feeder.attach(SERVO_PIN, 500, 2500);
-  if (!feeder.attached()) {
-    Serial.println("Feed rejected: servo PWM unavailable.");
+  Serial.println("FEED v4: checked native PWM, GPIO23, SG90; website command accepted.");
+  if (!ledcAttach(SERVO_PIN, 50, 16)) {
+    Serial.println("FEED PWM ERROR: attach failed; cycle not started.");
     return;
   }
+  feederPwmAttached = true;
   // First establish provisional home; never energize the servo at boot.
-  feeder.write(FEEDER_HOME_DEG);
-  responsiveWait(FEEDER_TRAVEL_MS);
-  if (armed && !localStop && WiFi.status() == WL_CONNECTED) {
-    feeder.write(FEEDER_DISPENSE_DEG);
-    responsiveWait(FEEDER_TRAVEL_MS);
+  bool pwmOk = writeFeederPosition(FEEDER_HOME_DEG, "home");
+  if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
+  if (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED) {
+    pwmOk = writeFeederPosition(FEEDER_DISPENSE_DEG, "dispense");
+    if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
     const uint32_t holdStart = millis();
     // Keep network requests out of this timed section so HTTPS timeouts cannot
     // extend the configured dwell. Serial stop and Wi-Fi loss end it early.
-    while (armed && !localStop && WiFi.status() == WL_CONNECTED &&
+    while (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED &&
            millis() - holdStart < FEEDER_HOLD_MS) {
       serialCommands();
       delay(2);
     }
   }
-  feeder.write(FEEDER_HOME_DEG);
-  responsiveWait(FEEDER_TRAVEL_MS);
-  feeder.detach();
-  pinMode(SERVO_PIN, OUTPUT);
-  digitalWrite(SERVO_PIN, LOW);
+  if (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED) {
+    pwmOk = writeFeederPosition(FEEDER_HOME_DEG, "return");
+    if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
+  } else pwmOk = false;
+  pwmOk = pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED;
+  stopFeederPwm();
   lastFeedEnd = millis();
   feedCompleted = true;
-  Serial.println("Feed cycle ended; home commanded. Mechanical position NOT verified.");
+  Serial.println(pwmOk ? "Feed PWM sequence checked; mechanical movement NOT verified."
+                       : "Feed aborted: PWM error, local stop, or Wi-Fi loss. Movement NOT verified.");
 }
 
 void help() {
@@ -195,13 +246,43 @@ bool validTemperature(float value) {
   return isfinite(value) && value >= -55 && value <= 125 && value != 85.0f;
 }
 
+void recoverTemperatureProbe(DallasTemperature &probe, uint8_t pin,
+                             float previousReading, uint32_t &retryAt) {
+  // getDeviceCount() is cached by begin(). A probe missed at boot otherwise
+  // stays undiscoverable even after its power/contact has recovered.
+  const bool needsRecovery = probe.getDeviceCount() != 1 ||
+    (sampleAt != 0 && !validTemperature(previousReading));
+  const uint32_t now = millis();
+  if (!needsRecovery || now - retryAt < 10000UL) return;
+  retryAt = now;
+  Serial.printf("Temperature GPIO%u: rescanning failed probe bus.\n", pin);
+  probe.begin();
+  probe.setResolution(12);
+  probe.setWaitForConversion(false);
+  Serial.printf("Temperature GPIO%u: detected %u device(s); awaiting fresh conversion.\n",
+                pin, unsigned(probe.getDeviceCount()));
+}
+
+float meterReferencedTds(float v) {
+  if (!TDS_METER_REFERENCE_ENABLED || !isfinite(v) || v <= 0.0f || v >= 3.3f ||
+      !(TDS_HIGH_V > TDS_LOW_V) || !(TDS_HIGH_PPM > TDS_LOW_PPM)) return NAN;
+  const float result = TDS_LOW_PPM + (v - TDS_LOW_V) *
+    (TDS_HIGH_PPM - TDS_LOW_PPM) / (TDS_HIGH_V - TDS_LOW_V);
+  return isfinite(result) && result >= 0.0f ? result : NAN;
+}
+
 float fitPH(float v) {
-  if (v >= PH686_V)
-    return 4.01f + (v - PH4_V) * (6.86f - 4.01f) / (PH686_V - PH4_V);
-  return 6.86f + (v - PH686_V) * (9.18f - 6.86f) / (PH918_V - PH686_V);
+  if (!isfinite(v) || !(PH4_V > PH686_V && PH686_V > PH918_V)) return NAN;
+  const float result = v >= PH686_V
+    ? 4.01f + (v - PH4_V) * (6.86f - 4.01f) / (PH686_V - PH4_V)
+    : 6.86f + (v - PH686_V) * (9.18f - 6.86f) / (PH918_V - PH686_V);
+  // Match the existing client validity policy. Never clamp to a normal pH.
+  return isfinite(result) && result > 0.0f && result <= 14.0f ? result : NAN;
 }
 
 void sampleSensors() {
+  recoverTemperatureProbe(temp18, 18, t18, temp18RetryAt);
+  recoverTemperatureProbe(temp19, 19, t19, temp19RetryAt);
   temp18.requestTemperatures();
   temp19.requestTemperatures();
   responsiveWait(800);
@@ -215,6 +296,8 @@ void sampleSensors() {
 
   phV = voltage(PH_PIN);
   tdsV = voltage(TDS_PIN);
+  // ADC clipping cannot measure a higher concentration; never publish it as ppm.
+  tdsPpm = analogRead(TDS_PIN) >= 4095 ? NAN : meterReferencedTds(tdsV);
   turbV = voltage(TURB_PIN);
   if (POWER_SENSOR_ANALOG) {
     powerSignalV = voltage(POWER_PIN);
@@ -222,8 +305,9 @@ void sampleSensors() {
     measuredPower = PowerSignal::classify(powerSignalV, POWER_SIGNAL_OFF_V,
                                          POWER_SIGNAL_ON_V, analogRead(POWER_PIN) >= 4095);
   }
-  // No extrapolated pH is published outside the recorded buffers.
-  phValue = phV >= PH918_V && phV <= PH4_V ? fitPH(phV) : NAN;
+  // Buffer points define the transfer curve, not hard input-voltage limits.
+  // Extrapolation is identified below; its accuracy needs an independent check.
+  phValue = fitPH(phV);
   if (turbV >= 0.15f && turbV < 3.0f) {
     if (!turbKnown) cloudy = turbV < TURB_MID_V;
     else if (turbV < TURB_MID_V - TURB_HYST_V) cloudy = true;
@@ -262,7 +346,9 @@ void sampleSensors() {
   Serial.println("\n--- AQUARIUM 2 REAL SENSOR SAMPLE ---");
   Serial.printf("Temp GPIO18: %.2f C | GPIO19: %.2f C | mean: %.2f C\n",
                 t18, t19, temperaturesValid ? (t18 + t19) / 2.0f : NAN);
-  Serial.printf("pH: %.2f | input %.3f V (nan = invalid/outside buffer range)\n", phValue, phV);
+  Serial.printf("pH: %.2f | input %.3f V (%s)\n", phValue, phV,
+    !isfinite(phValue) ? "invalid: check input/probe/calibration" :
+    phV < PH918_V || phV > PH4_V ? "outside buffer span: extrapolated; verify with meter" : "within buffer span");
   Serial.printf("Turbidity: %s | GPIO35 %.3f V | module approx %.3f V\n",
                 turbKnown ? (cloudy ? "CLOUDY" : "CLEAR") : "UNKNOWN", turbV, turbV * 2);
   if (PROFILE_LEVEL_ENABLED)
@@ -270,10 +356,11 @@ void sampleSensors() {
                   distanceCm, levelPct, profileTargetHeightCm);
   else Serial.printf("Distance: %.1f cm | level %.1f %% (27.0 empty / 20.2 chosen full)\n", distanceCm, levelPct);
   Serial.printf("Ultrasonic: %u/5 valid echoes; current-batch median only\n", validEchoes);
-  if (tdsV >= TDS_BASE_V && tdsV <= TDS_REF_V) {
-    const float estimate = (tdsV - TDS_BASE_V) * SALT_EQ_REF_PPM / (TDS_REF_V - TDS_BASE_V);
-    Serial.printf("Homemade salt-equivalent estimate: %.0f ppm; NOT validated TDS | %.3f V\n", estimate, tdsV);
-  } else Serial.printf("TDS input %.3f V: outside homemade reference range; no ppm estimate.\n", tdsV);
+  if (isfinite(tdsPpm)) {
+    Serial.printf("TDS: %.0f ppm | GPIO32 %.3f V | %s; no temperature compensation\n", tdsPpm, tdsV,
+                  tdsV < TDS_CHECKED_MIN_V || tdsV > TDS_CHECKED_MAX_V
+                    ? "outside checked span: extrapolated; verify with meter" : "within checked span");
+  } else Serial.printf("TDS input %.3f V: invalid/clipped input or reference disabled; no ppm published.\n", tdsV);
   if (POWER_SENSOR_ANALOG) {
     Serial.printf("Voltage GPIO33: %.3f V | estimated DC supply: %.2f V | power: %s\n",
                   powerSignalV, supplyV, PowerSignal::label(measuredPower));
@@ -563,25 +650,26 @@ bool cloudCycle() {
   }
   if (!establishingBaseline && scheduleValid) applyScheduledFeed(control);
 
-  // Mandatory fields cannot be fabricated. Skip entire snapshot if either fails.
-  if (!temperaturesValid || (!PROFILE_LEVEL_ENABLED && !levelValid) || millis() - sampleAt > 15000) {
-    Serial.println("Telemetry withheld: missing valid temperature pair/water level/fresh sample.");
-    return true;
-  }
+  // Connection freshness is independent of sensor health. Never substitute a
+  // sentinel/old value, and never let one failed probe hide working sensors.
+  if (millis() - sampleAt > 15000) sampleSensors();
   JsonDocument telemetry;
-  telemetry["temperatureC"] = (t18 + t19) / 2.0f;
-  telemetry["temperatureReadingValid"] = true;
+  telemetry["temperatureReadingValid"] = temperaturesValid;
+  if (temperaturesValid) telemetry["temperatureC"] = (t18 + t19) / 2.0f;
+  if (!temperaturesValid) Serial.println("Temperature sensor fault: valid probe pair unavailable; other telemetry continues.");
+  telemetry["waterLevelReadingValid"] = levelValid;
   if (PROFILE_LEVEL_ENABLED) {
-    telemetry["waterLevelReadingValid"] = levelValid;
     if (profileTargetHeightCm > 0) telemetry["waterLevelTargetHeightCm"] = profileTargetHeightCm;
   }
   if (levelValid) {
     telemetry["waterLevelPercent"] = levelPct;
     telemetry["waterPresent"] = levelPct > 0;
   }
+  telemetry["phReadingValid"] = isfinite(phValue);
   if (isfinite(phValue)) telemetry["ph"] = phValue;
-  // Homemade salt equivalent is NOT calibrated TDS; do not feed it into alerts.
-  telemetry["tdsReadingValid"] = false;
+  // Publish only measured inputs within the meter-compared span; never clamp.
+  telemetry["tdsReadingValid"] = isfinite(tdsPpm);
+  if (isfinite(tdsPpm)) telemetry["tdsPpm"] = tdsPpm;
   // Two-sample comparison is categorical, never fabricated NTU.
   telemetry["turbidityState"] = turbKnown ? (cloudy ? "Cloudy" : "Clear") : "Unknown";
   telemetry["filterState"] = filterOn ? "Active" : "Inactive"; // commanded, not flow feedback

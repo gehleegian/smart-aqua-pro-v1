@@ -20,7 +20,7 @@ const UNAVAILABLE: Record<Exclude<PushAvailability, { available: true }>['reason
 /** FR15: turn on push alerts in this browser and choose what to receive. */
 export function NotificationSettings() {
   const [availability, setAvailability] = useState<PushAvailability | null>(null);
-  const [enabled, setEnabled] = useState(() => pushEnabledHere());
+  const [enabled, setEnabled] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [tanks, setTanks] = useState<Array<{ id: string; name: string }>>([]);
   const [busy, setBusy] = useState('');
@@ -29,6 +29,8 @@ export function NotificationSettings() {
   useEffect(() => {
     let cancelled = false;
     void pushAvailability().then((value) => { if (!cancelled) setAvailability(value); });
+    void pushEnabledHere().then((value) => { if (!cancelled) setEnabled(value); })
+      .catch(() => { if (!cancelled) setMessage({ kind: 'error', text: 'Push registration could not be checked. Try Turn on alerts again.' }); });
     void loadNotificationPrefs().then((value) => { if (!cancelled) setPrefs(value); }).catch(() => undefined);
     const uid = auth.currentUser?.uid;
     if (uid) {

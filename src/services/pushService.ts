@@ -10,6 +10,16 @@ import { auth, db } from '../firebase';
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
 const USING_EMULATORS = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
 const SW_URL = '/firebase-messaging-sw.js';
+const preferenceKey = (uid: string) => `smartaqua-push:${uid}`;
+let pendingToken: Promise<string> | undefined;
+
+function browserToken(serviceWorkerRegistration: ServiceWorkerRegistration) {
+  // Layout refresh and Settings status can run together. The SDK's initial
+  // registration must not create competing tokens for the same browser.
+  pendingToken ??= getToken(getMessaging(getApp()), { vapidKey: VAPID_KEY, serviceWorkerRegistration })
+    .finally(() => { pendingToken = undefined; });
+  return pendingToken;
+}
 
 export type PushAvailability =
   | { available: true }
@@ -53,15 +63,44 @@ export function userAgentSummary(ua = typeof navigator === 'undefined' ? '' : na
 }
 
 async function registration() {
-  return navigator.serviceWorker.register(SW_URL, { scope: '/' });
+  return activeRegistration(await navigator.serviceWorker.register(SW_URL, { scope: '/' }));
 }
 
-async function saveToken(token: string) {
-  const uid = auth.currentUser?.uid;
+/** register() resolves before first install/activation; PushManager requires an active worker. */
+export async function activeRegistration(registered: ServiceWorkerRegistration) {
+  if (registered.active?.state === 'activated') return registered;
+  await new Promise<void>((resolve, reject) => {
+    const watched = new Set<ServiceWorker>();
+    const cleanup = () => {
+      clearTimeout(timeout);
+      registered.removeEventListener('updatefound', check);
+      watched.forEach((worker) => worker.removeEventListener('statechange', check));
+    };
+    const check = () => {
+      if (registered.active?.state === 'activated') { cleanup(); resolve(); return; }
+      for (const worker of [registered.installing, registered.waiting, registered.active]) {
+        if (worker && !watched.has(worker)) {
+          watched.add(worker);
+          worker.addEventListener('statechange', check);
+        }
+      }
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('The notification service worker did not activate. Reload this page and try again.'));
+    }, 15000);
+    registered.addEventListener('updatefound', check);
+    check();
+  });
+  return registered;
+}
+
+async function saveToken(token: string, uid = auth.currentUser?.uid) {
   if (!uid) throw new Error('You must be signed in.');
   const ref = doc(db, 'users', uid, 'fcmTokens', await tokenId(token));
   const existing = await getDoc(ref);
   const now = Date.now();
+  if (auth.currentUser?.uid !== uid) throw new Error('Account changed. Please turn on alerts again.');
   await setDoc(ref, {
     token,
     platform: platform(),
@@ -73,35 +112,49 @@ async function saveToken(token: string) {
 
 /** Call ONLY from a click handler: asks for permission, registers, stores the token. */
 export async function enablePush() {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('You must be signed in.');
   const availability = await pushAvailability();
   if (!availability.available) throw new Error(`Push is not available here (${availability.reason}).`);
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new Error('Notifications were not allowed. You can allow them in the browser settings.');
-  const token = await getToken(getMessaging(getApp()), { vapidKey: VAPID_KEY, serviceWorkerRegistration: await registration() });
+  const token = await browserToken(await registration());
   if (!token) throw new Error('This browser did not give a push token.');
-  await saveToken(token);
+  await saveToken(token, uid);
+  localStorage.setItem(preferenceKey(uid), 'on');
   return token;
 }
 
 /** On app start: if alerts were already turned on here, refresh lastSeenAt (and the token if it rotated). */
 export async function refreshPushToken() {
+  const uid = auth.currentUser?.uid;
+  if (!uid || localStorage.getItem(preferenceKey(uid)) === 'off') return;
   if (!(await pushAvailability()).available || Notification.permission !== 'granted') return;
   const existing = await navigator.serviceWorker.getRegistration(SW_URL);
   if (!existing) return;
-  const token = await getToken(getMessaging(getApp()), { vapidKey: VAPID_KEY, serviceWorkerRegistration: existing });
-  if (token) await saveToken(token);
+  const token = await browserToken(await activeRegistration(existing));
+  if (token) await saveToken(token, uid);
 }
 
 export async function disablePush() {
   const uid = auth.currentUser?.uid;
+  if (uid) localStorage.setItem(preferenceKey(uid), 'off');
+  if (!(await pushAvailability()).available) return;
   const existing = await navigator.serviceWorker.getRegistration(SW_URL);
   if (!uid || !existing) return;
   const messaging = getMessaging(getApp());
-  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: existing }).catch(() => '');
+  const token = await browserToken(await activeRegistration(existing)).catch(() => '');
   if (token) await deleteDoc(doc(db, 'users', uid, 'fcmTokens', await tokenId(token)));
   await deleteToken(messaging).catch(() => undefined);
 }
 
-export function pushEnabledHere() {
-  return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
+export async function pushEnabledHere() {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !(await pushAvailability()).available || Notification.permission !== 'granted' ||
+    localStorage.getItem(preferenceKey(uid)) === 'off') return false;
+  const existing = await navigator.serviceWorker.getRegistration(SW_URL);
+  if (!existing) return false;
+  const token = await browserToken(await activeRegistration(existing));
+  if (!token || auth.currentUser?.uid !== uid) return false;
+  return (await getDoc(doc(db, 'users', uid, 'fcmTokens', await tokenId(token)))).exists();
 }
