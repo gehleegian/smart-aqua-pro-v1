@@ -138,6 +138,8 @@ test('web and mobile keep other sensor validity and matching profile water level
   }
 });
 
+test('new shared engine excludes invalid profile levels without suppressing valid temperature', () => {
+  const config = seedRuleConfig({ approved: true });
 test('active fixed formula gives the chosen endpoints and never turns invalid echoes into full', () => {
   for (const device of [1, 2]) {
     for (const root of [new URL(`../../firmware/Aquarium${device}Device/`, import.meta.url),
@@ -190,7 +192,9 @@ test('former profile-mode summaries cannot override fixed readings; profile edit
 test('profile synchronization remains disabled without creating control records or equipment commands', () => {
   for (const relative of ['src/services/deviceService.ts', ...(hasMobile ? ['../smart-aqua-mobile/src/services/firebase-service.ts'] : [])]) {
     const source = readFileSync(new URL(`../../${relative}`, import.meta.url), 'utf8');
-    assert.match(source, /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
+    assert.match(source, relative.startsWith('src/')
+      ? /await update\(control, \{ waterLevelProfile: evaluateWaterLevelProfile/
+      : /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
     assert.match(source, /if \(!\(await get\(control\)\)\.exists\(\)\) return/);
     assert.match(source, /profile saved, but water-level device synchronization failed|assertRealtimeDeviceAccess/);
   }

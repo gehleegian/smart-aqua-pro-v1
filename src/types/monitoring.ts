@@ -17,12 +17,22 @@ export type MonitoringAquarium = Aquarium & {
   hasFreshTelemetry: boolean;
   hasFreshWaterLevelTelemetry?: boolean;
   waterLevelMessage?: string;
+  waterLevelObservation?: {
+    waterLevelPercent?: number;
+    waterLevelReadingValid?: boolean;
+    waterLevelTargetHeightCm?: number;
+    updatedAt?: number;
+  };
   hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;
   hasFreshPhTelemetry: boolean;
   hasFreshTurbidityTelemetry: boolean;
   hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
+  lastUpdatedAt: number | null;
+  reportedFilterState?: 'Active' | 'Inactive';
+  reportedLightState?: 'On' | 'Off';
+  reportedEquipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   sensorValidity: TelemetryValidity | null;
   commandStatus: CommandStatus;
 };

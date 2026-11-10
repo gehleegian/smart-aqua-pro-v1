@@ -179,6 +179,9 @@ test('RORG-10 command acks: additive source/type/state for scheduled actions; va
   const ack = (extra) => set(ref(db, `devices/${TANK_1}/commandAck/latest`), { commandId: 'c1', status: 'done', executedAt: serverTimestamp(), ...extra });
   await assertSucceeds(ack({ commandId: 'feed_now-owner-a' }));
   await assertSucceeds(ack({ commandId: 'feed_now-owner-a', source: 'app' }));
+  await assertSucceeds(ack({ commandId: 'feed_now-owner-a', source: 'app', type: 'feed_now' }));
+  await assertFails(ack({ commandId: 'feed_now-owner-a', source: 'app', type: 'set_light_state', state: 'On' }), 'app ack metadata must match the current command');
+  await assertFails(ack({ commandId: 'feed_now-owner-a', error: 'error is invalid for done status' }));
   await assertFails(ack({ commandId: 'not-the-latest' }), 'an app ack must match commands/latest');
   await assertFails(ack({ commandId: 'free-form', source: 'schedule', type: 'feed_now' }), 'scheduled ids start with schedule-');
   await assertSucceeds(ack({ commandId: 'schedule-feed_now-1794000000', source: 'schedule', type: 'feed_now' }));
@@ -187,5 +190,6 @@ test('RORG-10 command acks: additive source/type/state for scheduled actions; va
   await assertFails(ack({ commandId: 'schedule-x', source: 'cron', type: 'feed_now' }));
   await assertFails(ack({ commandId: 'schedule-x', source: 'schedule', type: 'sync_control' }));
   await assertFails(ack({ commandId: 'schedule-x', source: 'schedule', type: 'feed_now', state: 'Dim' }));
+  await assertFails(ack({ commandId: 'schedule-invalid/id', source: 'schedule', type: 'feed_now' }));
   await assertFails(set(ref(human('owner-a'), `devices/${TANK_1}/commandAck/latest`), { commandId: 'c1', status: 'done', executedAt: serverTimestamp() }), 'only the device acks');
 });

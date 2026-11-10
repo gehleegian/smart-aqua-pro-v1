@@ -11,6 +11,9 @@ export type Recommendation = {
   action: string;
   basis: string;
   preCheck: string;
+  /** Validated telemetry captured when this recommendation was generated. */
+  readingSnapshot: Record<string, unknown> | null;
+  threshold: { min?: number; max?: number } | null;
   /** Approval status of the rule that produced it. */
   ruleStatus: 'draft' | 'approved';
   alertId: string | null;

@@ -90,6 +90,8 @@ Firebase.RTDB.setJSON(&fbdo, ("devices/" + aquariumId + "/telemetry").c_str(), &
 
 Read `devices/{aquariumId}/commands/latest`, run the command, then write the ack. The rules accept the ack only if its `commandId` equals the current `commands/latest/commandId` and `executedAt` is the server timestamp.
 
+**Repository status:** implemented for Aquarium 1 and Aquarium 2. Fresh app commands write `done` or `failed`; retained startup commands are only baselined and never replayed. `done` confirms the firmware software/output sequence, not physical operation. Flashing and end-to-end hardware verification are still pending.
+
 ```cpp
 String lastHandledCommandId;
 
@@ -115,9 +117,12 @@ void handleCommand(FirebaseJson &cmd) {
 }
 ```
 
-- [ ] Ack within 30 s; after that the web shows "No response".
-- [ ] Remember the last `commandId` so a reboot or reconnect doesn't feed twice. Ideally keep it in `Preferences`.
-- [ ] Never write under `commands/`. The device is read-only there.
+- [x] Repository firmware attempts the ack immediately after command handling; after 30 s the web shows "No response".
+- [x] Retained commands are baselined after boot/reconnect and are not replayed. Persistent terminal-ack replay remains future hardening.
+- [x] The device never writes under `commands/`; it writes only `commandAck/latest`.
+- [ ] Flash both devices and verify app `Waiting → Done/Failed` against deployed rules and Functions.
+
+The ack PUT is currently single-attempt and terminal app outcomes are not stored in NVS. If the write fails, or the device restarts after an action but before the ack is accepted, the action may have occurred while the UI later shows `no_response`. A restart before handling can instead baseline and skip the retained app request. A newer last-write-wins command can replace an unseen request or cause the older command's late ack to be rejected. Do not automatically retry a timed-out feeder command because the timeout does not prove that feeding failed.
 
 ## 5. WiFiManager setup and a 5 s reset
 
@@ -294,8 +299,12 @@ The owner edits the schedule in the app. It is written to the existing `devices/
    - Offline: queue up to ~20 acks in RAM and send them when Wi-Fi is back. `executedAt` is then the upload time; that is acceptable for now.
    - The `source`, `type` and `state` fields are additive. Old acks (§4) do not change.
 
+   **Repository status:** online scheduled light/filter transitions and feed attempts now write terminal acknowledgements with stable `schedule-<type>-<epoch minute>` identifiers. Offline schedule execution and acknowledgement queuing are not implemented: the present cloud cycle returns before schedule evaluation when authentication, control, or command reads fail.
+
+   Scheduled feeding persists the minute before motion to prevent duplicate feed after restart. As a fail-safe consequence, restarting or reconnecting during the scheduled minute can skip that feed rather than catch it up.
+
 - [ ] Schedules fire at the right Manila time (compare with a phone clock).
-- [ ] Unplug the router for 10 minutes across a feeding time: the feed still happens, and its ack shows in the app after reconnecting.
+- [ ] Future approved offline-schedule design: define safe execution and persistent ack replay before expecting a feed during a router outage. Current firmware skips it.
 - [ ] A reboot during a scheduled minute does not feed twice.
 - [ ] Manual mode: no scheduled actions run.
 

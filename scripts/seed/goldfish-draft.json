@@ -498,7 +498,7 @@
       "priority": 10,
       "title": "Device offline",
       "action": "Check the device power and Wi-Fi. Readings and alerts are paused until it reconnects.",
-      "basis": "No telemetry for longer than the 60 s offline window (3 missed sends).",
+      "basis": "No telemetry for longer than 60 s; at the 15 s target cadence, this is more than four expected send opportunities.",
       "preCheck": "Check the router and whether the device LED shows it is powered.",
       "enabled": true
     },

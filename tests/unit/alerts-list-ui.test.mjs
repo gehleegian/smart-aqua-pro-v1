@@ -14,12 +14,12 @@ function load(url) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
     jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
   } }).outputText;
-  const module = { exports: {} };
+  const commonJsModule = { exports: {} };
   const require = specifier => specifier.startsWith('.')
     ? load(new URL(specifier + (specifier.includes('/utils/') ? '.ts' : '.tsx'), url))
     : nodeRequire(specifier);
-  new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-  return module.exports;
+  new Function('require', 'module', 'exports', compiled)(require, commonJsModule, commonJsModule.exports);
+  return commonJsModule.exports;
 }
 const { AlertsList } = load(new URL('components/alerts/AlertsList.tsx', root));
 const { AlertsFilters } = load(new URL('components/alerts/AlertsFilters.tsx', root));

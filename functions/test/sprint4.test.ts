@@ -2,7 +2,6 @@
 // command log (FR17/FR19) and push notifications with a fake sender (FR15).
 // Run: npm run test:sprint4-functions
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test, { after, before, beforeEach } from 'node:test';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';
@@ -18,6 +17,7 @@ import { approveRuleConfig, saveRuleConfig } from '../src/ruleAdmin.js';
 import { refreshCleaningSchedule } from '../src/scheduledChecks.js';
 import { ingestTelemetry } from '../src/telemetryIngest.js';
 import { MutationError } from '../src/trustedMutations.js';
+import { readApprovedTestSeed } from './testSeed.js';
 
 const PROJECT_ID = 'demo-smartaqua-sprint4';
 const PEPPER = 'emulator-test-pepper';
@@ -99,7 +99,7 @@ beforeEach(async () => {
   if (users.users.length) await auth.deleteUsers(users.users.map((user) => user.uid));
   for (const user of [OWNER_A, CO_OWNER, CARE_X, CARE_Y, OWNER_B]) await seedUser(user);
   await seedUser(ADMIN, 'Admin');
-  const seed = JSON.parse(readFileSync(new URL('../../../scripts/seed/goldfish-draft.json', import.meta.url), 'utf8'));
+  const seed = readApprovedTestSeed();
   const batch = firestore.batch();
   for (const [id, data] of Object.entries(seed.species)) batch.set(firestore.doc(`species/${id}`), data as Record<string, unknown>);
   for (const [id, data] of Object.entries(seed.rules)) batch.set(firestore.doc(`rules/${id}`), data as Record<string, unknown>);
@@ -419,6 +419,45 @@ test('CMD-02 a scheduled action acked with source "schedule" gets its own entry;
   assert.equal((await firestore.doc(`command_logs/${commandLogId(tank1, 'same')}`).get()).get('status'), 'pending');
   assert.equal((await firestore.doc(`command_logs/${commandLogId(tank2, 'same')}`).get()).get('status'), 'done');
   assert.equal((await recordCommand(fs, 'no-such-tank', { commandId: 'x', type: 'feed_now' })).recorded, false);
+});
+
+test('CMD-03 an app ack can finalize the log before the independent command trigger runs', async () => {
+  const fs = { firestore, now: () => clockMs };
+  const command = {
+    aquariumId: tank1,
+    commandId: 'ack-first',
+    type: 'set_filter_state',
+    state: 'Active',
+    requestedAt: clockMs - 500,
+    requestedBy: CARE_X.uid,
+  };
+  const ack = {
+    commandId: command.commandId,
+    status: 'done',
+    executedAt: clockMs,
+    source: 'app',
+    type: command.type,
+    state: command.state,
+  };
+
+  assert.equal((await recordAck(fs, tank1, ack, command)).updated, true);
+  const log = firestore.doc(`command_logs/${commandLogId(tank1, command.commandId)}`);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries((await log.get()).data()!).filter(([key]) =>
+      ['type', 'state', 'status', 'source', 'requestedAt', 'executedAt'].includes(key))),
+    {
+      type: 'set_filter_state',
+      state: 'Active',
+      status: 'done',
+      source: 'app',
+      requestedAt: clockMs - 500,
+      executedAt: clockMs,
+    }
+  );
+
+  assert.equal((await recordCommand(fs, tank1, command)).recorded, false,
+    'the later command trigger must not replace the terminal acknowledgement');
+  assert.equal((await log.get()).get('status'), 'done');
 });
 
 // ---------------------------------------------------------------------------

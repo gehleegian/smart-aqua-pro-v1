@@ -5,9 +5,9 @@ import {
   conditionSignature,
   evaluateAquarium,
   planAlertChanges,
-  readAquariumOverrides,
   resolveThresholds,
   selectSpeciesConfig,
+  TELEMETRY_STALE_MS,
   TELEMETRY_EPOCH_FLOOR,
   toConditionSummary,
   type ConditionSeverity,
@@ -44,13 +44,12 @@ export const HISTORY_SAMPLE_INTERVAL_MS = 5 * 60_000;
 // existing history rows (local ISO string, no offset).
 export const HISTORY_TIME_ZONE = 'Asia/Manila';
 // Reject device clocks far in the future (legacy firmware writes its own clock).
-export const MAX_FUTURE_SKEW_MS = 5 * 60_000;
-
 const TELEMETRY_FIELDS = [
   'temperatureC', 'temperatureReadingValid', 'waterLevelPercent', 'waterPresent',
   'waterLevelReadingValid', 'waterLevelTargetHeightCm',
   'tdsPpm', 'tdsPercent', 'tdsReadingValid', 'turbidity', 'turbidityReadingValid',
-  'ph', 'phReadingValid', 'filterState', 'equipmentStatus', 'powerStatus', 'mainsPresent', 'online',
+  'turbidityState', 'ph', 'phReadingValid', 'filterState', 'lightState',
+  'equipmentStatus', 'powerStatus', 'mainsPresent', 'online',
 ] as const;
 
 export type IngestDependencies = {
@@ -61,6 +60,7 @@ export type IngestDependencies = {
 export type IngestSkipReason =
   | 'malformed'
   | 'timestamp_out_of_range'
+  | 'stale_or_offline'
   | 'unknown_aquarium'
   | 'out_of_order';
 
@@ -126,15 +126,37 @@ function statusOf(result: EngineResult, parameter: string) {
 export async function ingestTelemetry(
   dependencies: IngestDependencies,
   aquariumId: string,
-  raw: unknown
+  raw: unknown,
+  previousRaw?: unknown
 ): Promise<IngestResult> {
   const now = dependencies.now?.() ?? Date.now();
   if (!isRecord(raw) || typeof raw.updatedAt !== 'number' || !Number.isFinite(raw.updatedAt)) {
     return { ingested: false, written: false, reason: 'malformed' };
   }
   const recordedAtEpoch = raw.updatedAt;
-  if (recordedAtEpoch < TELEMETRY_EPOCH_FLOOR || recordedAtEpoch > now + MAX_FUTURE_SKEW_MS) {
+  const previousRecordedAt = isRecord(previousRaw) &&
+    typeof previousRaw.updatedAt === 'number' && Number.isFinite(previousRaw.updatedAt)
+    ? previousRaw.updatedAt
+    : null;
+  // RTDB `telemetry` is a latest-value node. The trigger supplies the value
+  // that this write replaced, allowing duplicate/backward device writes to be
+  // rejected without adding a Firestore write for every normal 15 s sample.
+  if (previousRecordedAt !== null && recordedAtEpoch <= previousRecordedAt) {
+    return { ingested: false, written: false, reason: 'out_of_order' };
+  }
+  // Keep server evaluation aligned with the web freshness contract: a future
+  // sample is unavailable, not a current water condition. Repository firmware
+  // uses the RTDB server timestamp, so valid writes do not require clock-skew
+  // tolerance here.
+  if (recordedAtEpoch < TELEMETRY_EPOCH_FLOOR || recordedAtEpoch > now) {
     return { ingested: false, written: false, reason: 'timestamp_out_of_range' };
+  }
+  // A latest-value write that is already stale, or explicitly says the device
+  // is offline, is a connectivity event rather than a current water reading.
+  // The scheduled heartbeat owns the offline alert lifecycle. Never let this
+  // payload create water-condition advice or resolve an active offline alert.
+  if (raw.online === false || now - recordedAtEpoch > TELEMETRY_STALE_MS) {
+    return { ingested: false, written: false, reason: 'stale_or_offline' };
   }
 
   const { firestore } = dependencies;
@@ -147,12 +169,22 @@ export async function ingestTelemetry(
 
   // 1. Validate (AGENTS.md §5) and evaluate against the Firestore thresholds and rules.
   const config = await loadRuleConfig(firestore, now);
-  const species = selectSpeciesConfig(aquarium, config.speciesById);
-  const thresholds = resolveThresholds(species, readAquariumOverrides(aquarium));
+  const configuredSpecies = selectSpeciesConfig(aquarium, config.speciesById);
+  const enabledRules = config.rules.filter((rule) => rule.enabled);
+  const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
+  // Only approved configuration is authoritative. Draft values remain stored
+  // for admin preview/sign-off but cannot create live classifications, alerts,
+  // recommendations, cleaning schedules, or bioload bands.
+  const species = configuredSpecies?.status === 'approved' && ruleSetApproved ? configuredSpecies : null;
+  const approvedRules = ruleSetApproved ? config.rules.filter((rule) => rule.status === 'approved') : [];
+  // Profile limits and thresholdOverrides currently have no approval metadata.
+  // They remain editable/previewable, but only approved species thresholds are
+  // authoritative for live classifications and persisted recommendations.
+  const thresholds = resolveThresholds(species);
   const bioload = computeBioload(aquarium, species?.bioloadBandsGPerL);
   const checkedReading = withWaterLevelProfile(aquarium as LevelProfileInput, raw);
   const validity = evaluateTelemetryValidity(checkedReading);
-  const result = evaluateAquarium(checkedReading, thresholds, config.rules, {
+  const result = evaluateAquarium(checkedReading, thresholds, approvedRules, {
     hasFiltrationSystem: typeof aquarium.hasFiltrationSystem === 'boolean' ? aquarium.hasFiltrationSystem : undefined,
     bioloadLevel: bioload?.level ?? null,
     fishCount: typeof aquarium.fishCount === 'number' ? aquarium.fishCount : undefined,
@@ -226,7 +258,14 @@ export async function ingestTelemetry(
 
     // ---- writes (only what changed) ----
     let firestoreWrites = 0;
-    const ctx = { aquariumId, ownerId, deviceId, now, readingSnapshot: { ...telemetry, updatedAt: recordedAtEpoch } };
+    const ctx = {
+      aquariumId,
+      ownerId,
+      deviceId,
+      now,
+      readingSnapshot: { ...telemetry, updatedAt: recordedAtEpoch },
+      thresholdSnapshot: thresholds.values as Record<string, unknown>,
+    };
     applyAlertOperations(transaction, firestore, ctx, plan.operations, recommendationStatus);
     let recommendationsCreated = 0;
     for (const op of plan.operations) {
@@ -245,7 +284,7 @@ export async function ingestTelemetry(
     }
 
     if (cleaning.recommend) {
-      const rule = cleaningRecommendation(config.rules, cleaning.recommend, cleaning.summary);
+      const rule = cleaningRecommendation(approvedRules, cleaning.recommend, cleaning.summary);
       if (rule) {
         transaction.set(firestore.doc(`recommendations/${aquariumId}_${cleaning.recommend}_${now}`), recommendationDoc(ctx, rule, null));
         recommendationsCreated += 1;
@@ -272,6 +311,13 @@ export async function ingestTelemetry(
           .filter((item) => item.parameter !== 'device' && item.parameter !== 'maintenance')
           .map((item) => [item.parameter, item.status])),
         validity: summarizeValidity(validity),
+        matchedRuleIds: result.matchedRules.map((rule) => rule.ruleId),
+        thresholdSnapshot: {
+          speciesId: thresholds.speciesId,
+          status: thresholds.status,
+          values: thresholds.values,
+          overridden: thresholds.overridden,
+        },
         reading_id: docId,
       };
       transaction.set(firestore.doc(`sensor_readings/${docId}`), reading);

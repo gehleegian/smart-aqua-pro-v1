@@ -8,7 +8,7 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   const root = new URL('../../firmware/', import.meta.url);
   const a = await readFile(new URL('Aquarium1Device/Aquarium1Device.ino', root), 'utf8');
   const b = await readFile(new URL('Aquarium2Device/Aquarium2Device.ino', root), 'utf8');
-  const feedRoutine = a.replace(/\r\n/g, '\n').match(/void runManualFeed\(\) \{[\s\S]*?(?=\nvoid help\(\))/)?.[0];
+  const feedRoutine = a.replace(/\r\n/g, '\n').match(/bool runManualFeed\(\) \{[\s\S]*?(?=\nvoid help\(\))/)?.[0];
   assert.ok(feedRoutine);
   const turbConstants = a.match(/constexpr float CLEAR_V[\s\S]*?(?=#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED)/)?.[0];
   const turbClassifier = a.match(/  if \(turbV >= 0\.15f[\s\S]*?else turbKnown = false;\r?\n/)?.[0];

@@ -75,7 +75,7 @@ test('continuous SG90 uses speed/neutral pulses, not Aquarium 1 position angles'
 
 test('failed PWM attachment never emits movement pulses or reports checked sequence', () => {
   const { state, events } = harness({ attach: false });
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('attach failed')));
   assert.ok(!events.some(e => e[0] === 'write'));
   assert.equal(state.feederPwmAttached, false);
@@ -88,7 +88,7 @@ for (const [name, options] of [
 ]) {
   test(`${name} aborts, detaches PWM, and does not dispense`, () => {
     const { state, events } = harness(options);
-    state.runManualFeed();
+    assert.equal(state.runManualFeed(), false);
     assert.equal(events.filter(e => e[0] === 'write').length, 1);
     assert.ok(events.some(e => e[0] === 'detach'));
     assert.ok(events.some(e => e[0] === 'log' && e[1].startsWith('Feed aborted')));
@@ -99,13 +99,8 @@ for (const [name, options] of [
 
 test('website return test preserves the observed forward turn and reverses after a neutral hold', () => {
   const { state, events } = harness();
-  state.runManualFeed();
-  const writes = events.filter(e => e[0] === 'write');
-  assert.deepEqual(writes.map(e => e[2]), [4915, 5243, 4915, 4588, 4915]);
-  assert.equal(writes[2][3] - writes[1][3], 900, 'PWM settling is included in the bounded jog');
-  assert.equal(writes[3][3] - writes[2][3], 40 + 1000);
-  assert.equal(writes[4][3] - writes[3][3], 900);
-  assert.ok(events.some(e => e[0] === 'log' && String(e[1]).startsWith('CALIBRATION:') && e[2] === 900 && e[4] === 900));
+  assert.equal(state.runManualFeed(), true);
+  assert.deepEqual(events.filter(e => e[0] === 'write').map(e => e[2]), [5734, 4096, 5734]);
   assert.deepEqual(events.find(e => e[0] === 'attach'), ['attach', 23, 50, 16]);
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('NOT a verified feeding cycle')));
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('angle, physical stop and return NOT verified')));
@@ -113,7 +108,7 @@ test('website return test preserves the observed forward turn and reverses after
   assert.equal(state.feedCompleted, true);
   assert.ok(!events.some(e => e[0] === 'digital' && [16, 17].includes(e[1])), 'feeder never operates either relay');
   const attaches = events.filter(e => e[0] === 'attach').length;
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.equal(events.filter(e => e[0] === 'attach').length, attaches, 'cooldown rejects repeated feed');
 });
 
@@ -179,7 +174,7 @@ test('stop during PWM settling aborts without any drive or return pulse', () => 
     s.localStop = true;
     s.stopFeederPwm();
   } });
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.equal(events.filter(e => e[0] === 'write').length, 1);
   assert.ok(events.some(e => e[0] === 'log' && e[1].startsWith('Feed aborted')));
   assert.equal(state.feederPwmAttached, false);

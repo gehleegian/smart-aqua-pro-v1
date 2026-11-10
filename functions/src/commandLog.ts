@@ -74,7 +74,12 @@ export async function recordCommand(dependencies: { firestore: Firestore; now?: 
   }
 }
 
-export async function recordAck(dependencies: { firestore: Firestore; now?: () => number }, aquariumId: string, raw: unknown) {
+export async function recordAck(
+  dependencies: { firestore: Firestore; now?: () => number },
+  aquariumId: string,
+  raw: unknown,
+  matchingCommand?: unknown
+) {
   const { firestore } = dependencies;
   if (!isRecord(raw) || typeof raw.commandId !== 'string' || !ID_PATTERN.test(raw.commandId) ||
     (raw.status !== 'done' && raw.status !== 'failed')) {
@@ -86,6 +91,17 @@ export async function recordAck(dependencies: { firestore: Firestore; now?: () =
   const ref = firestore.doc(`command_logs/${commandLogId(aquariumId, raw.commandId)}`);
   const orgId = await aquariumOrg(firestore, aquariumId);
   if (orgId === undefined) return { updated: false, reason: 'unknown_aquarium' as const };
+  const appCommand = (raw.source === undefined || raw.source === 'app') && isRecord(matchingCommand) &&
+    matchingCommand.aquariumId === aquariumId && matchingCommand.commandId === raw.commandId &&
+    typeof matchingCommand.requestedBy === 'string' && typeof matchingCommand.requestedAt === 'number' &&
+    COMMAND_TYPES.has(String(matchingCommand.type)) &&
+    (raw.type === undefined || raw.type === matchingCommand.type) &&
+    (raw.state === undefined || raw.state === matchingCommand.state)
+    ? matchingCommand
+    : null;
+  const appRequesterName = appCommand
+    ? await displayName(firestore, appCommand.requestedBy as string)
+    : null;
 
   return firestore.runTransaction(async (transaction) => {
     const existing = await transaction.get(ref);
@@ -97,6 +113,25 @@ export async function recordAck(dependencies: { firestore: Firestore; now?: () =
         executedAt,
         error,
         ...(status === 'no_response' ? { lateAck: true } : {}),
+        updatedAt: now,
+      });
+      return { updated: true, id: ref.id };
+    }
+    if (appCommand) {
+      transaction.create(ref, {
+        aquariumId,
+        orgId,
+        commandId: raw.commandId,
+        type: appCommand.type,
+        state: STATES.has(String(appCommand.state)) ? appCommand.state : null,
+        durationMs: typeof appCommand.durationMs === 'number' ? appCommand.durationMs : null,
+        requestedBy: { uid: appCommand.requestedBy, displayName: appRequesterName },
+        requestedAt: appCommand.requestedAt,
+        source: 'app',
+        status: raw.status,
+        executedAt,
+        error,
+        createdAt: now,
         updatedAt: now,
       });
       return { updated: true, id: ref.id };

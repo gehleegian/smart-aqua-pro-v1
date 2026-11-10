@@ -452,6 +452,10 @@ test('CMD-05 unknown fields and invalid type-specific payloads are denied', asyn
   const target = ref(database, `devices/${AQUARIUM_A}/commands/latest`);
   const invalidCommands = [
     { ...commandFor(AQUARIUM_A, 'user-a'), bypass: true },
+    commandFor(AQUARIUM_A, 'user-a', { commandId: '' }),
+    commandFor(AQUARIUM_A, 'user-a', { commandId: 'contains a space' }),
+    commandFor(AQUARIUM_A, 'user-a', { commandId: 'contains/slash' }),
+    commandFor(AQUARIUM_A, 'user-a', { commandId: 'x'.repeat(161) }),
     commandFor(AQUARIUM_A, 'user-a', { type: 'set_filter_state', state: 'On' }),
     commandFor(AQUARIUM_A, 'user-a', { type: 'set_light_state', state: 'Active' }),
     commandFor(AQUARIUM_A, 'user-a', { type: 'feed_now', durationMs: 0 }),
@@ -806,7 +810,12 @@ test('ACK-05 acknowledgement payloads are validated', async () => {
     ackFor(COMMAND_A_ID, { status: 'pending' }),
     ackFor(COMMAND_A_ID, { status: undefined }),
     ackFor(COMMAND_A_ID, { executedAt: undefined }),
-    ackFor(COMMAND_A_ID, { error: 'x'.repeat(201) }),
+    ackFor(COMMAND_A_ID, { error: 'unexpected error on success' }),
+    ackFor(COMMAND_A_ID, { status: 'failed', error: 'x'.repeat(201) }),
+    ackFor(COMMAND_A_ID, { source: 'app', type: 'set_light_state', state: 'On' }),
+    ackFor(COMMAND_A_ID, { source: 'app', type: 'feed_now', state: 'On' }),
+    ackFor(`schedule-${'x'.repeat(161)}`, { source: 'schedule', type: 'feed_now' }),
+    ackFor('schedule-invalid/id', { source: 'schedule', type: 'feed_now' }),
     ackFor(COMMAND_A_ID, { extra: true }),
   ]) {
     await assertFails(set(ref(database, path), ack));

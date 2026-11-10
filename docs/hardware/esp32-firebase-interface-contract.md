@@ -1,6 +1,6 @@
 # SmartAqua Pro ESP32–Firebase Interface Contract
 
-Status: Phase 7A design baseline; documentation only; not implemented in firmware and not deployed.
+Status: Phase 7A historical design baseline with current repository-firmware implementation notes; not deployed or physically verified.
 
 This document defines the approved integration boundary for future physical ESP32 work. It preserves the current RTDB paths and application behavior. It does not authorize firmware changes, Firebase deployment, device-account creation, simulated telemetry, or physical equipment operation.
 
@@ -10,9 +10,11 @@ The accepted capstone outline is the current scope authority for hardware integr
 
 The application remains rule-based. Sensor validation precedes NORMAL / WARNING / CRITICAL classification, predefined IF–THEN recommendations, alerts, history, and reports. This contract does not define or change numerical water-quality thresholds.
 
-## 2. Current firmware readiness assessment
+## 2. Historical Phase 7A firmware readiness assessment
 
 Assessed source: `docs/arduino/SmartAquaPhase1/SmartAquaPhase1.ino`.
+
+This table records the older source assessment and is not the readiness table for `firmware/Aquarium1Device` or `firmware/Aquarium2Device`. Those newer sketches add authenticated RTDB polling, telemetry, supported outputs, schedules, and command acknowledgements; their software compilation and contract checks do not replace physical verification.
 
 | Area | Classification | Repository evidence and boundary |
 |---|---|---|
@@ -221,39 +223,39 @@ Control profile is desired configuration. `commands/latest` is a human-requested
 
 ## 8. Command acknowledgement and idempotency design
 
-The existing `commands/latest` last-write-wins request path remains. It can overwrite an unprocessed request and contains no device acknowledgement. Before actuators are connected, add a narrowly scoped companion design rather than replacing the request path:
+The existing `commands/latest` last-write-wins request path remains. It can overwrite an unprocessed request, so commands are paired with the implemented acknowledgement path:
 
 ```text
 /devices/{aquariumId}/commands/latest
-/devices/{aquariumId}/commands/status/{commandId}
+/devices/{aquariumId}/commandAck/latest
 ```
 
-`commands/status` is a proposed future extension only. Current rules deny it. A later approved change must grant the assigned device write-only access to its own validated status record and the human owner read access, while retaining default deny.
+Only the device principal bound to the active aquarium may write `commandAck/latest`. App acknowledgements must match the current command ID; optional type/state metadata must match the request. Scheduled acknowledgements use a validated `schedule-*` ID plus `source: schedule` and a supported type. The server timestamp is mandatory.
 
-Minimum status record:
+Acknowledgement record:
 
 ```text
 commandId
-deviceUid
-status: received | accepted | rejected | action_attempted |
-        observed | completed | failed
-receivedAt
-updatedAt
-reasonCode?          // bounded approved enum, no secrets
-requestedState?
-observedState?       // only when real feedback exists
+status: done | failed
+executedAt            // Firebase server timestamp
+error?                // failed only, bounded to 200 characters
+source?               // app | schedule
+type?                  // required for schedules
+state?                 // validated light/filter requested state
 ```
 
-State transitions are monotonic. `rejected`, `completed`, and `failed` are terminal. A device may update only a record whose `commandId` matches the request it read and whose aquarium is its assignment. The UI must distinguish request submission from completion.
+The UI must distinguish request submission from acknowledgement. `done` means the firmware completed its software/output sequence; it is not physical feedback. A missing acknowledgement becomes the neutral `no_response` log status after 30 seconds. The repository firmware implements this contract, but flashing and physical verification are still required.
 
 Idempotency requirements:
 
-1. Generate collision-resistant command IDs; the current `type-timestamp` format is PARTIAL and should be migrated to UUID-style IDs before equipment testing.
+1. Generate unique IDs using only the rules-approved 1–160 character set `[A-Za-z0-9_.:-]`; collision resistance remains the client responsibility.
 2. Persist recently processed command IDs and terminal outcomes in nonvolatile device storage before or atomically with actuation where feasible.
-3. On duplicate delivery, return the existing acknowledgement without repeating the physical action.
+3. On duplicate delivery, never repeat the physical action. Persisting and replaying terminal acknowledgements remains future hardening.
 4. Validate command freshness against an approved maximum age. No maximum is invented here. Add an approved expiry contract before feeder testing.
 5. On restart, read `commands/latest`, compare it with persisted state, and never execute an old or already processed feeder request.
 6. A last-write-wins slot can still lose a command if writers replace it before receipt. The UI must wait for acknowledgement and report timeout/unknown, not claim completion. If testing proves loss unacceptable, a queued command architecture requires a separate approval.
+
+Current limitation: app and schedule acknowledgement writes are attempted once and are not queued or replayed after a failed network write. App command IDs and terminal outcomes are not persisted across restarts. Schedules run only inside a successful cloud cycle and therefore do not execute offline. If a newer command replaces `commands/latest` before an older command's ack PUT, rules reject the older ack even if its output sequence already ran.
 
 ## 9. Power, disconnect, and reconnect design
 

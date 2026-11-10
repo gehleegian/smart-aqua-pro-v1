@@ -558,7 +558,12 @@ export const ingestDeviceTelemetry = onValueWritten(
       return;
     }
     const aquariumId = event.params.aquariumId;
-    const result = await ingestTelemetry({ firestore: dependencies.firestore }, aquariumId, event.data.after.val());
+    const result = await ingestTelemetry(
+      { firestore: dependencies.firestore },
+      aquariumId,
+      event.data.after.val(),
+      event.data.before.exists() ? event.data.before.val() : undefined
+    );
     if (!result.ingested) {
       logger.warn('Telemetry not ingested.', { aquariumId, reason: result.reason });
     } else if (result.firestoreWrites > 0) {
@@ -646,14 +651,20 @@ export const logDeviceCommandAck = onValueWritten(
   { ref: '/devices/{aquariumId}/commandAck/latest', region: RTDB_TRIGGER_REGION },
   async (event) => {
     if (!event.data.after.exists()) return;
-    const result = await recordAck({ firestore: dependencies.firestore }, event.params.aquariumId, event.data.after.val());
+    const command = await dependencies.database.ref(`/devices/${event.params.aquariumId}/commands/latest`).get();
+    const result = await recordAck(
+      { firestore: dependencies.firestore },
+      event.params.aquariumId,
+      event.data.after.val(),
+      command.val()
+    );
     if (!result.updated && result.reason !== 'already_final') logger.warn('Command ack not logged.', { aquariumId: event.params.aquariumId, reason: result.reason });
   }
 );
 
 // Pending commands with no acknowledgement after 30 s become no_response.
-// Live firmware does not acknowledge yet (docs/firmware-changes.md §5), so
-// until it does every command ends as no_response; the app shows that neutrally.
+// A timeout remains neutral because a lost acknowledgement cannot prove whether
+// the physical equipment acted. Repository firmware now sends terminal acks.
 export const checkCommandAcks = onSchedule(
   { schedule: 'every 1 minutes', retryCount: 0, maxInstances: 1, timeoutSeconds: 50 },
   async () => {

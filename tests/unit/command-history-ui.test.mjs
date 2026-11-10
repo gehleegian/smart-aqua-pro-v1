@@ -18,7 +18,7 @@ function renderHistory(snapshot, aquariumId = 'tank-a') {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
-    const module = { exports: {} };
+    const commonJsModule = { exports: {} };
     const require = specifier => {
       if (specifier === 'react') return { ...React, useState: () => [snapshot, () => {}], useEffect: () => {} };
       if (specifier === 'firebase/firestore') return {};
@@ -29,8 +29,8 @@ function renderHistory(snapshot, aquariumId = 'tank-a') {
       }
       return nodeRequire(specifier);
     };
-    new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-    return module.exports;
+    new Function('require', 'module', 'exports', compiled)(require, commonJsModule, commonJsModule.exports);
+    return commonJsModule.exports;
   }
   const { CommandHistory } = load(componentUrl);
   return renderToStaticMarkup(React.createElement(CommandHistory, { aquariumId }));

@@ -115,16 +115,25 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
     temperatureC: reading.temperatureReadingValid === false ? NaN : temperatureC!,
     temperatureReadingValid: readBoolean(reading.temperatureReadingValid, true),
     waterLevelPercent,
+    waterLevelReadingValid: typeof reading.waterLevelReadingValid === 'boolean' ? reading.waterLevelReadingValid : undefined,
+    waterLevelTargetHeightCm: typeof reading.waterLevelTargetHeightCm === 'number' && Number.isFinite(reading.waterLevelTargetHeightCm) ? reading.waterLevelTargetHeightCm : undefined,
     waterPresent: readBoolean(reading.waterPresent, true),
     tdsPpm: hasTdsPpm ? tdsPpm : undefined,
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid: readBoolean(reading.tdsReadingValid, hasTdsPercent),
     turbidity,
+    turbidityState:
+      reading.turbidityState === 'Clear' || reading.turbidityState === 'Cloudy' || reading.turbidityState === 'Unknown'
+        ? reading.turbidityState
+        : undefined,
     ammoniaPpm,
     filterState:
       reading.filterState === 'Active' || reading.filterState === 'Inactive'
         ? reading.filterState
         : undefined,
+    lightState: reading.lightState === 'On' || reading.lightState === 'Off'
+      ? reading.lightState
+      : undefined,
     equipmentStatus:
       reading.equipmentStatus === 'Normal' ||
       reading.equipmentStatus === 'Warning' ||
@@ -176,17 +185,23 @@ export function buildSensorReadingDocument(options: {
     temperatureC: options.telemetry.temperatureC,
     temperatureReadingValid: options.telemetry.temperatureReadingValid,
     waterLevelPercent: options.telemetry.waterLevelPercent,
+    waterLevelReadingValid: options.telemetry.waterLevelReadingValid,
+    waterLevelTargetHeightCm: options.telemetry.waterLevelTargetHeightCm,
     waterPresent: options.telemetry.waterPresent,
     tdsPpm: options.telemetry.tdsPpm,
     tdsPercent: options.telemetry.tdsPercent,
     waterQualityPercent: options.telemetry.tdsPercent,
     tdsReadingValid: options.telemetry.tdsReadingValid,
     turbidity: options.telemetry.turbidity,
+    turbidityReadingValid: options.telemetry.turbidityReadingValid,
+    turbidityState: options.telemetry.turbidityState,
     ammoniaPpm: options.telemetry.ammoniaPpm,
     filterState: options.telemetry.filterState,
+    lightState: options.telemetry.lightState,
     equipmentStatus: options.telemetry.equipmentStatus,
     powerStatus: options.telemetry.powerStatus,
     ph: options.telemetry.ph,
+    phReadingValid: options.telemetry.phReadingValid,
     online: options.telemetry.online,
   };
 }
@@ -212,17 +227,23 @@ export function buildSensorReadingDocumentFromHistoryEntry(options: {
     temperatureC: options.entry.temperatureC,
     temperatureReadingValid: options.entry.temperatureReadingValid,
     waterLevelPercent: options.entry.waterLevelPercent,
+    waterLevelReadingValid: options.entry.waterLevelReadingValid,
+    waterLevelTargetHeightCm: options.entry.waterLevelTargetHeightCm,
     waterPresent: options.entry.waterPresent,
     tdsPpm: options.entry.tdsPpm,
     tdsPercent: options.entry.tdsPercent,
     waterQualityPercent: options.entry.tdsPercent,
     tdsReadingValid: options.entry.tdsReadingValid,
     turbidity: options.entry.turbidity,
+    turbidityReadingValid: options.entry.turbidityReadingValid,
+    turbidityState: options.entry.turbidityState,
     ammoniaPpm: options.entry.ammoniaPpm,
     filterState: options.entry.filterState,
+    lightState: options.entry.lightState,
     equipmentStatus: options.entry.equipmentStatus,
     powerStatus: options.entry.powerStatus,
     ph: options.entry.ph,
+    phReadingValid: options.entry.phReadingValid,
     online: options.entry.online ?? true,
   };
 }
