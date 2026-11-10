@@ -23,6 +23,10 @@ export type MonitoringAquarium = Aquarium & {
   hasFreshTurbidityTelemetry: boolean;
   hasFreshPowerTelemetry: boolean;
   telemetryState: DeviceTelemetryState;
+  lastUpdatedAt: number | null;
+  reportedFilterState?: 'Active' | 'Inactive';
+  reportedLightState?: 'On' | 'Off';
+  reportedEquipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   sensorValidity: TelemetryValidity | null;
   commandStatus: CommandStatus;
 };

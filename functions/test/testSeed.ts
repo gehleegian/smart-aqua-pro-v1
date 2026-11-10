@@ -13,7 +13,22 @@ export function readSeed(): SeedFile {
   return JSON.parse(readFileSync(path.join(process.cwd(), 'scripts/seed/goldfish-draft.json'), 'utf8')) as SeedFile;
 }
 
-export async function seedRules(firestore: Firestore, seed = readSeed()) {
+export function readApprovedTestSeed(): SeedFile {
+  const seed = readSeed();
+  const approve = (data: Record<string, unknown>) => ({
+    ...data,
+    status: 'approved',
+    source: 'TEST_FIXTURE_ONLY',
+    approvedBy: 'automated-test',
+    approvedAt: 1,
+  });
+  return {
+    species: Object.fromEntries(Object.entries(seed.species).map(([id, data]) => [id, approve(data)])),
+    rules: Object.fromEntries(Object.entries(seed.rules).map(([id, data]) => [id, approve(data)])),
+  };
+}
+
+export async function seedRules(firestore: Firestore, seed = readApprovedTestSeed()) {
   const batch = firestore.batch();
   for (const [id, data] of Object.entries(seed.species)) batch.set(firestore.doc(`species/${id}`), data);
   for (const [id, data] of Object.entries(seed.rules)) batch.set(firestore.doc(`rules/${id}`), data);

@@ -83,9 +83,12 @@ function bounded(value: unknown, min: number, max: number): value is number {
 // - pH: 0 (unset/disconnected probe) or outside 0-14.
 // - Temperature: 0 C (unset default), 85 C (DS18B20 power-on reset value),
 //   -127 C (DallasTemperature DEVICE_DISCONNECTED_C).
-// - TDS: 0 ppm (probe out of water or disconnected).
+// - TDS: 0 ppm (probe out of water or disconnected), or outside the current
+//   meter-compared 80-314 ppm span documented in docs/device-contract.md.
 // - Water level: 0% is accepted only when the device also reports waterPresent === false.
 export const SENSOR_FAULT_TEMPERATURE_SENTINELS_C = [0, 85, -127] as const;
+export const TDS_METER_COMPARED_MIN_PPM = 80;
+export const TDS_METER_COMPARED_MAX_PPM = 314;
 
 export type SensorFaultParameter = 'temperature' | 'ph' | 'tds' | 'waterLevel';
 
@@ -105,7 +108,10 @@ export function getSensorFault(
         : null;
     case 'tds':
       if (value < 0) return 'negative TDS';
-      return value === 0 ? 'TDS 0 ppm indicates a dry or disconnected probe' : null;
+      if (value === 0) return 'TDS 0 ppm indicates a dry or disconnected probe';
+      return value < TDS_METER_COMPARED_MIN_PPM || value > TDS_METER_COMPARED_MAX_PPM
+        ? `TDS outside the current ${TDS_METER_COMPARED_MIN_PPM}-${TDS_METER_COMPARED_MAX_PPM} ppm meter-compared span`
+        : null;
     case 'waterLevel':
       if (value < 0 || value > 100) return 'water level outside 0-100%';
       return value === 0 && context.waterPresent !== false
@@ -114,9 +120,9 @@ export function getSensorFault(
   }
 }
 
-// Device contract (docs/device-contract.md), decision 2: the device sends every
-// 15 s; telemetry older than 60 s (3 missed sends) is offline. This is the only
-// freshness window; every view, the mobile copy, and the ingest function use it.
+// Device contract (docs/device-contract.md), decision 2: the device targets a
+// 15 s cadence; telemetry older than 60 s is offline. This is the only freshness
+// window; every view, the mobile copy, and the ingest function use it.
 export const TELEMETRY_STALE_MS = 60_000;
 
 // Decision 5: a command with no device acknowledgement after this long shows "No response".
@@ -1387,6 +1393,7 @@ export function ruleMatrixMarkdown(species: SpeciesConfig[], rules: RuleConfig[]
       `| Water level (%) | ${item.minWaterLevelPercent !== undefined ? `min ${item.minWaterLevelPercent}` : '—'} |`,
       `| Bioload bands (g/L) | ${item.bioloadBandsGPerL ? `light ≤ ${item.bioloadBandsGPerL.lightMax}, moderate ≤ ${item.bioloadBandsGPerL.moderateMax}, heavy above` : '—'} |`,
       `| Cleaning interval (days) | ${item.cleaningIntervalDays ? BIOLOAD_LEVELS.map((level) => `${level} ${item.cleaningIntervalDays?.[level] ?? '—'}`).join(', ') : '—'} |`,
+      `| Early cleaning | ${item.earlyCleaning ? `TDS +${item.earlyCleaning.tdsRisePct}% over the post-cleaning baseline, or turbidity WARNING ${item.earlyCleaning.turbidityWarningCount}× in ${item.earlyCleaning.turbidityWindowHours} h` : '—'} |`,
       '');
   }
   lines.push(`## Rules (${sorted.length})`, '',

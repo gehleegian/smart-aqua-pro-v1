@@ -20,6 +20,7 @@ import type {
 import {
   buildDeviceControlProfile,
   getDeviceCommandStatus,
+  getDeviceTelemetryUpdatedAt,
   getDeviceTelemetryState,
   getDeviceTelemetryStatusText,
   getFreshTelemetrySnapshot,
@@ -340,6 +341,10 @@ export function useMonitoringController() {
         hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
         hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
         telemetryState,
+        lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
+        reportedFilterState: snapshot?.filterState,
+        reportedLightState: snapshot?.lightState,
+        reportedEquipmentStatus: snapshot?.equipmentStatus,
         sensorValidity: snapshot?.validity ?? null,
         commandStatus: getDeviceCommandStatus(deviceShadows[aquarium.id], telemetryNow),
         manualStatus,

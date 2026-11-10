@@ -71,3 +71,17 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
     online: typeof telemetry.online === 'boolean' ? telemetry.online : true,
   };
 }
+
+/**
+ * Prevent a late/replayed RTDB write from rolling a live web subscription
+ * back to an older sample. A missing or malformed latest node still clears
+ * the snapshot so the UI never keeps presenting old data as current.
+ */
+export function selectNewestTelemetrySnapshot(
+  current: DeviceTelemetry | null | undefined,
+  incoming: DeviceTelemetry | null
+): DeviceTelemetry | null {
+  if (!incoming) return null;
+  if (!current || incoming.updatedAt > current.updatedAt) return incoming;
+  return current;
+}

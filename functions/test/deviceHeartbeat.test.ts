@@ -104,3 +104,21 @@ test('HEARTBEAT-04 online=false counts as offline; never-reported and revoked aq
   assert.deepEqual(await alerts('aquarium-never'), []);
   assert.deepEqual(await alerts('aquarium-revoked'), []);
 });
+
+test('HEARTBEAT-05 ingesting an online=false snapshot cannot resolve the active offline alert', async () => {
+  await writeTelemetry(AQUARIUM, T0, false);
+  await checkDeviceHeartbeats(deps());
+  assert.equal((await alerts())[0].status, 'active');
+
+  const result = await ingestTelemetry({ firestore, now: () => clock }, AQUARIUM, {
+    temperatureC: 27,
+    temperatureReadingValid: true,
+    waterLevelPercent: 90,
+    waterPresent: true,
+    online: false,
+    updatedAt: clock,
+  });
+
+  assert.deepEqual(result, { ingested: false, written: false, reason: 'stale_or_offline' });
+  assert.equal((await alerts())[0].status, 'active');
+});

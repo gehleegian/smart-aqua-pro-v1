@@ -39,7 +39,7 @@ test('contract constants match the agreed decisions', () => {
   assert.equal(REQUIRE_SENSOR_VALIDITY_FLAGS, false, 'flip only at the scheduled firmware switchover');
 });
 
-test('freshness: 60 s window (3 missed 15 s sends); the live ~7.5 s firmware cadence stays live', () => {
+test('freshness: exactly 60 s stays live and older telemetry is offline', () => {
   const now = 1793980261525;
   assert.equal(getTelemetryFreshness({ updatedAt: now - 7_500, online: true }, now), 'live');
   assert.equal(getTelemetryFreshness({ updatedAt: now - 60_000, online: true }, now), 'live');

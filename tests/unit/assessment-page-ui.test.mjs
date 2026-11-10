@@ -27,15 +27,17 @@ function loadView(overrides = {}) {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
-    const module = { exports: {} };
+    const commonJsModule = { exports: {} };
     const require = specifier => {
       if (specifier === '../hooks/useDashboardController') return { useDashboardController: () => dashboard };
       if (specifier === '../services/tankFocus') return { requestTankFocus: id => events.push(['focus', id]) };
+      if (specifier.endsWith('hooks/useRecommendations')) return { useRecommendations: () => ({ recommendations: [], error: '', savingId: '', setStatus: () => {} }) };
+      if (specifier.endsWith('maintenance/LogMaintenanceModal')) return { LogMaintenanceModal: () => null };
       if (specifier.startsWith('.')) return load(new URL(specifier + '.tsx', url));
       return nodeRequire(specifier);
     };
-    new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-    return module.exports;
+    new Function('require', 'module', 'exports', compiled)(require, commonJsModule, commonJsModule.exports);
+    return commonJsModule.exports;
   }
   const { default: Assessment } = load(new URL('views/Assessment.tsx', root));
   const element = Assessment({ onNavigate: page => events.push(['navigate', page]) });
@@ -82,16 +84,17 @@ test('assessment page reuses existing read-only data and explains missing valid 
   assert.match(html, /Aquarium A/);
   assert.match(html, /Aquarium B/);
   assert.match(read('views/Assessment.tsx'), /useDashboardController\(\)/);
+  assert.match(read('views/Assessment.tsx'), /<RecommendationsPanel/);
   assert.doesNotMatch(read('views/Assessment.tsx'), /publishDeviceCommand|syncDeviceControlProfile|updateAquarium|setDoc|setStatus/);
 });
 
 test('details retain parameter explanations, draft status and existing recommendations', () => {
   const { html } = loadView({ selectedTank: { ...tank, assessment: {
     ...assessment, overallSeverity: 'warning', draft: true,
-    parameters: [{ parameter: 'temperature', label: 'Temperature', severity: 'warning', message: 'Existing parameter explanation' }],
+    parameters: [{ parameter: 'temperature', label: 'Temperature', severity: 'warning', status: 'warning', notMonitored: false, value: 25, unit: '°C', message: 'Existing parameter explanation' }],
     recommendations: ['Existing maintenance recommendation'],
   } } });
-  for (const text of ['WARNING', 'Draft thresholds', 'Temperature', 'Existing parameter explanation', 'Existing maintenance recommendation']) assert.ok(html.includes(text), text);
+  for (const text of ['WARNING', 'Draft thresholds', 'Temperature', '25 °C', 'Existing parameter explanation', 'Existing maintenance recommendation']) assert.ok(html.includes(text), text);
 });
 
 test('selector and return link preserve the selected aquarium', () => {

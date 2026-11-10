@@ -10,7 +10,10 @@ import {
 } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, rtdb } from '../firebase';
-import { normalizeTelemetry } from '../utils/deviceTelemetryParser';
+import {
+  normalizeTelemetry,
+  selectNewestTelemetrySnapshot,
+} from '../utils/deviceTelemetryParser';
 import { getWaterLevelControl, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
@@ -306,11 +309,18 @@ function mapTelemetryHistoryEntry(value: unknown): DeviceTelemetryLogEntry | nul
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid,
     turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
+    turbidityState:
+      entry.turbidityState === 'Clear' || entry.turbidityState === 'Cloudy' || entry.turbidityState === 'Unknown'
+        ? entry.turbidityState
+        : undefined,
     ammoniaPpm: Number.isFinite(ammoniaPpm) ? ammoniaPpm : undefined,
     filterState:
       entry.filterState === 'Active' || entry.filterState === 'Inactive'
         ? entry.filterState
         : undefined,
+    lightState: entry.lightState === 'On' || entry.lightState === 'Off'
+      ? entry.lightState
+      : undefined,
     equipmentStatus:
       entry.equipmentStatus === 'Normal' ||
       entry.equipmentStatus === 'Warning' ||
@@ -547,7 +557,11 @@ export function subscribeToDeviceShadow(
       const telemetryUnsubscribe = onValue(
         child(deviceRootRef, 'telemetry'),
         (snapshot) => {
-          updateShadow('telemetry', normalizeTelemetry(snapshot.val()) || null);
+          const incoming = normalizeTelemetry(snapshot.val());
+          updateShadow(
+            'telemetry',
+            selectNewestTelemetrySnapshot(shadow.telemetry, incoming)
+          );
         },
         (error) => {
           console.error(error);

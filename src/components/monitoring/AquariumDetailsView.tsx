@@ -28,6 +28,11 @@ import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
+const deviceUpdateFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'medium',
+});
+
 interface AquariumDetailsViewProps {
   aquarium: MonitoringAquarium;
   automationEnabled: boolean;
@@ -116,6 +121,14 @@ export function AquariumDetailsView({
               {aquarium.telemetrySource} · {aquarium.assessment.overallSeverity}
             </Badge>
           </div>
+          <p className="mt-3 text-xs text-slate-400">
+            Last device update:{' '}
+            {aquarium.lastUpdatedAt ? (
+              <time dateTime={new Date(aquarium.lastUpdatedAt).toISOString()}>
+                {deviceUpdateFormatter.format(aquarium.lastUpdatedAt)}
+              </time>
+            ) : 'No telemetry received'}
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
@@ -142,6 +155,21 @@ export function AquariumDetailsView({
               label="Power Status"
               value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
               status={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus === 'Unknown' ? 'Power detector setup not verified' : 'Live telemetry' : 'Waiting for telemetry'}
+            />
+            <Reading
+              label="Filtration Output"
+              value={aquarium.telemetryState === 'live' ? aquarium.reportedFilterState ?? '--' : '--'}
+              status={aquarium.telemetryState === 'live' ? 'Device-reported output state' : 'Waiting for live telemetry'}
+            />
+            <Reading
+              label="Lighting Output"
+              value={aquarium.telemetryState === 'live' ? aquarium.reportedLightState ?? '--' : '--'}
+              status={aquarium.telemetryState === 'live' ? 'Device-reported output state' : 'Waiting for live telemetry'}
+            />
+            <Reading
+              label="Equipment Diagnostic"
+              value={aquarium.telemetryState === 'live' ? aquarium.reportedEquipmentStatus ?? '--' : '--'}
+              status={aquarium.telemetryState === 'live' ? 'Device-reported diagnostic; not physical verification' : 'Waiting for live telemetry'}
             />
             <Reading
               label="Estimated Bioload"

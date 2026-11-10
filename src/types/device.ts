@@ -64,8 +64,10 @@ export interface DeviceTelemetryLogEntry {
   tdsPercent?: number;
   tdsReadingValid?: boolean;
   turbidity?: number;
+  turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
+  lightState?: 'On' | 'Off';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
   mainsPresent?: boolean;
@@ -300,6 +302,10 @@ export function getFreshTelemetrySnapshot(
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
+        : undefined,
+    lightState:
+      telemetry.lightState === 'On' || telemetry.lightState === 'Off'
+        ? telemetry.lightState
         : undefined,
     equipmentStatus:
       telemetry.equipmentStatus === 'Normal' ||

@@ -6,7 +6,7 @@ import { HISTORY_SAMPLE_INTERVAL_MS, ingestTelemetry } from '../src/telemetryIng
 import { clearRuleConfigCache } from '../src/ruleEngine.js';
 import { refreshCleaningSchedule, runDailyCleaningCheck } from '../src/scheduledChecks.js';
 import { ALERT_COOLDOWN_MS, ALERT_TOUCH_INTERVAL_MS, DAY_MS } from '../src/shared/monitoringAssessmentCore.js';
-import { clearCollections, seedRules } from './testSeed.js';
+import { clearCollections, readSeed, seedRules } from './testSeed.js';
 
 const PROJECT_ID = 'demo-smartaqua-telemetry-ingest';
 const AQUARIUM = 'aquarium-ingest';
@@ -81,7 +81,10 @@ after(async () => {
 // ---------------- Sprint 1 history behaviour (unchanged) ----------------
 
 test('INGEST-01 a valid reading is written to flat and nested history with a validity summary', async () => {
-  const result = await ingestTelemetry(deps(), AQUARIUM, telemetry());
+  const result = await ingestTelemetry(deps(), AQUARIUM, telemetry({
+    lightState: 'On',
+    turbidityState: 'Clear',
+  }));
   assert.ok(result.ingested && result.written && result.sampleReason === 'first_of_day');
   const [row] = await flatRows();
   assert.equal(row.aquariumId, AQUARIUM);
@@ -93,6 +96,8 @@ test('INGEST-01 a valid reading is written to flat and nested history with a val
   assert.equal(row.recordedAtEpoch, T0);
   assert.equal(row.ingestedAtEpoch, T0);
   assert.equal(row.classification, 'normal');
+  assert.equal(row.lightState, 'On');
+  assert.equal(row.turbidityState, 'Clear');
   assert.deepEqual(row.validity, { allValid: true, temperature: 'valid', ph: 'valid', tds: 'valid', turbidity: 'valid', waterLevel: 'valid' });
   const nested = await firestore.doc(`aquariums/${AQUARIUM}/sensor_readings/2026-11-06/readings/23-21-26`).get();
   assert.deepEqual(nested.data(), row);
@@ -179,12 +184,46 @@ test('INGEST-06 malformed, out-of-range, out-of-order, and unknown-aquarium read
   assert.deepEqual(await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: '1' })), { ingested: false, written: false, reason: 'malformed' });
   // The 1997 epoch seen in old test data.
   assert.deepEqual(await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: 853755456 })), { ingested: false, written: false, reason: 'timestamp_out_of_range' });
+  assert.deepEqual(await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: T0 + 1 })), { ingested: false, written: false, reason: 'timestamp_out_of_range' });
   assert.deepEqual(await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: T0 + 3_600_000 })), { ingested: false, written: false, reason: 'timestamp_out_of_range' });
   assert.deepEqual(await ingestTelemetry(deps(), 'no-such-aquarium', telemetry()), { ingested: false, written: false, reason: 'unknown_aquarium' });
   await ingestTelemetry(deps(), AQUARIUM, telemetry());
   assert.deepEqual(await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: T0 - 1000, temperatureC: 30 })), { ingested: false, written: false, reason: 'out_of_order' });
   assert.equal((await flatRows()).length, 1);
   assert.deepEqual(await alerts(), [], 'an out-of-order reading never raises alerts');
+});
+
+test('INGEST-06b stale and explicitly offline snapshots never change current conditions', async () => {
+  const stale = await ingestTelemetry(
+    { firestore, now: () => T0 + 60_001 },
+    AQUARIUM,
+    telemetry({ updatedAt: T0, temperatureC: 27 })
+  );
+  assert.deepEqual(stale, { ingested: false, written: false, reason: 'stale_or_offline' });
+
+  const offline = await ingestTelemetry(
+    deps(),
+    AQUARIUM,
+    telemetry({ online: false, temperatureC: 27 })
+  );
+  assert.deepEqual(offline, { ingested: false, written: false, reason: 'stale_or_offline' });
+  assert.deepEqual(await flatRows(), []);
+  assert.deepEqual(await alerts(), []);
+  assert.deepEqual(await recommendations(), []);
+});
+
+test('INGEST-06c duplicate and out-of-order latest-node writes are rejected against the prior RTDB value', async () => {
+  await ingestTelemetry(deps(), AQUARIUM, telemetry());
+  clock = T0 + 120_000;
+  const current = await ingestTelemetry(deps(), AQUARIUM, telemetry(), telemetry({ updatedAt: T0 }));
+  assert.ok(current.ingested && !current.written);
+
+  const duplicate = await ingestTelemetry(deps(), AQUARIUM, telemetry(), telemetry());
+  assert.deepEqual(duplicate, { ingested: false, written: false, reason: 'out_of_order' });
+
+  const older = await ingestTelemetry(deps(), AQUARIUM, telemetry({ updatedAt: T0 + 60_000, temperatureC: 27 }), telemetry());
+  assert.deepEqual(older, { ingested: false, written: false, reason: 'out_of_order' });
+  assert.deepEqual(await alerts(), []);
 });
 
 test('INGEST-07 rows, alerts and recommendations stay isolated per aquarium', async () => {
@@ -200,6 +239,21 @@ test('INGEST-07 rows, alerts and recommendations stay isolated per aquarium', as
 });
 
 // ---------------- Sprint 2: rules engine ----------------
+
+test('RULES-00 draft configuration is recorded as unavailable and creates no active alert or recommendation', async () => {
+  await clearCollections(firestore, ['sensor_readings', 'alert_records', 'recommendations', 'species', 'rules']);
+  await seedRules(firestore, readSeed());
+  clearRuleConfigCache();
+
+  const result = await send({ temperatureC: 25 });
+  assert.ok(result.ingested && result.written);
+  assert.equal(result.classification, 'unavailable');
+  assert.deepEqual(await alerts(), []);
+  assert.deepEqual(await recommendations(), []);
+  const aquarium = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!;
+  assert.equal(aquarium.condition.draft, true);
+  assert.equal(aquarium.condition.overall, 'unavailable');
+});
 
 test('RULES-01 a bad reading produces the classification, a recommendation, an alert and the condition summary', async () => {
   const result = await send({ temperatureC: 25 });
@@ -222,13 +276,19 @@ test('RULES-01 a bad reading produces the classification, a recommendation, an a
   assert.equal(alert.recommendationId, rec.id);
   assert.equal(rec.ruleId, 'temp_high_warning');
   assert.equal(rec.status, 'pending');
-  assert.equal(rec.ruleStatus, 'draft');
-  assert.equal(rec.ruleSource, 'TBD');
+  assert.equal(rec.ruleStatus, 'approved');
+  assert.equal(rec.ruleSource, 'TEST_FIXTURE_ONLY');
   assert.ok(rec.action && rec.basis && rec.preCheck && rec.issueDetected);
   assert.equal(rec.readingSnapshot.temperatureC, 25);
+  assert.deepEqual(rec.threshold, { min: 20, max: 24 });
+  assert.equal(rec.createdAt, T0);
+  const [history] = await flatRows();
+  assert.deepEqual(history.matchedRuleIds, ['temp_high_warning']);
+  assert.equal(history.thresholdSnapshot.status, 'approved');
+  assert.deepEqual(history.thresholdSnapshot.values.temperatureC, { min: 20, max: 24 });
   const aquarium = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!;
   assert.equal(aquarium.condition.overall, 'warning');
-  assert.equal(aquarium.condition.draft, true);
+  assert.equal(aquarium.condition.draft, false);
   assert.equal(aquarium.condition.evaluatedAt, T0);
   assert.equal(aquarium.condition.perParameter.find((item: FirebaseFirestore.DocumentData) => item.parameter === 'temperatureC').status, 'warning');
 });

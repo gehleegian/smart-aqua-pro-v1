@@ -5,7 +5,7 @@ import type {
   DashboardSummaryCard,
   DashboardTankStat,
 } from '../../types/dashboard';
-import { getManualSystemStatus } from '../../utils/monitoringHelpers';
+import { getEquipmentFeedback } from '../../utils/dashboardHelpers';
 import Badge from '../ui/Badge';
 import { Card, CardHeader } from '../ui/Card';
 import { SummaryGrid } from './SummaryGrid';
@@ -208,15 +208,11 @@ export function UserDashboardView({
   onNavigate,
   onSelectTank,
 }: UserDashboardViewProps) {
-  const equipmentStatus = getManualSystemStatus(selectedTank);
-  // Without live telemetry the stored states are only the last values set in
-  // the app, not what the equipment is doing, so they are not shown as fact.
-  const live = selectedTank.hasFreshTelemetry;
-  const equipment = [
-    { label: 'Filter', state: live ? equipmentStatus.filter : 'Unknown', icon: Filter },
-    { label: 'Light', state: live ? equipmentStatus.light : 'Unknown', icon: Lightbulb },
-    { label: 'Feeder', state: live ? equipmentStatus.feeder : 'Unknown', icon: Utensils },
-  ];
+  const equipmentIcons = { Filter, Light: Lightbulb, Feeder: Utensils, 'Equipment diagnostic': Info };
+  const equipment = getEquipmentFeedback(selectedTank).map((item) => ({
+    ...item,
+    icon: equipmentIcons[item.label as keyof typeof equipmentIcons],
+  }));
   const readings = stats.filter((stat) => stat.title !== SYSTEM_STATUS_TITLE);
 
   return (
@@ -271,7 +267,7 @@ export function UserDashboardView({
             Open controls
           </button>
         </CardHeader>
-        <div className="grid divide-y divide-slate-600/25 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="grid divide-y divide-slate-600/25 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
           {equipment.map((item) => {
             const Icon = item.icon;
 

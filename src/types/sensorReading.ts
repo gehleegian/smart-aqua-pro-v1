@@ -17,16 +17,21 @@ export interface SensorReadingDocument {
   temperatureC: number;
   temperatureReadingValid?: boolean;
   waterLevelPercent: number;
+  waterLevelReadingValid?: boolean;
   waterPresent?: boolean;
   tdsPpm?: number;
   tdsPercent?: number;
   waterQualityPercent?: number;
   tdsReadingValid?: boolean;
   turbidity?: number;
+  turbidityReadingValid?: boolean;
+  turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
+  lightState?: 'On' | 'Off';
   equipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   powerStatus?: DevicePowerStatus;
   ph?: number;
+  phReadingValid?: boolean;
   online: boolean;
 }

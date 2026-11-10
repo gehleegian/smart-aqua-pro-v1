@@ -17,7 +17,7 @@ function renderPanel(recommendations, options = {}) {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
-    const module = { exports: {} };
+    const commonJsModule = { exports: {} };
     const require = specifier => {
       if (specifier === 'react') return { ...React, useState: initial => [initial === null ? options.applying ?? null : initial, () => {}] };
       if (specifier === '../../hooks/useRecommendations') return { useRecommendations: () => ({
@@ -30,8 +30,8 @@ function renderPanel(recommendations, options = {}) {
       if (specifier.startsWith('.')) return load(new URL(specifier + '.tsx', url));
       return nodeRequire(specifier);
     };
-    new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-    return module.exports;
+    new Function('require', 'module', 'exports', compiled)(require, commonJsModule, commonJsModule.exports);
+    return commonJsModule.exports;
   }
   const { RecommendationsPanel } = load(componentUrl);
   return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A' }));
@@ -39,9 +39,12 @@ function renderPanel(recommendations, options = {}) {
 
 const recommendation = {
   id: 'recommendation-1', aquariumId: 'tank-a', status: 'pending',
-  severity: 'warning', ruleStatus: 'draft', title: 'Review aquarium condition',
-  issueDetected: 'Review the reported condition.', preCheck: 'Verify the measurement.',
+  ruleId: 'temp_high_warning', parameter: 'temperatureC', createdAt: 1794290400000,
+  severity: 'warning', ruleStatus: 'approved', title: 'Review aquarium condition',
+  issueDetected: 'Temperature 25 °C is above the 24 °C maximum.', preCheck: 'Verify the measurement.',
   action: 'Review the maintenance guidance.', basis: 'Existing configured rule.',
+  readingSnapshot: { temperatureC: 25, updatedAt: 1794290390000 },
+  threshold: { min: 20, max: 24 },
 };
 
 test('recommendations use the same initially collapsed Show/Hide pattern as command history', () => {
@@ -51,7 +54,7 @@ test('recommendations use the same initially collapsed Show/Hide pattern as comm
   assert.match(html, /<summary[^>]*focus-visible/);
   assert.match(html, /group-open:hidden">Show/);
   assert.match(html, /group-open:inline">Hide/);
-  assert.match(html, /1 pending/);
+  assert.match(html, /1 active/);
   assert.match(readFileSync(componentUrl, 'utf8'), /<details key=\{aquariumId\}/);
 });
 
@@ -61,7 +64,7 @@ test('only pending recommendations appear, all inside a bounded keyboard-scrolla
     { ...recommendation, id: 'recommendation-2', severity: 'critical', title: 'Second pending recommendation' },
     { ...recommendation, id: 'recommendation-3', status: 'dismissed', title: 'Dismissed recommendation' },
   ]);
-  assert.match(html, /2 pending/);
+  assert.match(html, /2 active/);
   assert.equal((html.match(/<li /g) ?? []).length, 2);
   assert.match(html, /<ul aria-label="Pending recommendations" tabindex="0"[^>]*max-h-96[^>]*overflow-y-auto/);
   assert.doesNotMatch(html, /Dismissed recommendation/);
@@ -69,19 +72,30 @@ test('only pending recommendations appear, all inside a bounded keyboard-scrolla
   assert.match(html, /CRITICAL/);
 });
 
-test('rule explanations, draft badge and existing action controls stay available', () => {
+test('approved recommendations show traceable measurements, threshold explanation, timestamp and controls', () => {
   const html = renderPanel([recommendation]);
-  for (const text of ['Check first', 'Action', 'Why', recommendation.preCheck, recommendation.action, recommendation.basis, 'Draft rule', 'Applied', 'Dismiss']) {
+  for (const text of ['Problem detected', 'Parameter', 'Temperature', 'Measured value', '25 °C', 'Applicable threshold',
+    '20 °C to 24 °C', '24 °C maximum', 'Severity', 'Generated', 'Nov 10, 2026', 'Check first', 'Action', 'Why',
+    recommendation.preCheck, recommendation.action, recommendation.basis, 'Applied', 'Dismiss']) {
     assert.ok(html.includes(text), text);
   }
   const saving = renderPanel([recommendation], { savingId: recommendation.id });
   assert.equal((saving.match(/ disabled=""/g) ?? []).length, 2);
 });
 
+test('draft recommendations are withheld from active actions without losing their approval status', () => {
+  const html = renderPanel([{ ...recommendation, ruleStatus: 'draft' }]);
+  assert.match(html, /0 active/);
+  assert.match(html, /1 draft recommendation withheld pending scientific approval/);
+  assert.match(html, /Draft rule/);
+  assert.doesNotMatch(html, />Applied</);
+  assert.doesNotMatch(html, />Dismiss</);
+});
+
 test('empty and error states remain understandable while collapsed', () => {
   const empty = renderPanel([]);
-  assert.match(empty, /0 pending/);
-  assert.match(empty, /No pending recommendations/);
+  assert.match(empty, /0 active/);
+  assert.match(empty, /No active approved recommendations/);
   assert.doesNotMatch(empty, /<ul/);
   const error = renderPanel([], { error: 'Unable to read recommendations.' });
   assert.match(error, /Recommendations unavailable/);

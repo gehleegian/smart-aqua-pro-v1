@@ -143,7 +143,7 @@
               ".validate": "newData.isString() && newData.val() == $aquariumId"
             },
             "commandId": {
-              ".validate": "newData.isString()"
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_.:-]{1,160}$/)"
             },
             "type": {
               ".validate": "newData.isString() && (newData.val() == 'feed_now' || newData.val() == 'set_filter_state' || newData.val() == 'set_light_state' || newData.val() == 'sync_control')"
@@ -173,9 +173,9 @@
           "latest": {
             ".read": "(auth != null && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && ((((auth.token.email_verified == true || root.child('authorization/users').child(auth.uid).child('emailVerificationRequired').val() == false) && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'User' && ((root.child('authorization/aquariums').child($aquariumId).child('ownerUid').val() == auth.uid || root.child('authorization/aquariums').child($aquariumId).child('coOwnerUids').child(auth.uid).val() == true) || root.child('authorization/aquariums').child($aquariumId).child('caretakerUids').child(auth.uid).val() == true)) || (auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true)))) || (auth != null && auth.token.platformAdmin == true && auth.token.email_verified == true && auth.token.principalType != 'device' && root.child('authorization/users').child(auth.uid).child('role').val() == 'Admin')",
             ".write": "auth != null && auth.token.principalType == 'device' && root.child('authorization/aquariums').child($aquariumId).child('state').val() == 'active' && root.child('authorization/aquariums').child($aquariumId).child('deviceUids').child(auth.uid).val() == true && newData.exists() && (newData.child('commandId').val() == root.child('devices').child($aquariumId).child('commands/latest/commandId').val() || (newData.child('source').val() == 'schedule' && newData.child('commandId').isString() && newData.child('commandId').val().beginsWith('schedule-')))",
-            ".validate": "newData.hasChildren(['commandId', 'status', 'executedAt']) && (!newData.child('source').exists() || newData.child('source').val() == 'app' || newData.hasChildren(['type']))",
+            ".validate": "newData.hasChildren(['commandId', 'status', 'executedAt']) && (((!newData.child('source').exists() || newData.child('source').val() == 'app') && (!newData.child('type').exists() || newData.child('type').val() == root.child('devices').child($aquariumId).child('commands/latest/type').val()) && (!newData.child('state').exists() || newData.child('state').val() == root.child('devices').child($aquariumId).child('commands/latest/state').val())) || (newData.child('source').val() == 'schedule' && newData.hasChildren(['type']))) && ((!newData.child('type').exists() && !newData.child('state').exists()) || (newData.child('type').val() == 'feed_now' && !newData.child('state').exists()) || (newData.child('type').val() == 'set_filter_state' && (newData.child('state').val() == 'Active' || newData.child('state').val() == 'Inactive')) || (newData.child('type').val() == 'set_light_state' && (newData.child('state').val() == 'On' || newData.child('state').val() == 'Off'))) && (!newData.child('error').exists() || newData.child('status').val() == 'failed')",
             "commandId": {
-              ".validate": "newData.isString()"
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_.:-]{1,160}$/)"
             },
             "status": {
               ".validate": "newData.isString() && (newData.val() == 'done' || newData.val() == 'failed')"

@@ -120,11 +120,18 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid: readBoolean(reading.tdsReadingValid, hasTdsPercent),
     turbidity,
+    turbidityState:
+      reading.turbidityState === 'Clear' || reading.turbidityState === 'Cloudy' || reading.turbidityState === 'Unknown'
+        ? reading.turbidityState
+        : undefined,
     ammoniaPpm,
     filterState:
       reading.filterState === 'Active' || reading.filterState === 'Inactive'
         ? reading.filterState
         : undefined,
+    lightState: reading.lightState === 'On' || reading.lightState === 'Off'
+      ? reading.lightState
+      : undefined,
     equipmentStatus:
       reading.equipmentStatus === 'Normal' ||
       reading.equipmentStatus === 'Warning' ||
@@ -176,17 +183,22 @@ export function buildSensorReadingDocument(options: {
     temperatureC: options.telemetry.temperatureC,
     temperatureReadingValid: options.telemetry.temperatureReadingValid,
     waterLevelPercent: options.telemetry.waterLevelPercent,
+    waterLevelReadingValid: options.telemetry.waterLevelReadingValid,
     waterPresent: options.telemetry.waterPresent,
     tdsPpm: options.telemetry.tdsPpm,
     tdsPercent: options.telemetry.tdsPercent,
     waterQualityPercent: options.telemetry.tdsPercent,
     tdsReadingValid: options.telemetry.tdsReadingValid,
     turbidity: options.telemetry.turbidity,
+    turbidityReadingValid: options.telemetry.turbidityReadingValid,
+    turbidityState: options.telemetry.turbidityState,
     ammoniaPpm: options.telemetry.ammoniaPpm,
     filterState: options.telemetry.filterState,
+    lightState: options.telemetry.lightState,
     equipmentStatus: options.telemetry.equipmentStatus,
     powerStatus: options.telemetry.powerStatus,
     ph: options.telemetry.ph,
+    phReadingValid: options.telemetry.phReadingValid,
     online: options.telemetry.online,
   };
 }
@@ -218,11 +230,15 @@ export function buildSensorReadingDocumentFromHistoryEntry(options: {
     waterQualityPercent: options.entry.tdsPercent,
     tdsReadingValid: options.entry.tdsReadingValid,
     turbidity: options.entry.turbidity,
+    turbidityReadingValid: options.entry.turbidityReadingValid,
+    turbidityState: options.entry.turbidityState,
     ammoniaPpm: options.entry.ammoniaPpm,
     filterState: options.entry.filterState,
+    lightState: options.entry.lightState,
     equipmentStatus: options.entry.equipmentStatus,
     powerStatus: options.entry.powerStatus,
     ph: options.entry.ph,
+    phReadingValid: options.entry.phReadingValid,
     online: options.entry.online ?? true,
   };
 }

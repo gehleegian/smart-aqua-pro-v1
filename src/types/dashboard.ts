@@ -24,6 +24,9 @@ export type DashboardAquarium = Aquarium & {
   hasFreshPhTelemetry: boolean;
   hasFreshTurbidityTelemetry: boolean;
   hasFreshPowerTelemetry: boolean;
+  reportedFilterState?: 'Active' | 'Inactive';
+  reportedLightState?: 'On' | 'Off';
+  reportedEquipmentStatus?: 'Normal' | 'Warning' | 'Fault' | 'Unknown';
   telemetryState: DeviceTelemetryState;
   lastUpdatedAt: number | null;
   sensorValidity: TelemetryValidity | null;

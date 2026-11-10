@@ -60,7 +60,7 @@ test('SG90 home/dispense preserve 1750/1250us targets with 16-bit ticks', () => 
 
 test('failed PWM attachment never emits movement pulses or reports checked sequence', () => {
   const { state, events } = harness({ attach: false });
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('attach failed')));
   assert.ok(!events.some(e => e[0] === 'write'));
   assert.equal(state.feederPwmAttached, false);
@@ -73,7 +73,7 @@ for (const [name, options] of [
 ]) {
   test(`${name} aborts, detaches PWM, and does not dispense`, () => {
     const { state, events } = harness(options);
-    state.runManualFeed();
+    assert.equal(state.runManualFeed(), false);
     assert.equal(events.filter(e => e[0] === 'write').length, 1);
     assert.ok(events.some(e => e[0] === 'detach'));
     assert.ok(events.some(e => e[0] === 'log' && e[1].startsWith('Feed aborted')));
@@ -84,7 +84,7 @@ for (const [name, options] of [
 
 test('successful driver sequence is home, dispense, return with delayed readback and cleanup', () => {
   const { state, events } = harness();
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), true);
   assert.deepEqual(events.filter(e => e[0] === 'write').map(e => e[2]), [5734, 4096, 5734]);
   assert.deepEqual(events.find(e => e[0] === 'attach'), ['attach', 23, 50, 16]);
   const firstRead = events.findIndex(e => e[0] === 'read');
@@ -94,7 +94,7 @@ test('successful driver sequence is home, dispense, return with delayed readback
   assert.equal(state.feedCompleted, true);
   assert.ok(!events.some(e => e[0] === 'digital' && [16, 17].includes(e[1])), 'feeder never operates either relay');
   const attaches = events.filter(e => e[0] === 'attach').length;
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.equal(events.filter(e => e[0] === 'attach').length, attaches, 'cooldown rejects repeated feed');
 });
 
@@ -116,7 +116,7 @@ test('stop during PWM settling aborts without dispense or return pulse', () => {
     s.localStop = true;
     s.stopFeederPwm();
   } });
-  state.runManualFeed();
+  assert.equal(state.runManualFeed(), false);
   assert.equal(events.filter(e => e[0] === 'write').length, 1);
   assert.ok(events.some(e => e[0] === 'log' && e[1].startsWith('Feed aborted')));
   assert.equal(state.feederPwmAttached, false);

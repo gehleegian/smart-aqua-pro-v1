@@ -1,6 +1,6 @@
 # SmartAqua Pro rule engine
 
-**Status:** implemented in software and verified on the Firebase Emulator Suite (Sprint 2). Not deployed. All thresholds and rules are **DRAFT** until the adviser signs off `docs/rule-matrix.md`.
+**Status:** implemented in software and verified on the Firebase Emulator Suite. Not deployed. All seeded thresholds and rules are **DRAFT** until the adviser signs off `docs/rule-matrix.md`; draft configuration is preview-only and cannot create live classifications, alerts, recommendations, or cleaning schedules.
 
 Sections 1–5 are written so they can be pasted into Chapter 2 (system design) with light editing.
 
@@ -10,7 +10,7 @@ Sections 1–5 are written so they can be pasted into Chapter 2 (system design) 
 
 SmartAqua Pro uses **rule-based prescriptive analytics**: predefined IF-THEN rules turn a validated sensor reading into a condition classification (NORMAL, WARNING or CRITICAL) and, when applicable, a maintenance recommendation. It does not use machine learning or prediction.
 
-Thresholds and rules are **data**, stored in Cloud Firestore, not code. Changing a value, approving a rule or disabling one is a database edit that takes effect without redeploying the system (within 5 minutes, the function's cache lifetime).
+Thresholds and rules are **data**, stored in Cloud Firestore, not code. Changing a value, approving a rule or disabling one is a database edit that takes effect without redeploying the system (within 5 minutes, the function's cache lifetime). The live pipeline activates only when the selected species configuration and every enabled rule are approved. The Rules Editor may still preview draft values for sign-off.
 
 The same evaluation code runs in three places, so results are identical:
 
@@ -28,12 +28,13 @@ For each telemetry write from the ESP32 (`devices/{aquariumId}/telemetry`):
 
 1. **Validate the reading.** Timestamp checks (not before 2000, not more than 5 min in the future, not older than the last processed reading). Per-sensor validity: a missing value, a `<sensor>ReadingValid: false` flag, or a physically impossible value (e.g. pH 0 or outside 0–14, the DS18B20's 85 °C reset value) makes that sensor **invalid**.
 2. **Associate it with the aquarium.** The aquarium doc must exist and have an owner. The RTDB rules already ensure only the bound device can write.
-3. **Resolve the thresholds:** species defaults (`species/{id}`), then per-aquarium overrides (§4).
-4. **Classify each valid parameter** against the thresholds: NORMAL, WARNING or CRITICAL.
-5. **Match rules.** Pick the most specific rule using `extraChecks` (equipment status, filter state, bioload, filtration installed).
-6. **Roll up** the overall condition.
-7. **Reconcile alerts and recommendations** (§7).
-8. **Record**: a sampled history row, plus the condition summary on the aquarium doc.
+3. **Apply the approval gate.** If the selected species configuration or any enabled rule is still draft, record an unavailable assessment and stop before alert/recommendation generation.
+4. **Resolve the thresholds:** approved species defaults (`species/{id}`). Aquarium-specific overrides remain preview-only until they have an approval contract (§4).
+5. **Classify each valid parameter** against the thresholds: NORMAL, WARNING or CRITICAL.
+6. **Match rules.** Pick the most specific rule using `extraChecks` (equipment status, filter state, bioload, filtration installed).
+7. **Roll up** the overall condition.
+8. **Reconcile alerts and recommendations** (§7).
+9. **Record**: a sampled history row, plus the condition summary on the aquarium doc. Sampled rows include matched rule IDs and the effective threshold snapshot used at evaluation time.
 
 **Invalid readings never produce a water-condition classification or water advice.** Each invalid sensor produces one `sensor_fault` recommendation: "Check the &lt;sensor&gt; probe connection or calibration."
 
@@ -82,10 +83,12 @@ Power: when the device sends `mainsPresent` (new, additive), it decides `powerSt
 
 Approval fields on every species and rule doc: `status` (draft or approved), `source` (a citation, or "TBD"), `approvedBy`, `approvedAt` (epoch ms).
 
-**Effective thresholds** come from three layers. A layer only replaces the bounds it actually sets:
+**Threshold preview** in the Rules Editor comes from three layers. A layer only replaces the bounds it actually sets:
 1. the species defaults;
-2. the aquarium's existing profile limits (`minTemp`/`maxTemp`, `minPh`/`maxPh`, `minLevel`), so limits an owner already saved keep working;
+2. the aquarium's existing profile limits (`minTemp`/`maxTemp`, `minPh`/`maxPh`, `minLevel`);
 3. the admin-set `thresholdOverrides` map, which replaces layer 2 entirely when present.
+
+The live engine currently uses only the approved species thresholds. Profile limits and `thresholdOverrides` have no status/source/approver metadata, so they remain preview-only until an approved aquarium-specific override contract is defined. This prevents an owner-edited or legacy value from silently becoming an authoritative scientific threshold.
 
 `minQuality` (TDS purity %) has no ppm equivalent and is not used.
 

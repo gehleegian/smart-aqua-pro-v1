@@ -32,6 +32,9 @@ export function AssessmentDetails({ assessment }: { assessment: AquariumConditio
                   <ParameterStatusBadge item={item} />
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-400">{item.message}</p>
+                <p className="mt-2 text-sm text-slate-200">
+                  Measured value: {item.value === null ? 'Unavailable' : `${item.value}${item.unit === '%' ? '%' : item.unit ? ` ${item.unit}` : ''}`}
+                </p>
               </div>
             ))}
           </div>

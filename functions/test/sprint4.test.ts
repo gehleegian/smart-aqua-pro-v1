@@ -421,6 +421,45 @@ test('CMD-02 a scheduled action acked with source "schedule" gets its own entry;
   assert.equal((await recordCommand(fs, 'no-such-tank', { commandId: 'x', type: 'feed_now' })).recorded, false);
 });
 
+test('CMD-03 an app ack can finalize the log before the independent command trigger runs', async () => {
+  const fs = { firestore, now: () => clockMs };
+  const command = {
+    aquariumId: tank1,
+    commandId: 'ack-first',
+    type: 'set_filter_state',
+    state: 'Active',
+    requestedAt: clockMs - 500,
+    requestedBy: CARE_X.uid,
+  };
+  const ack = {
+    commandId: command.commandId,
+    status: 'done',
+    executedAt: clockMs,
+    source: 'app',
+    type: command.type,
+    state: command.state,
+  };
+
+  assert.equal((await recordAck(fs, tank1, ack, command)).updated, true);
+  const log = firestore.doc(`command_logs/${commandLogId(tank1, command.commandId)}`);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries((await log.get()).data()!).filter(([key]) =>
+      ['type', 'state', 'status', 'source', 'requestedAt', 'executedAt'].includes(key))),
+    {
+      type: 'set_filter_state',
+      state: 'Active',
+      status: 'done',
+      source: 'app',
+      requestedAt: clockMs - 500,
+      executedAt: clockMs,
+    }
+  );
+
+  assert.equal((await recordCommand(fs, tank1, command)).recorded, false,
+    'the later command trigger must not replace the terminal acknowledgement');
+  assert.equal((await log.get()).get('status'), 'done');
+});
+
 // ---------------------------------------------------------------------------
 // Rules & species editor (FR13 admin side)
 // ---------------------------------------------------------------------------

@@ -120,11 +120,13 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
         : clampPercent(getTelemetryPurityPercent(telemetry)!),
     tdsReadingValid: telemetry.tdsReadingValid,
     turbidity: telemetry.turbidity,
+    turbidityState: telemetry.turbidityState,
     ammoniaPpm: telemetry.ammoniaPpm,
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'
         ? telemetry.filterState
         : undefined,
+    lightState: telemetry.lightState,
     equipmentStatus: telemetry.equipmentStatus,
     powerStatus: normalizeDevicePowerStatus(telemetry.powerStatus),
     ph: typeof telemetry.ph === 'number' ? telemetry.ph : undefined,
