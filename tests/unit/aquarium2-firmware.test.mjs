@@ -10,12 +10,24 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   const b = await readFile(new URL('Aquarium2Device/Aquarium2Device.ino', root), 'utf8');
   const feedRoutine = a.replace(/\r\n/g, '\n').match(/bool runManualFeed\(\) \{[\s\S]*?(?=\nvoid help\(\))/)?.[0];
   assert.ok(feedRoutine);
+  const turbConstants = a.match(/constexpr float CLEAR_V[\s\S]*?(?=#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED)/)?.[0];
+  const turbClassifier = a.match(/  if \(turbV >= 0\.15f[\s\S]*?else turbKnown = false;\r?\n/)?.[0];
+  const turbLog = a.match(/  Serial.printf\("Turbidity:[\s\S]*?(?=  if \(PROFILE_LEVEL_ENABLED\))/)?.[0];
+  assert.ok(turbConstants && turbClassifier && turbLog);
   const normalizedB = b.replace(/\r\n/g, '\n')
     .replace('#include <esp32-hal-ledc.h>', '#include <ESP32Servo.h>')
     .replace('bool feederPwmAttached = false;', 'Servo feeder;')
     .replace('  stopFeederPwm();\n', '') // disarm now also stops PWM immediately
     .replace(/\/\/ Native core-3 LEDC calls[\s\S]*?(?=\nvoid help\(\))/, feedRoutine.replace(/\r\n/g, '\n'))
-    .replace('SERVO_PIN = 23', 'SERVO_PIN = 15');
+    .replace('SERVO_PIN = 23', 'SERVO_PIN = 15')
+    .replace('  if (!feederCalibrationReady()) return; // never run calibration jogs automatically\n', '')
+    // Only Aquarium 2's owner-provided different-brand sample classifier differs.
+    .replace(/\/\/ Aquarium 2's different-brand probe:[\s\S]*?(?=#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED)/, turbConstants.replace(/\r\n/g, '\n'))
+    .replace('int turbRaw = 0;\n', '')
+    .replace(/void updateTurbidity\([\s\S]*?(?=void sampleSensors\(\))/, '')
+    .replace('  turbRaw = analogRead(TURB_PIN);\n  updateTurbidity(turbV, turbRaw >= 4095);\n', '')
+    .replace('  phValue = fitPH(phV);\n', '  phValue = fitPH(phV);\n' + turbClassifier.replace(/\r\n/g, '\n'))
+    .replace(/  Serial.printf\("Turbidity:[\s\S]*?(?=  if \(PROFILE_LEVEL_ENABLED\))/, turbLog.replace(/\r\n/g, '\n'));
   assert.match(b, /if \(!ledcAttach\(SERVO_PIN, 50, 16\)\)/);
   assert.match(b, /LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 23/);
   assert.equal(normalizedB, a.replace(/Aquarium 1/g, 'Aquarium 2')
@@ -34,11 +46,11 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   assert.match(config, /POWER_PRESENT_LEVEL = 0/);
   assert.match(config, /#define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1/);
   assert.match(a1Config, /POWER_SIGNAL_ON_V = 2\.515f/);
-  assert.match(a1Config, /PROFILE_LEVEL_ENABLED = true/);
+  assert.match(a1Config, /PROFILE_LEVEL_ENABLED = false/);
   assert.match(config, /PROFILE_LEVEL_ENABLED = false/);
   const feeder = await readFile(new URL('Aquarium2Device/FeederConfig.h', root), 'utf8');
   assert.match(feeder, /owner-confirmed SG90/);
-  for (const setting of ['FEEDER_HOME_DEG = 135', 'FEEDER_DISPENSE_DEG = 45', 'FEEDER_HOLD_MS = 1500', 'FEEDER_COOLDOWN_MS = 5000']) assert.ok(feeder.includes(setting));
+  for (const setting of ['FEEDER_CALIBRATED = false', 'FEEDER_RETURN_TEST_ENABLED = true', 'FEEDER_STOP_US = 1500', 'FEEDER_FORWARD_MS = 900', 'FEEDER_REVERSE_MS = 900', 'FEEDER_HOLD_MS = 1000', 'FEEDER_COOLDOWN_MS = 5000']) assert.ok(feeder.includes(setting));
   for (const file of ['ScheduleLogic.h', 'ScheduleLogicTests.h', 'EchoFilter.h', 'PowerSignal.h', 'WaterLevel.h']) {
     assert.equal(await readFile(new URL(`Aquarium2Device/${file}`, root), 'utf8'),
       await readFile(new URL(`Aquarium1Device/${file}`, root), 'utf8'));

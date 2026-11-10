@@ -49,7 +49,7 @@ test('full assessment is removed from Monitoring, but its scoped navigation link
   assert.doesNotMatch(detail, />Condition Assessment<|Assessment limits and calibration|assessment\.parameters\.map/);
   assert.match(detail, /onClick=\{onOpenAssessment\}/);
   assert.match(detail, /View assessment/);
-  assert.match(detail, /<RecommendationsPanel/);
+  assert.doesNotMatch(detail, /<RecommendationsPanel/);
   assert.match(detail, /<CommandHistory/);
   assert.match(detail, /<h3[^>]*>Manual Controls<\/h3>/);
   const monitoring = read('views/Monitoring.tsx');

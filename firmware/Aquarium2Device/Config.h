@@ -39,4 +39,4 @@ constexpr float POWER_DIVIDER_RATIO = 5.0f; // unused in digital mode
 constexpr float POWER_SIGNAL_OFF_V = 0.0f; // unused; not a calibration for this device
 constexpr float POWER_SIGNAL_ON_V = 0.0f;
 #define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1
-constexpr bool PROFILE_LEVEL_ENABLED = false; // Aquarium 1 only.
+constexpr bool PROFILE_LEVEL_ENABLED = false; // fixed 27.0 cm empty / 20.2 cm full

@@ -14,7 +14,13 @@ import {
   normalizeTelemetry,
   selectNewestTelemetrySnapshot,
 } from '../utils/deviceTelemetryParser';
-import { evaluateWaterLevelProfile, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
+
+import {
+  evaluateWaterLevelProfile,
+  getWaterLevelControl,
+  usesProfileWaterLevel,
+  type LevelProfileInput,
+} from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
 import {
@@ -190,6 +196,7 @@ export async function syncWaterLevelProfile(aquariumId: string): Promise<void> {
   const root = getDeviceRootRef(aquariumId);
   if (!root) return;
   const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
+  if (!usesProfileWaterLevel(aquarium as LevelProfileInput)) return;
   const control = child(root, 'control');
   if (!(await get(control)).exists()) return;
   await update(control, { waterLevelProfile: evaluateWaterLevelProfile(aquarium as LevelProfileInput).profile });

@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Activity,
   ClipboardCheck,
+  ClipboardList,
   Cpu,
   Bell,
   BarChart3,
@@ -20,6 +21,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   FileBarChart,
+  Wrench,
 } from 'lucide-react';
 
 /** Sprint 3: navigation follows the access role, not only the platform role. */
@@ -50,6 +52,7 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'owner', 'caretaker', 'none'] },
       { id: 'monitoring', label: 'Monitoring', icon: Activity, roles: ['owner', 'caretaker'] },
       { id: 'assessment', label: 'Assessment', icon: ClipboardCheck, roles: ['owner', 'caretaker'] },
+      { id: 'recommendations', label: 'Recommendations', icon: ClipboardList, roles: ['owner', 'caretaker'] },
       { id: 'alerts', label: 'Alerts', icon: Bell, roles: ['owner', 'caretaker'] },
     ],
   },
@@ -57,6 +60,7 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
     label: 'Manage',
     items: [
       { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['owner'] },
+      { id: 'maintenance', label: 'Maintenance', icon: Wrench, roles: ['owner', 'caretaker'] },
       { id: 'add-device', label: 'Add Device', icon: PlusCircle, roles: ['owner', 'caretaker', 'none'] },
       { id: 'team', label: 'Team', icon: UserPlus, roles: ['owner'] },
       { id: 'audit', label: 'Audit Log', icon: ScrollText, roles: ['owner'] },

@@ -125,6 +125,11 @@ export function getSensorFault(
 // window; every view, the mobile copy, and the ingest function use it.
 export const TELEMETRY_STALE_MS = 60_000;
 
+// Client server-time estimates can lag a just-received RTDB timestamp by a few
+// milliseconds. Bound that estimation error without extending the stale window.
+// Trusted server callers do not opt in: their future-timestamp check stays strict.
+export const TELEMETRY_CLOCK_SKEW_MS = 1_000;
+
 // Decision 5: a command with no device acknowledgement after this long shows "No response".
 export const COMMAND_ACK_TIMEOUT_MS = 30_000;
 
@@ -256,10 +261,12 @@ export const TELEMETRY_EPOCH_FLOOR = 946684800000;
 
 export function getTelemetryFreshness(
   telemetry: { updatedAt?: number; online?: boolean } | null | undefined,
-  now = Date.now()
+  now = Date.now(),
+  { allowClockSkew = false }: { allowClockSkew?: boolean } = {}
 ): 'live' | 'offline' | 'unavailable' {
   if (!telemetry || !finite(now) || !finite(telemetry.updatedAt) ||
-      telemetry.updatedAt < TELEMETRY_EPOCH_FLOOR || telemetry.updatedAt > now) {
+      telemetry.updatedAt < TELEMETRY_EPOCH_FLOOR ||
+      telemetry.updatedAt > now + (allowClockSkew ? TELEMETRY_CLOCK_SKEW_MS : 0)) {
     return 'unavailable';
   }
   if (telemetry.online === false) return 'offline';

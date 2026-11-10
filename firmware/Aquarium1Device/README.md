@@ -1,5 +1,31 @@
 # Aquarium 1 supervised Arduino test
 
+## Current water level: fixed calibration restored (2026-11-10)
+
+PROFILE_LEVEL_ENABLED is false in repository and C:/new/Aquarium1Device/Config.h.
+The active formula is clamp((27.0-distanceCm)/(27.0-20.2)*100, 0, 100):
+27.0cm is empty, 20.2cm is the chosen full reference. Dimensions/operational
+litres are not used. No valid echo or distance below 20cm remains unavailable,
+not fabricated full. Web/mobile/backend must use the matching fixed policy.
+Upload the matching folder with all headers; no upload was performed here.
+Other sensors, servo settings, power detection and owner-edited content remain.
+
+## Previous profile water level implementation (superseded)
+
+The prepared repository and C:/new/Aquarium1Device upload now use saved internal
+dimensions and operational litres for 100%, retaining the existing 27cm mounting
+reference. A target above the measurable water-height range no longer suppresses
+every current reading: valid 20-800cm echoes use (27-distance)/target*100. Blind
+echoes remain invalid; the code does not pretend the sensor can observe full
+volume. The app warns when full target is outside the configured range. Serial's
+"Water level upload" line reports the post-profile value sent to RTDB.
+
+Requires the matching RTDB validation/ingest rollout, then an owner profile/control
+save to synchronize geometry BEFORE uploading. Keep all headers, especially
+WaterLevel.h and Config.h, with the sketch. Other owner-edited content is retained.
+No upload, live settings change or physical accuracy verification is implied.
+See ../../docs/security/profile-water-level.md for the current activation order.
+
 ## 12V outage push signal (2026-11-09)
 
 The sketch now sends `mainsPresent` from the existing analog power-presence

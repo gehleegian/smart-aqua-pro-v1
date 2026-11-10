@@ -25,7 +25,7 @@
             ".validate": "newData.isBoolean()"
           },
           "waterLevelTargetHeightCm": {
-            ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 7"
+            ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() < 27"
           },
           "waterPresent": {
             ".validate": "newData.isBoolean()"
@@ -93,7 +93,7 @@
             ".validate": "newData.isString() && (newData.val() == 'manual' || newData.val() == 'automation')"
           },
           "waterLevelProfile": {
-            ".validate": "newData.hasChildren(['tankLengthCm','tankWidthCm','tankHeightCm','workingWaterVolumeLiters']) && newData.child('workingWaterVolumeLiters').val()*1000 <= newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*newData.child('tankHeightCm').val() && newData.child('workingWaterVolumeLiters').val()*1000 <= newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*7",
+            ".validate": "newData.hasChildren(['tankLengthCm','tankWidthCm','tankHeightCm','workingWaterVolumeLiters']) && newData.child('workingWaterVolumeLiters').val()*1000 <= newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*newData.child('tankHeightCm').val() && newData.child('workingWaterVolumeLiters').val()*1000 < newData.child('tankLengthCm').val()*newData.child('tankWidthCm').val()*27",
             "tankLengthCm": { ".validate": "newData.isNumber() && newData.val() > 0" },
             "tankWidthCm": { ".validate": "newData.isNumber() && newData.val() > 0" },
             "tankHeightCm": { ".validate": "newData.isNumber() && newData.val() > 0" },

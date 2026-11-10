@@ -24,10 +24,14 @@ constexpr uint8_t LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 23;
 constexpr uint8_t POWER_PIN = 33;
 constexpr float PH4_V = 2.438f, PH686_V = 2.287f, PH918_V = 2.103f;
 constexpr float EMPTY_CM = 27.0f, FULL_CM = 20.2f;
-constexpr float CLEAR_V = 0.967f, CLOUDY_V = 0.246f;
-// Midpoint separates the two tested samples, NOT a calibrated NTU threshold.
+// Aquarium 2's different-brand probe: owner-observed samples, not NTU calibration.
+// Fresh unclipped samples: clear 2.343/2.340/2.336V; cloudy 0.283/0.282/0.291V.
+// Median of each group replaces the earlier, clipped 3.129V clear endpoint.
+constexpr float CLEAR_V = 2.340f, CLOUDY_V = 0.283f;
+// Midpoint separates these samples only; it is not a calibrated NTU threshold.
 constexpr float TURB_MID_V = (CLEAR_V + CLOUDY_V) / 2.0f;
 constexpr float TURB_HYST_V = 0.02f; // anti-flicker margin, not a water-quality rule
+constexpr float TURB_INPUT_MAX_V = 3.0f; // retain original ADC headroom guard
 #ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED
 #define AQUARIUM_TDS_METER_REFERENCE_ENABLED 0
 #endif
@@ -46,6 +50,7 @@ bool armed = false, lightOn = false, filterOn = false;
 bool localStop = false; // optional serial DISARM stays latched until ARM/reset
 bool turbKnown = false, cloudy = false;
 float phV = NAN, tdsV = NAN, turbV = NAN, phValue = NAN;
+int turbRaw = 0;
 float tdsPpm = NAN;
 float powerSignalV = NAN, supplyV = NAN;
 PowerSignal::State measuredPower = PowerSignal::State::Unknown;
@@ -109,23 +114,45 @@ void stopFeederPwm() {
   pinMode(SERVO_PIN, OUTPUT);
 }
 
-uint32_t feederDuty(int degrees) {
-  // Preserve the existing SG90 mapping: 135=1750us, 45=1250us.
-  const uint32_t pulseUs = 1000U + uint32_t(degrees) * 1000U / 180U;
+uint32_t feederDuty(int pulseUs) {
   return (pulseUs * 65536U + 10000U) / 20000U;
 }
 
-bool writeFeederPosition(int degrees, const char *phase) {
+bool feederTimingValid() {
+  return FEEDER_FORWARD_MS >= 40 && FEEDER_FORWARD_MS <= FEEDER_MAX_RUN_MS &&
+    FEEDER_REVERSE_MS >= 40 && FEEDER_REVERSE_MS <= FEEDER_MAX_RUN_MS &&
+    FEEDER_STOP_US >= 1000 && FEEDER_STOP_US <= 2000 &&
+    FEEDER_FORWARD_US >= 1000 && FEEDER_FORWARD_US <= 2000 &&
+    FEEDER_REVERSE_US >= 1000 && FEEDER_REVERSE_US <= 2000 &&
+    ((FEEDER_FORWARD_US > FEEDER_STOP_US && FEEDER_REVERSE_US < FEEDER_STOP_US) ||
+     (FEEDER_FORWARD_US < FEEDER_STOP_US && FEEDER_REVERSE_US > FEEDER_STOP_US));
+}
+
+bool feederCalibrationReady() {
+  return FEEDER_CALIBRATED && feederTimingValid();
+}
+
+bool waitFeederMs(uint32_t duration) {
+  const uint32_t start = millis();
+  while (feederPwmAttached && armed && !localStop && WiFi.status() == WL_CONNECTED &&
+         millis() - start < duration) {
+    serialCommands();
+    delay(2);
+  }
+  return feederPwmAttached && armed && !localStop && WiFi.status() == WL_CONNECTED;
+}
+
+bool writeFeederPulse(int pulseUs, const char *phase) {
   if (!feederPwmAttached || !armed || localStop || WiFi.status() != WL_CONNECTED) return false;
-  const uint32_t duty = feederDuty(degrees);
+  if (pulseUs < 1000 || pulseUs > 2000) return false;
+  const uint32_t duty = feederDuty(pulseUs);
   if (!ledcWrite(SERVO_PIN, duty)) {
     Serial.printf("FEED PWM ERROR: %s write failed on GPIO%u.\n", phase, SERVO_PIN);
     return false;
   }
   // Duty changes latch on a PWM boundary. Wait two 20ms frames, not an
   // immediate read which can still return the previous pulse's duty.
-  responsiveWait(40);
-  if (!feederPwmAttached || !armed || localStop || WiFi.status() != WL_CONNECTED) return false;
+  if (!waitFeederMs(40)) return false;
   const uint32_t actualHz = ledcReadFreq(SERVO_PIN);
   const uint32_t actualDuty = ledcRead(SERVO_PIN);
   const bool matches = actualHz == 50 && actualDuty == duty;
@@ -133,6 +160,16 @@ bool writeFeederPosition(int degrees, const char *phase) {
                 phase, SERVO_PIN, (unsigned long)duty, (unsigned long)actualDuty,
                 (unsigned long)actualHz, matches ? "MATCH" : "ERROR");
   return matches;
+}
+
+bool runFeederTimed(int pulseUs, uint32_t duration, const char *phase) {
+  if (duration < 40 || duration > FEEDER_MAX_RUN_MS) return false;
+  const uint32_t started = millis();
+  bool ok = writeFeederPulse(pulseUs, phase);
+  const uint32_t elapsed = millis() - started;
+  if (ok && elapsed < duration) ok = waitFeederMs(duration - elapsed);
+  if (!ok) { stopFeederPwm(); return false; }
+  return writeFeederPulse(FEEDER_STOP_US, "stop");
 }
 
 bool runManualFeed() {
@@ -144,36 +181,38 @@ bool runManualFeed() {
     Serial.println("Feed rejected: cooldown active.");
     return false;
   }
-  Serial.println("FEED v4: checked native PWM, GPIO23, SG90; website command accepted.");
+  const bool roundTrip = FEEDER_CALIBRATED || FEEDER_RETURN_TEST_ENABLED;
+  if (roundTrip && !feederTimingValid()) {
+    Serial.println("Feed rejected: continuous-servo calibration settings invalid.");
+    return;
+  }
+  Serial.println(FEEDER_CALIBRATED
+    ? "FEED v7: calibrated TIMED continuous SG90, GPIO23; angles/home are not measured."
+    : "FEED v7 CALIBRATION: empty feeder only; NOT a verified feeding cycle or absolute home position.");
+  if (!FEEDER_CALIBRATED)
+    Serial.printf("CALIBRATION: forward %lu ms; hold %lu ms; return %lu ms. Verify returned position.\n",
+                  (unsigned long)(roundTrip ? FEEDER_FORWARD_MS : FEEDER_JOG_MS),
+                  (unsigned long)(roundTrip ? FEEDER_HOLD_MS : 0),
+                  (unsigned long)(roundTrip ? FEEDER_REVERSE_MS : 0));
   if (!ledcAttach(SERVO_PIN, 50, 16)) {
     Serial.println("FEED PWM ERROR: attach failed; cycle not started.");
     return false;
   }
   feederPwmAttached = true;
-  // First establish provisional home; never energize the servo at boot.
-  bool pwmOk = writeFeederPosition(FEEDER_HOME_DEG, "home");
-  if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
-  if (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED) {
-    pwmOk = writeFeederPosition(FEEDER_DISPENSE_DEG, "dispense");
-    if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
-    const uint32_t holdStart = millis();
-    // Keep network requests out of this timed section so HTTPS timeouts cannot
-    // extend the configured dwell. Serial stop and Wi-Fi loss end it early.
-    while (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED &&
-           millis() - holdStart < FEEDER_HOLD_MS) {
-      serialCommands();
-      delay(2);
-    }
+  // No positional "home" pulse: on this servo that would command rotation.
+  bool pwmOk = writeFeederPulse(FEEDER_STOP_US, "neutral");
+  if (pwmOk) pwmOk = runFeederTimed(FEEDER_FORWARD_US,
+    roundTrip ? FEEDER_FORWARD_MS : FEEDER_JOG_MS, "forward");
+  if (pwmOk && roundTrip) {
+    // Forward motion has already ended at neutral. No moving pulse during hold.
+    pwmOk = waitFeederMs(FEEDER_HOLD_MS);
+    if (pwmOk) pwmOk = runFeederTimed(FEEDER_REVERSE_US, FEEDER_REVERSE_MS, "return");
   }
-  if (pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED) {
-    pwmOk = writeFeederPosition(FEEDER_HOME_DEG, "return");
-    if (pwmOk) responsiveWait(FEEDER_TRAVEL_MS);
-  } else pwmOk = false;
   pwmOk = pwmOk && armed && !localStop && WiFi.status() == WL_CONNECTED;
   stopFeederPwm();
   lastFeedEnd = millis();
   feedCompleted = true;
-  Serial.println(pwmOk ? "Feed PWM sequence checked; mechanical movement NOT verified."
+  Serial.println(pwmOk ? "Continuous-servo PWM ended/detached; angle, physical stop and return NOT verified."
                        : "Feed aborted: PWM error, local stop, or Wi-Fi loss. Movement NOT verified.");
   return pwmOk;
 }
@@ -282,6 +321,17 @@ float fitPH(float v) {
   return isfinite(result) && result > 0.0f && result <= 14.0f ? result : NAN;
 }
 
+void updateTurbidity(float inputV, bool adcClipped) {
+  if (!isfinite(inputV) || adcClipped || inputV < 0.15f || inputV >= TURB_INPUT_MAX_V) {
+    turbKnown = false;
+    return;
+  }
+  if (!turbKnown) cloudy = inputV < TURB_MID_V;
+  else if (inputV < TURB_MID_V - TURB_HYST_V) cloudy = true;
+  else if (inputV > TURB_MID_V + TURB_HYST_V) cloudy = false;
+  turbKnown = true;
+}
+
 void sampleSensors() {
   recoverTemperatureProbe(temp18, 18, t18, temp18RetryAt);
   recoverTemperatureProbe(temp19, 19, t19, temp19RetryAt);
@@ -301,6 +351,8 @@ void sampleSensors() {
   // ADC clipping cannot measure a higher concentration; never publish it as ppm.
   tdsPpm = analogRead(TDS_PIN) >= 4095 ? NAN : meterReferencedTds(tdsV);
   turbV = voltage(TURB_PIN);
+  turbRaw = analogRead(TURB_PIN);
+  updateTurbidity(turbV, turbRaw >= 4095);
   if (POWER_SENSOR_ANALOG) {
     powerSignalV = voltage(POWER_PIN);
     supplyV = powerSignalV * POWER_DIVIDER_RATIO;
@@ -310,12 +362,6 @@ void sampleSensors() {
   // Buffer points define the transfer curve, not hard input-voltage limits.
   // Extrapolation is identified below; its accuracy needs an independent check.
   phValue = fitPH(phV);
-  if (turbV >= 0.15f && turbV < 3.0f) {
-    if (!turbKnown) cloudy = turbV < TURB_MID_V;
-    else if (turbV < TURB_MID_V - TURB_HYST_V) cloudy = true;
-    else if (turbV > TURB_MID_V + TURB_HYST_V) cloudy = false;
-    turbKnown = true;
-  } else turbKnown = false;
 
   uint32_t echoes[5] = {};
   unsigned validEchoes = 0;
@@ -351,8 +397,10 @@ void sampleSensors() {
   Serial.printf("pH: %.2f | input %.3f V (%s)\n", phValue, phV,
     !isfinite(phValue) ? "invalid: check input/probe/calibration" :
     phV < PH918_V || phV > PH4_V ? "outside buffer span: extrapolated; verify with meter" : "within buffer span");
-  Serial.printf("Turbidity: %s | GPIO35 %.3f V | module approx %.3f V\n",
-                turbKnown ? (cloudy ? "CLOUDY" : "CLEAR") : "UNKNOWN", turbV, turbV * 2);
+  Serial.printf("Turbidity: %s | GPIO35 %.3f V | raw ADC %d/4095 | %s\n",
+                turbKnown ? (cloudy ? "CLOUDY" : "CLEAR") : "UNKNOWN", turbV, turbRaw,
+                turbRaw >= 4095 ? "ADC CLIPPED: clarity unavailable; check signal range" :
+                turbKnown ? "owner sample-based category; NOT NTU calibration" : "invalid/outside measurement range");
   if (PROFILE_LEVEL_ENABLED)
     Serial.printf("Distance: %.1f cm | level %.1f %% | empty 27.0 cm | profile target height %.3f cm\n",
                   distanceCm, levelPct, profileTargetHeightCm);
@@ -594,6 +642,7 @@ void applyRelaySchedules(JsonDocument &control) {
 }
 
 void applyScheduledFeed(JsonDocument &control) {
+  if (!feederCalibrationReady()) return; // never run calibration jogs automatically
   if (!control["automationEnabled"].as<bool>() || !armed || localStop) return;
   const int64_t minute = localEpochMinute();
   if (minute <= lastAutoFeedMinute) return;
@@ -731,6 +780,9 @@ bool cloudCycle() {
   if (temperaturesValid) telemetry["temperatureC"] = (t18 + t19) / 2.0f;
   if (!temperaturesValid) Serial.println("Temperature sensor fault: valid probe pair unavailable; other telemetry continues.");
   telemetry["waterLevelReadingValid"] = levelValid;
+  if (PROFILE_LEVEL_ENABLED)
+    Serial.printf("Water level upload: %.1f %% | profile target %.3f cm | %s\n",
+                  levelPct, profileTargetHeightCm, levelValid ? "valid current echo; volume-based" : "unavailable: echo/profile invalid");
   if (PROFILE_LEVEL_ENABLED) {
     if (profileTargetHeightCm > 0) telemetry["waterLevelTargetHeightCm"] = profileTargetHeightCm;
   }

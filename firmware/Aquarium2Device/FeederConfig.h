@@ -1,12 +1,18 @@
 #pragma once
-// Aquarium 2: owner-confirmed SG90, NOT Aquarium 1's MG90S.
-// Provisional bench positions, NOT a measured mechanical calibration.
-// Main sketch maps 0-180 degrees across 1000-2000us: 135=1750us, 45=1250us.
-// Enable only after the owner confirms an empty, unobstructed feeder test.
-constexpr bool FEEDER_TEST_ENABLED = true; // owner confirmed empty and arm clear
-// Reversed provisional sweep for the owner's requested left turn.
-constexpr int FEEDER_HOME_DEG = 135;
-constexpr int FEEDER_DISPENSE_DEG = 45;
-constexpr uint32_t FEEDER_HOLD_MS = 1500; // owner-requested dwell
-constexpr uint32_t FEEDER_TRAVEL_MS = 600; // settle allowance, not position feedback
-constexpr uint32_t FEEDER_COOLDOWN_MS = 5000; // owner-requested cooldown after return
+// Aquarium 2: owner-confirmed SG90 360-degree CONTINUOUS rotation.
+// Pulses command speed/direction, NOT an angular position. No homing is possible
+// without feedback. Keep the feeder EMPTY and clear during website calibration.
+constexpr bool FEEDER_TEST_ENABLED = true;
+// Leave false until stop, rightward direction and both travel times are observed.
+// While false, website Feed Now is a supervised calibration test; schedules stay off.
+constexpr bool FEEDER_CALIBRATED = false;
+constexpr bool FEEDER_RETURN_TEST_ENABLED = true; // website-only round-trip calibration
+constexpr int FEEDER_STOP_US = 1500; // nominal neutral; physical stop unconfirmed
+constexpr int FEEDER_FORWARD_US = 1600; // owner observed rightward motion at this pulse
+constexpr int FEEDER_REVERSE_US = 1400; // provisional opposite direction
+constexpr uint32_t FEEDER_JOG_MS = 900; // single-leg fallback when return test is disabled
+constexpr uint32_t FEEDER_FORWARD_MS = 900; // owner confirmed this right turn is correct
+constexpr uint32_t FEEDER_REVERSE_MS = 900; // initial return estimate; endpoint NOT verified
+constexpr uint32_t FEEDER_MAX_RUN_MS = 1000; // hard per-leg limit, not servo calibration
+constexpr uint32_t FEEDER_HOLD_MS = 1000; // owner-requested 1-second neutral dwell
+constexpr uint32_t FEEDER_COOLDOWN_MS = 5000;

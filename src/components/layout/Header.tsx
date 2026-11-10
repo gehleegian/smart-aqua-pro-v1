@@ -19,6 +19,8 @@ const pageNames: Record<string, string> = {
   dashboard: 'Dashboard',
   monitoring: 'Real-time Monitoring',
   assessment: 'Aquarium Assessment',
+  recommendations: 'Recommendations',
+  maintenance: 'Aquarium Maintenance',
   alerts: 'Alerts & Notifications',
   datalogs: 'Data Logs',
   reports: 'Reports',

@@ -34,7 +34,7 @@ function renderPanel(recommendations, options = {}) {
     return commonJsModule.exports;
   }
   const { RecommendationsPanel } = load(componentUrl);
-  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A' }));
+  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A', defaultOpen: options.defaultOpen }));
 }
 
 const recommendation = {
@@ -73,6 +73,15 @@ test('only pending recommendations appear, all inside a bounded keyboard-scrolla
 });
 
 test('approved recommendations show traceable measurements, threshold explanation, timestamp and controls', () => {
+test('dedicated page can expand recommendations without changing the dashboard default', () => {
+  const html = renderPanel([recommendation], { defaultOpen: true });
+  assert.match(html, /<details open="" class="group">/);
+  assert.match(html, /1 pending/);
+  assert.match(html, /Applied/);
+  assert.match(html, /Dismiss/);
+});
+
+test('rule explanations, draft badge and existing action controls stay available', () => {
   const html = renderPanel([recommendation]);
   for (const text of ['Problem detected', 'Parameter', 'Temperature', 'Measured value', '25 °C', 'Applicable threshold',
     '20 °C to 24 °C', '24 °C maximum', 'Severity', 'Generated', 'Nov 10, 2026', 'Check first', 'Action', 'Why',

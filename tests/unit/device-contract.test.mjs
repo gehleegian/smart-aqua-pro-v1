@@ -5,6 +5,7 @@ import {
   COMMAND_ACK_TIMEOUT_MS,
   REQUIRE_SENSOR_VALIDITY_FLAGS,
   TELEMETRY_STALE_MS,
+  TELEMETRY_CLOCK_SKEW_MS,
   evaluateTelemetryValidity,
   getCommandStatus,
   getTelemetryFreshness,
@@ -44,6 +45,18 @@ test('freshness: exactly 60 s stays live and older telemetry is offline', () => 
   assert.equal(getTelemetryFreshness({ updatedAt: now - 7_500, online: true }, now), 'live');
   assert.equal(getTelemetryFreshness({ updatedAt: now - 60_000, online: true }, now), 'live');
   assert.equal(getTelemetryFreshness({ updatedAt: now - 60_001, online: true }, now), 'offline');
+});
+
+test('trusted server freshness stays strict; client tolerance is bounded and opt-in', () => {
+  const now = 1793980261525;
+  assert.equal(TELEMETRY_CLOCK_SKEW_MS, 1000);
+  for (const ahead of [1, 8, 1000]) {
+    const telemetry = { updatedAt: now + ahead, online: true };
+    assert.equal(getTelemetryFreshness(telemetry, now), 'unavailable');
+    assert.equal(getTelemetryFreshness(telemetry, now, { allowClockSkew: true }), 'live');
+  }
+  assert.equal(getTelemetryFreshness({ updatedAt: now + 1001 }, now, { allowClockSkew: true }), 'unavailable');
+  assert.equal(getTelemetryFreshness({ updatedAt: now - 60001 }, now, { allowClockSkew: true }), 'offline');
 });
 
 test('every simulator scenario emits only rule-allowed telemetry fields', () => {

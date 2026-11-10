@@ -666,12 +666,13 @@ test('TURBIDITY categorical readings are device-only and enum validated', async 
   await assertFails(set(ref(deviceDatabase('device-b'), path), { ...TELEMETRY, turbidityState: 'Clear' }));
 });
 
-test('LEVEL profile geometry permits only measurable, capacity-valid owner configuration', async () => {
+test('LEVEL profile geometry permits capacity-valid targets without pretending every target is measurable', async () => {
   const profile = { tankLengthCm: 50, tankWidthCm: 30, tankHeightCm: 25, workingWaterVolumeLiters: 9 };
   const path = `devices/${AQUARIUM_A}/control`;
   await assertSucceeds(set(ref(humanDatabase('user-a'), path), { ...CONTROL, waterLevelProfile: profile }));
+  await assertSucceeds(set(ref(humanDatabase('user-a'), path), { ...CONTROL, waterLevelProfile: { ...profile, workingWaterVolumeLiters: 19.9 } }));
   for (const patch of [{ tankLengthCm: 0 }, { tankWidthCm: '30' }, { tankHeightCm: 1 },
-    { workingWaterVolumeLiters: 15 }, { workingWaterVolumeLiters: null }, { arbitrary: true }]) {
+    { workingWaterVolumeLiters: 38 }, { tankHeightCm: 40, workingWaterVolumeLiters: 41 }, { workingWaterVolumeLiters: null }, { arbitrary: true }]) {
     await assertFails(set(ref(humanDatabase('user-a'), path), { ...CONTROL, waterLevelProfile: { ...profile, ...patch } }));
   }
   await assertFails(set(ref(humanDatabase('user-b'), path), { ...CONTROL, waterLevelProfile: profile }));
@@ -688,7 +689,9 @@ test('LEVEL explicitly invalid level preserves other telemetry but cannot preten
   await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelPercent: 0 }));
   await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelReadingValid: true }));
   await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterPresent: true }));
-  await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelTargetHeightCm: 8 }));
+  for (const waterLevelTargetHeightCm of [0, -1, 27, 30, '12'])
+    await assertFails(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelTargetHeightCm }));
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), { ...partial, waterLevelTargetHeightCm: 12.85 }));
   await assertSucceeds(set(ref(deviceDatabase('device-a'), path), { ...TELEMETRY, waterLevelReadingValid: true, waterLevelTargetHeightCm: 6 }));
   await assertFails(set(ref(humanDatabase('user-a'), path), partial));
   await assertFails(set(ref(deviceDatabase('device-b'), path), partial));
