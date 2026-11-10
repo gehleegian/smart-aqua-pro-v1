@@ -6,6 +6,7 @@ import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 import { getFreshTelemetrySnapshot, getDeviceTelemetryState, setDeviceTelemetryClockOffsetMs } from '../../src/types/device.ts';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
 import { formatWaterLevel } from '../../src/utils/monitoringAssessmentCore.ts';
+import { withWaterLevelProfile } from '../../src/utils/waterLevelProfile.ts';
 import ts from 'typescript';
 
 // The mobile app lives in a sibling checkout (../smart-aqua-mobile). When it is
@@ -69,7 +70,8 @@ function webFrom(device) {
       { source: 'unavailable', assessedAt: now, origin: 'none' });
   }
   const thresholds = resolveThresholds(ruleConfig.speciesById.goldfish, readAquariumOverrides(profile));
-  const result = evaluateAquarium(device, thresholds, ruleConfig.rules, { hasFiltrationSystem: profile.hasFiltrationSystem });
+  // Match the real web adapter, including its existing level-validity mapping.
+  const result = evaluateAquarium(withWaterLevelProfile(profile, device), thresholds, ruleConfig.rules, { hasFiltrationSystem: profile.hasFiltrationSystem });
   return toConditionAssessment(result, { source: 'live', assessedAt: now, origin: 'client' });
 }
 mobileTest('web and mobile adapters produce identical assessments', () => {
@@ -155,8 +157,20 @@ test('water-level display hides invalid and unavailable values while preserving 
   assert.deepEqual(result.matchedRules.map((rule) => [rule.ruleId, rule.parameter]), [['sensor_fault', 'waterLevelPercent']]);
 });
 
-mobileTest('future timestamps are unavailable in both apps, including just beyond now', () => {
-  for (const delta of [1, 1000, 86_400_000]) {
+mobileTest('bounded server-clock estimate skew preserves readings and assessment parity', () => {
+  for (const delta of [1, 3, 8, 1000]) {
+    const telemetry = deviceFrom({ updatedAt: now + delta });
+    assert.equal(getDeviceTelemetryState(telemetry, now), 'live');
+    assert.ok(getFreshTelemetrySnapshot(telemetry, now));
+    const mobile = assessTelemetry(profile, telemetry, 'live', now, ruleConfig);
+    assert.equal(mobile.source, 'live');
+    assert.deepEqual(mobile, webFrom(telemetry));
+    assert.equal(getTelemetryDisplay(telemetry, null, now).telemetry, telemetry);
+  }
+});
+
+mobileTest('timestamps beyond the bounded client clock-skew allowance are unavailable in both apps', () => {
+  for (const delta of [1001, 60_000, 86_400_000]) {
     const telemetry = deviceFrom({ updatedAt: now + delta });
     assert.equal(getDeviceTelemetryState(telemetry, now), 'unavailable');
     assert.equal(getFreshTelemetrySnapshot(telemetry, now), null);
@@ -177,7 +191,7 @@ mobileTest('freshness respects exact stale boundary and server clock correction'
   try {
     setDeviceTelemetryClockOffsetMs(60_000);
     assert.equal(getDeviceTelemetryState(deviceFrom({ updatedAt: now + 60_000 }), now), 'live');
-    assert.equal(getDeviceTelemetryState(deviceFrom({ updatedAt: now + 60_001 }), now), 'unavailable');
+    assert.equal(getDeviceTelemetryState(deviceFrom({ updatedAt: now + 61_001 }), now), 'unavailable');
   } finally {
     setDeviceTelemetryClockOffsetMs(0);
   }
