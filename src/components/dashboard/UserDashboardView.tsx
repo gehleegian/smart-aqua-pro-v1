@@ -13,6 +13,7 @@ import { ConditionPanel } from '../condition/ConditionPanel';
 import { DraftThresholdsBadge, OverallConditionBadge } from '../condition/ConditionBadges';
 import { NextCleaningCard } from '../condition/NextCleaningCard';
 import { RecommendationsPanel } from '../condition/RecommendationsPanel';
+import { requestTankFocus } from '../../services/tankFocus';
 
 interface UserDashboardViewProps {
   liveDataWarning: ReactNode;
@@ -261,7 +262,10 @@ export function UserDashboardView({
 
       <div className="grid gap-6 lg:grid-cols-2">
         <RecommendationsPanel aquariumId={selectedTank.id} aquariumName={selectedTank.name} />
-        <NextCleaningCard cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow} />
+        <NextCleaningCard key={selectedTank.id} aquariumId={selectedTank.id} aquariumName={selectedTank.name}
+          cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow}
+          onOpenMaintenance={() => { requestTankFocus(selectedTank.id); onNavigate('maintenance'); }}
+        />
       </div>
 
       <Card>
