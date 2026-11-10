@@ -1,42 +1,53 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, ClipboardCheck, RefreshCw, Settings, Wrench } from 'lucide-react';
-import { useState } from 'react';
-import { ArrowLeft, ClipboardCheck, ClipboardList, RefreshCw, Settings, Wrench } from 'lucide-react';
-import { CommandHistory, CommandStatusBadge } from './CommandHistory';
-import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
-import { MaintenanceHistory } from '../maintenance/MaintenanceHistory';
-import { nextScheduledText } from '../../utils/schedule';
-import { useNow } from '../../hooks/useNow';
-import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
-import { getSensorDisplay, getTurbidityDisplay } from '../../utils/sensorDisplay';
-import type { AutomationSettings } from '../../types/aquarium';
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  ClipboardCheck,
+  ClipboardList,
+  RefreshCw,
+  Settings,
+  Wrench,
+} from "lucide-react";
+import { CommandHistory, CommandStatusBadge } from "./CommandHistory";
+import { LogMaintenanceModal } from "../maintenance/LogMaintenanceModal";
+import { MaintenanceHistory } from "../maintenance/MaintenanceHistory";
+import { nextScheduledText } from "../../utils/schedule";
+import { useNow } from "../../hooks/useNow";
+import { formatWaterLevel } from "../../utils/monitoringAssessmentCore";
+import {
+  getSensorDisplay,
+  getTurbidityDisplay,
+} from "../../utils/sensorDisplay";
+import type { AutomationSettings } from "../../types/aquarium";
 import type {
   AssessmentSeverity,
   ManualActionDisplay,
   MonitoringAquarium,
   SystemField,
   SystemMode,
-} from '../../types/monitoring';
+} from "../../types/monitoring";
 import {
   formatAutomationTimes,
   formatAutomationTime,
-} from '../../utils/monitoringHelpers';
+} from "../../utils/monitoringHelpers";
 import {
   formatBiomass,
   formatEstimatedBioload,
-} from '../../utils/aquariumProfileCalculations';
-import Badge from '../ui/Badge';
-import Button from '../ui/Button';
-import { Card, CardContent, CardHeader } from '../ui/Card';
-import { getDeviceTelemetryHistory } from '../../services/deviceService';
-import { buildDateKeys, formatDateKey } from '../../utils/dataLogsHelpers';
-import { calculateCurrentWaterVolume, calculateHistoricalWaterLoss } from '../../utils/waterVolumeCalculations';
-import { evaluateWaterLevelProfile } from '../../utils/waterLevelProfile';
-import type { DeviceTelemetryLogEntry } from '../../types/device';
+} from "../../utils/aquariumProfileCalculations";
+import Badge from "../ui/Badge";
+import Button from "../ui/Button";
+import { Card, CardContent, CardHeader } from "../ui/Card";
+import { getDeviceTelemetryHistory } from "../../services/deviceService";
+import { buildDateKeys, formatDateKey } from "../../utils/dataLogsHelpers";
+import {
+  calculateCurrentWaterVolume,
+  calculateHistoricalWaterLoss,
+} from "../../utils/waterVolumeCalculations";
+import { evaluateWaterLevelProfile } from "../../utils/waterLevelProfile";
+import type { DeviceTelemetryLogEntry } from "../../types/device";
 
 const deviceUpdateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'medium',
+  dateStyle: "medium",
+  timeStyle: "medium",
 });
 
 interface AquariumDetailsViewProps {
@@ -116,9 +127,10 @@ export function AquariumDetailsView({
         </div>
       ) : null}
 
-      {aquarium.telemetrySource === 'simulated' ? (
+      {aquarium.telemetrySource === "simulated" ? (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-          SIMULATED DATA — for software testing only. These readings are not from sensors and cannot trigger equipment controls.
+          SIMULATED DATA — for software testing only. These readings are not
+          from sensors and cannot trigger equipment controls.
         </div>
       ) : null}
 
@@ -126,20 +138,28 @@ export function AquariumDetailsView({
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-white">{aquarium.name}</h3>
-              <p className="mt-1 text-sm text-slate-400">{aquarium.species.join(', ')}</p>
+              <h3 className="text-lg font-semibold text-white">
+                {aquarium.name}
+              </h3>
+              <p className="mt-1 text-sm text-slate-400">
+                {aquarium.species.join(", ")}
+              </p>
             </div>
-            <Badge variant={getSeverityVariant(aquarium.assessment.overallSeverity)}>
+            <Badge
+              variant={getSeverityVariant(aquarium.assessment.overallSeverity)}
+            >
               {aquarium.telemetrySource} · {aquarium.assessment.overallSeverity}
             </Badge>
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            Last device update:{' '}
+            Last device update:{" "}
             {aquarium.lastUpdatedAt ? (
               <time dateTime={new Date(aquarium.lastUpdatedAt).toISOString()}>
                 {deviceUpdateFormatter.format(aquarium.lastUpdatedAt)}
               </time>
-            ) : 'No telemetry received'}
+            ) : (
+              "No telemetry received"
+            )}
           </p>
         </CardHeader>
         <CardContent>
@@ -147,50 +167,142 @@ export function AquariumDetailsView({
             {(() => {
               const live = aquarium.hasFreshTelemetry;
               const readings = [
-                { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
-                { label: 'Water Level', display: live && aquarium.hasFreshWaterLevelTelemetry === false
-                  ? { value: '--', status: aquarium.waterLevelMessage || 'No valid water-level reading' }
-                  : { ...getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)),
-                    ...(live && aquarium.hasFreshWaterLevelTelemetry && aquarium.waterLevelMessage ? { status: aquarium.waterLevelMessage } : {}) } },
                 {
-                  label: 'TDS',
-                  display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
-                    typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'),
+                  label: "Temperature",
+                  display: getSensorDisplay(
+                    aquarium.sensorValidity,
+                    "temperature",
+                    live,
+                    () => `${aquarium.temp.toFixed(1)} C`,
+                  ),
                 },
-                { label: 'pH Level', display: getSensorDisplay(aquarium.sensorValidity, 'ph', live, () => typeof aquarium.ph === 'number' ? aquarium.ph.toFixed(1) : '--') },
-                { label: 'Turbidity', display: getTurbidityDisplay(aquarium.sensorValidity, live, aquarium.turbidityState) },
+                {
+                  label: "Water Level",
+                  display:
+                    live && aquarium.hasFreshWaterLevelTelemetry === false
+                      ? {
+                          value: "--",
+                          status:
+                            aquarium.waterLevelMessage ||
+                            "No valid water-level reading",
+                        }
+                      : {
+                          ...getSensorDisplay(
+                            aquarium.sensorValidity,
+                            "waterLevel",
+                            live,
+                            () => formatWaterLevel(aquarium.level),
+                          ),
+                          ...(live &&
+                          aquarium.hasFreshWaterLevelTelemetry &&
+                          aquarium.waterLevelMessage
+                            ? { status: aquarium.waterLevelMessage }
+                            : {}),
+                        },
+                },
+                {
+                  label: "TDS",
+                  display: getSensorDisplay(
+                    aquarium.sensorValidity,
+                    "tds",
+                    live,
+                    () =>
+                      typeof aquarium.tdsPpm === "number"
+                        ? `${Math.round(aquarium.tdsPpm)} ppm`
+                        : "--",
+                  ),
+                },
+                {
+                  label: "pH Level",
+                  display: getSensorDisplay(
+                    aquarium.sensorValidity,
+                    "ph",
+                    live,
+                    () =>
+                      typeof aquarium.ph === "number"
+                        ? aquarium.ph.toFixed(1)
+                        : "--",
+                  ),
+                },
+                {
+                  label: "Turbidity",
+                  display: getTurbidityDisplay(
+                    aquarium.sensorValidity,
+                    live,
+                    aquarium.turbidityState,
+                  ),
+                },
               ];
               return readings.map(({ label, display }) => (
-                <Reading key={label} label={label} value={display.value} status={display.status} />
+                <Reading
+                  key={label}
+                  label={label}
+                  value={display.value}
+                  status={display.status}
+                />
               ));
             })()}
             <Reading
               label="Power Status"
-              value={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus || '--' : '--'}
-              status={aquarium.hasFreshPowerTelemetry ? aquarium.powerStatus === 'Unknown' ? 'Power detector setup not verified' : 'Live telemetry' : 'Waiting for telemetry'}
+              value={
+                aquarium.hasFreshPowerTelemetry
+                  ? aquarium.powerStatus || "--"
+                  : "--"
+              }
+              status={
+                aquarium.hasFreshPowerTelemetry
+                  ? aquarium.powerStatus === "Unknown"
+                    ? "Power detector setup not verified"
+                    : "Live telemetry"
+                  : "Waiting for telemetry"
+              }
             />
             <Reading
               label="Filtration Output"
-              value={aquarium.telemetryState === 'live' ? aquarium.reportedFilterState ?? '--' : '--'}
-              status={aquarium.telemetryState === 'live' ? 'Device-reported output state' : 'Waiting for live telemetry'}
+              value={
+                aquarium.telemetryState === "live"
+                  ? (aquarium.reportedFilterState ?? "--")
+                  : "--"
+              }
+              status={
+                aquarium.telemetryState === "live"
+                  ? "Device-reported output state"
+                  : "Waiting for live telemetry"
+              }
             />
             <Reading
               label="Lighting Output"
-              value={aquarium.telemetryState === 'live' ? aquarium.reportedLightState ?? '--' : '--'}
-              status={aquarium.telemetryState === 'live' ? 'Device-reported output state' : 'Waiting for live telemetry'}
+              value={
+                aquarium.telemetryState === "live"
+                  ? (aquarium.reportedLightState ?? "--")
+                  : "--"
+              }
+              status={
+                aquarium.telemetryState === "live"
+                  ? "Device-reported output state"
+                  : "Waiting for live telemetry"
+              }
             />
             <Reading
               label="Equipment Diagnostic"
-              value={aquarium.telemetryState === 'live' ? aquarium.reportedEquipmentStatus ?? '--' : '--'}
-              status={aquarium.telemetryState === 'live' ? 'Device-reported diagnostic; not physical verification' : 'Waiting for live telemetry'}
+              value={
+                aquarium.telemetryState === "live"
+                  ? (aquarium.reportedEquipmentStatus ?? "--")
+                  : "--"
+              }
+              status={
+                aquarium.telemetryState === "live"
+                  ? "Device-reported diagnostic; not physical verification"
+                  : "Waiting for live telemetry"
+              }
             />
             <Reading
               label="Estimated Bioload"
               value={formatEstimatedBioload(aquarium.estimatedBioloadGL)}
               status={
                 aquarium.estimatedBioloadGL === undefined
-                  ? 'Complete the aquarium profile'
-                  : 'Profile derived'
+                  ? "Complete the aquarium profile"
+                  : "Profile derived"
               }
             />
           </div>
@@ -202,15 +314,21 @@ export function AquariumDetailsView({
       <Card>
         <CardHeader>
           <div>
-            <h3 className="text-lg font-semibold text-white">Aquarium Profile</h3>
+            <h3 className="text-lg font-semibold text-white">
+              Aquarium Profile
+            </h3>
             <p className="mt-1 text-sm text-slate-400">
-              Structural details used to identify this aquarium. These values do not alter sensor classification rules.
+              Structural details used to identify this aquarium. These values do
+              not alter sensor classification rules.
             </p>
           </div>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            <ProfileRow label="Aquarium type" value={aquarium.tankType || 'Profile incomplete'} />
+            <ProfileRow
+              label="Aquarium type"
+              value={aquarium.tankType || "Profile incomplete"}
+            />
             <ProfileRow
               label="Tank dimensions"
               value={
@@ -218,7 +336,7 @@ export function AquariumDetailsView({
                 aquarium.tankWidthCm !== undefined &&
                 aquarium.tankHeightCm !== undefined
                   ? `${aquarium.tankLengthCm} × ${aquarium.tankWidthCm} × ${aquarium.tankHeightCm} cm`
-                  : 'Profile incomplete'
+                  : "Profile incomplete"
               }
             />
             <ProfileRow
@@ -226,26 +344,39 @@ export function AquariumDetailsView({
               value={
                 aquarium.workingWaterVolumeLiters !== undefined
                   ? `${aquarium.workingWaterVolumeLiters} L`
-                  : 'Profile incomplete'
+                  : "Profile incomplete"
               }
             />
             <ProfileRow
               label="Filtration system installed"
               value={
                 aquarium.hasFiltrationSystem === true
-                  ? 'Yes'
+                  ? "Yes"
                   : aquarium.hasFiltrationSystem === false
-                    ? 'No'
-                    : 'Profile incomplete'
+                    ? "No"
+                    : "Profile incomplete"
               }
             />
-            <ProfileRow label="Fish species" value={aquarium.species.join(', ') || 'Profile incomplete'} />
+            <ProfileRow
+              label="Fish species"
+              value={aquarium.species.join(", ") || "Profile incomplete"}
+            />
             <ProfileRow
               label="Fish quantity"
-              value={aquarium.fishCount !== undefined ? String(aquarium.fishCount) : 'Profile incomplete'}
+              value={
+                aquarium.fishCount !== undefined
+                  ? String(aquarium.fishCount)
+                  : "Profile incomplete"
+              }
             />
-            <ProfileRow label="Total fish biomass" value={formatBiomass(aquarium.totalFishBiomassG)} />
-            <ProfileRow label="Estimated bioload" value={formatEstimatedBioload(aquarium.estimatedBioloadGL)} />
+            <ProfileRow
+              label="Total fish biomass"
+              value={formatBiomass(aquarium.totalFishBiomassG)}
+            />
+            <ProfileRow
+              label="Estimated bioload"
+              value={formatEstimatedBioload(aquarium.estimatedBioloadGL)}
+            />
           </dl>
         </CardContent>
       </Card>
@@ -253,7 +384,9 @@ export function AquariumDetailsView({
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-semibold text-white">Manual Controls</h3>
+            <h3 className="text-lg font-semibold text-white">
+              Manual Controls
+            </h3>
           </CardHeader>
           <CardContent>
             {controlsDisabled ? (
@@ -262,15 +395,19 @@ export function AquariumDetailsView({
               </p>
             ) : null}
             <div className="mb-4 flex rounded-lg border border-slate-600/40 bg-slate-900/45 p-1">
-              {(['manual', 'automation'] as SystemMode[]).map((mode) => (
+              {(["manual", "automation"] as SystemMode[]).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   disabled={savingMode || controlsDisabled || !canManage}
-                  title={canManage ? undefined : 'Only the owner changes the mode'}
+                  title={
+                    canManage ? undefined : "Only the owner changes the mode"
+                  }
                   onClick={() => onModeChange(mode)}
                   className={`flex-1 rounded-md px-3 py-2 text-sm ${
-                    systemMode === mode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                    systemMode === mode
+                      ? "bg-teal-600 text-white"
+                      : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
                   }`}
                 >
                   {mode}
@@ -279,24 +416,38 @@ export function AquariumDetailsView({
             </div>
 
             <p className="mb-4 text-xs text-slate-400">
-              Manual controls work while automation is enabled. Light and filter overrides last until the next scheduled change.
+              Manual controls work while automation is enabled. Light and filter
+              overrides last until the next scheduled change.
             </p>
-            {aquarium.commandStatus !== 'none' ? (
-              <p className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-300" role="status">
-                Last command: <CommandStatusBadge status={aquarium.commandStatus} />
+            {aquarium.commandStatus !== "none" ? (
+              <p
+                className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-300"
+                role="status"
+              >
+                Last command:{" "}
+                <CommandStatusBadge status={aquarium.commandStatus} />
               </p>
             ) : null}
             <div className="space-y-3">
-              {(['feeder', 'light', 'filter'] as SystemField[]).map((field) => (
-                <div key={field} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3">
+              {(["feeder", "light", "filter"] as SystemField[]).map((field) => (
+                <div
+                  key={field}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-600/20 bg-slate-900/30 p-3"
+                >
                   <div>
                     <p className="capitalize text-white">{field}</p>
-                    <p className="text-xs text-slate-500">{manualActions[field].status}</p>
+                    <p className="text-xs text-slate-500">
+                      {manualActions[field].status}
+                    </p>
                   </div>
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={controlsDisabled || manualActions[field].disabled || Boolean(savingSystemKey)}
+                    disabled={
+                      controlsDisabled ||
+                      manualActions[field].disabled ||
+                      Boolean(savingSystemKey)
+                    }
                     onClick={() => onManualAction(field)}
                   >
                     {manualActions[field].buttonLabel}
@@ -312,7 +463,12 @@ export function AquariumDetailsView({
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-white">Automation</h3>
               {canManage ? (
-                <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={onOpenAutomationEditor}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={controlsDisabled}
+                  onClick={onOpenAutomationEditor}
+                >
                   <Settings className="h-4 w-4" />
                   Edit
                 </Button>
@@ -324,115 +480,254 @@ export function AquariumDetailsView({
           <CardContent>
             {aquarium.automationSettings ? (
               <div className="space-y-3 text-sm">
-                <Row label="Status" value={automationEnabled ? 'Enabled' : 'Disabled'} />
+                <Row
+                  label="Status"
+                  value={automationEnabled ? "Enabled" : "Disabled"}
+                />
                 <Row label="Schedule time zone" value="UTC+8" />
-                <Row label="Feeding" value={formatAutomationTimes(automationSettings.feedingTimes)} />
-                <Row label="Light On" value={formatAutomationTime(automationSettings.lightOnTime)} />
-                <Row label="Light Off" value={formatAutomationTime(automationSettings.lightOffTime)} />
-                <Row label="Filtration" value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`} />
+                <Row
+                  label="Feeding"
+                  value={formatAutomationTimes(automationSettings.feedingTimes)}
+                />
+                <Row
+                  label="Light On"
+                  value={formatAutomationTime(automationSettings.lightOnTime)}
+                />
+                <Row
+                  label="Light Off"
+                  value={formatAutomationTime(automationSettings.lightOffTime)}
+                />
+                <Row
+                  label="Filtration"
+                  value={`${formatAutomationTime(automationSettings.filtrationStartTime)} for ${automationSettings.filtrationRuntimeHours}h`}
+                />
               </div>
             ) : (
               <div className="space-y-2 text-sm">
                 <Row label="Status" value="No schedule set" />
                 <p className="text-slate-400">
-                  {canManage ? 'Nothing runs automatically. Use Edit to set feeding, light and filter times.' : 'Nothing runs automatically. An owner can set a schedule.'}
+                  {canManage
+                    ? "Nothing runs automatically. Use Edit to set feeding, light and filter times."
+                    : "Nothing runs automatically. An owner can set a schedule."}
                 </p>
               </div>
             )}
-            {aquarium.automationSettings && automationEnabled && nextScheduledText(automationSettings, now) ? (
-              <p className="mt-4 text-sm text-teal-100">{nextScheduledText(automationSettings, now)}</p>
+            {aquarium.automationSettings &&
+            automationEnabled &&
+            nextScheduledText(automationSettings, now) ? (
+              <p className="mt-4 text-sm text-teal-100">
+                {nextScheduledText(automationSettings, now)}
+              </p>
             ) : null}
-            <p className="mt-2 text-xs text-slate-400">Times are Asia/Manila. The device runs the schedule on its own clock, even if Wi-Fi drops.</p>
+            <p className="mt-2 text-xs text-slate-400">
+              Times are Asia/Manila. The device runs the schedule on its own
+              clock, even if Wi-Fi drops.
+            </p>
             {canManage && aquarium.automationSettings ? (
-              <Button className="mt-5 w-full" disabled={controlsDisabled || savingAutomationEnabled || savingAutomation} onClick={onAutomationToggle}>
-                {automationEnabled ? 'Disable Automation' : 'Enable Automation'}
+              <Button
+                className="mt-5 w-full"
+                disabled={
+                  controlsDisabled ||
+                  savingAutomationEnabled ||
+                  savingAutomation
+                }
+                onClick={onAutomationToggle}
+              >
+                {automationEnabled ? "Disable Automation" : "Enable Automation"}
               </Button>
             ) : null}
           </CardContent>
         </Card>
       </div>
 
-      {aquarium.telemetrySource !== 'simulated' ? (
+      {aquarium.telemetrySource !== "simulated" ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <MaintenanceHistory
             aquariumId={aquarium.id}
-            action={<Button size="sm" onClick={() => setLogging(true)}><Wrench className="h-4 w-4" aria-hidden="true" /> Log maintenance</Button>}
+            action={
+              <Button size="sm" onClick={() => setLogging(true)}>
+                <Wrench className="h-4 w-4" aria-hidden="true" /> Log
+                maintenance
+              </Button>
+            }
           />
           <CommandHistory aquariumId={aquarium.id} />
         </div>
       ) : null}
-      {logging ? <LogMaintenanceModal aquariumId={aquarium.id} aquariumName={aquarium.name} recommendation={null} onClose={() => setLogging(false)} /> : null}
+      {logging ? (
+        <LogMaintenanceModal
+          aquariumId={aquarium.id}
+          aquariumName={aquarium.name}
+          recommendation={null}
+          onClose={() => setLogging(false)}
+        />
+      ) : null}
     </div>
   );
 }
 
 function getSeverityVariant(severity: AssessmentSeverity) {
-  if (severity === 'normal') return 'success' as const;
-  if (severity === 'critical') return 'danger' as const;
-  if (severity === 'warning') return 'warning' as const;
-  return 'default' as const;
+  if (severity === "normal") return "success" as const;
+  if (severity === "critical") return "danger" as const;
+  if (severity === "warning") return "warning" as const;
+  return "default" as const;
 }
 
-function WaterVolumeSummary({ aquarium, now }: { aquarium: MonitoringAquarium; now: number }) {
+function WaterVolumeSummary({
+  aquarium,
+  now,
+}: {
+  aquarium: MonitoringAquarium;
+  now: number;
+}) {
   const [history, setHistory] = useState<{
-    aquariumId: string; entries: DeviceTelemetryLogEntry[]; error: string;
+    aquariumId: string;
+    entries: DeviceTelemetryLogEntry[];
+    error: string;
   } | null>(null);
   const dateKey = formatDateKey(new Date(now));
   const calibration = evaluateWaterLevelProfile(aquarium);
   const hasCalibration = Boolean(calibration.profile);
   useEffect(() => {
-    if (!hasCalibration || aquarium.telemetrySource === 'simulated') return;
+    if (!hasCalibration || aquarium.telemetrySource === "simulated") return;
     let cancelled = false;
     const keys = buildDateKeys(dateKey, 2);
-    void Promise.all(keys.map((key) => getDeviceTelemetryHistory(aquarium.id, key)))
+    void Promise.all(
+      keys.map((key) => getDeviceTelemetryHistory(aquarium.id, key)),
+    )
       .then((days) => {
-        if (!cancelled) setHistory({ aquariumId: aquarium.id, entries: days.flat().sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch), error: '' });
+        if (!cancelled)
+          setHistory({
+            aquariumId: aquarium.id,
+            entries: days
+              .flat()
+              .sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch),
+            error: "",
+          });
       })
       .catch((error: unknown) => {
-        if (!cancelled) setHistory({ aquariumId: aquarium.id, entries: [], error: error instanceof Error ? error.message : 'History could not be loaded.' });
+        if (!cancelled)
+          setHistory({
+            aquariumId: aquarium.id,
+            entries: [],
+            error:
+              error instanceof Error
+                ? error.message
+                : "History could not be loaded.",
+          });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [aquarium.id, aquarium.telemetrySource, hasCalibration, dateKey]);
 
   const current = !hasCalibration
-    ? { status: 'unavailable' as const, reason: `Calibration required: ${calibration.message}` }
-    : aquarium.telemetrySource === 'live' && aquarium.waterLevelObservation
-      ? calculateCurrentWaterVolume(aquarium, aquarium.waterLevelObservation, now)
-      : { status: 'unavailable' as const, reason: 'Waiting for device: a fresh water-level reading is required.' };
+    ? {
+        status: "unavailable" as const,
+        reason: `Calibration required: ${calibration.message}`,
+      }
+    : aquarium.telemetrySource === "live" && aquarium.waterLevelObservation
+      ? calculateCurrentWaterVolume(
+          aquarium,
+          aquarium.waterLevelObservation,
+          now,
+        )
+      : {
+          status: "unavailable" as const,
+          reason:
+            "Waiting for device: a fresh water-level reading is required.",
+        };
   const entries = history?.aquariumId === aquarium.id ? history.entries : [];
   const recent = entries.slice(-289);
   const loss = !hasCalibration
-    ? { status: 'unavailable' as const, reason: 'Calibration required: save valid tank dimensions and operational volume.' }
+    ? {
+        status: "unavailable" as const,
+        reason:
+          "Calibration required: save valid tank dimensions and operational volume.",
+      }
     : history?.aquariumId !== aquarium.id
-      ? { status: 'unavailable' as const, reason: 'Loading historical measurements.' }
+      ? {
+          status: "unavailable" as const,
+          reason: "Loading historical measurements.",
+        }
       : history.error
-        ? { status: 'unavailable' as const, reason: `History unavailable: ${history.error}` }
-        : calculateHistoricalWaterLoss(aquarium, recent.map((entry) => ({
-          waterLevelPercent: entry.waterLevelPercent,
-          waterLevelReadingValid: entry.waterLevelReadingValid,
-          waterLevelTargetHeightCm: entry.waterLevelTargetHeightCm,
-          updatedAt: entry.recordedAtEpoch,
-        })));
+        ? {
+            status: "unavailable" as const,
+            reason: `History unavailable: ${history.error}`,
+          }
+        : calculateHistoricalWaterLoss(
+            aquarium,
+            recent.map((entry) => ({
+              waterLevelPercent: entry.waterLevelPercent,
+              waterLevelReadingValid: entry.waterLevelReadingValid,
+              waterLevelTargetHeightCm: entry.waterLevelTargetHeightCm,
+              updatedAt: entry.recordedAtEpoch,
+            })),
+          );
 
-  return <Card>
-    <CardHeader><h3 className="text-lg font-semibold text-white">Water volume and observed loss</h3></CardHeader>
-    <CardContent className="space-y-3 text-sm text-slate-300">
-      {current.status === 'available' ? <>
-        <p>Estimated current volume: {current.currentVolumeLiters} L</p>
-        <p>Operational target: {current.operationalTargetLiters} L · Tank capacity: {current.tankCapacityLiters} L</p>
-        <p>Estimated volume to target: {current.volumeToOperationalTargetLiters} L</p>
-        <p className="text-xs text-slate-400">Geometry-based estimate from the current level, measured {deviceUpdateFormatter.format(current.measuredAt)}. The target is below total tank capacity.</p>
-      </> : <p>Current volume unavailable: {current.reason.startsWith('A valid synchronized') ? `Waiting for device: ${current.reason}` : current.reason}</p>}
-      {loss.status === 'available' ? <p>
-        Observed decrease: {loss.observedDecreaseLiters} L from {deviceUpdateFormatter.format(loss.from)} to {deviceUpdateFormatter.format(loss.to)}.
-        Average over that period: {loss.averageObservedDecreaseLitersPerDay} L/day.
-      </p> : <p>Historical loss unavailable: {loss.reason}</p>}
-      <p className="text-xs text-slate-400">Observed changes do not identify evaporation or leaks. A refill or water change, missing samples, or changed calibration interrupts the estimate. Values are informational; confirm the actual level before any maintenance.</p>
-    </CardContent>
-  </Card>;
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="text-lg font-semibold text-white">
+          Water volume and observed loss
+        </h3>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm text-slate-300">
+        {current.status === "available" ? (
+          <>
+            <p>Estimated current volume: {current.currentVolumeLiters} L</p>
+            <p>
+              Operational target: {current.operationalTargetLiters} L · Tank
+              capacity: {current.tankCapacityLiters} L
+            </p>
+            <p>
+              Estimated volume to target:{" "}
+              {current.volumeToOperationalTargetLiters} L
+            </p>
+            <p className="text-xs text-slate-400">
+              Geometry-based estimate from the current level, measured{" "}
+              {deviceUpdateFormatter.format(current.measuredAt)}. The target is
+              below total tank capacity.
+            </p>
+          </>
+        ) : (
+          <p>
+            Current volume unavailable:{" "}
+            {current.reason.startsWith("A valid synchronized")
+              ? `Waiting for device: ${current.reason}`
+              : current.reason}
+          </p>
+        )}
+        {loss.status === "available" ? (
+          <p>
+            Observed decrease: {loss.observedDecreaseLiters} L from{" "}
+            {deviceUpdateFormatter.format(loss.from)} to{" "}
+            {deviceUpdateFormatter.format(loss.to)}. Average over that period:{" "}
+            {loss.averageObservedDecreaseLitersPerDay} L/day.
+          </p>
+        ) : (
+          <p>Historical loss unavailable: {loss.reason}</p>
+        )}
+        <p className="text-xs text-slate-400">
+          Observed changes do not identify evaporation or leaks. A refill or
+          water change, missing samples, or changed calibration interrupts the
+          estimate. Values are informational; confirm the actual level before
+          any maintenance.
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
-function Reading({ label, value, status }: { label: string; value: string; status: string }) {
+function Reading({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: string;
+  status: string;
+}) {
   return (
     <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
       <p className="text-sm text-slate-400">{label}</p>
