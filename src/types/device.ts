@@ -218,7 +218,7 @@ export function getDeviceTelemetryState(
   telemetry: DeviceTelemetry | null | undefined,
   now = Date.now()
 ): DeviceTelemetryState {
-  return getTelemetryFreshness(telemetry, now + deviceTelemetryClockOffsetMs);
+  return getTelemetryFreshness(telemetry, now + deviceTelemetryClockOffsetMs, { allowClockSkew: true });
 }
 
 export function hasFreshDeviceTelemetry(

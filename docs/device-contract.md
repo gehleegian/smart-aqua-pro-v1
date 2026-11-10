@@ -109,6 +109,14 @@ The device writes the whole node in one `set`. Any field not in this table is re
 - **Offline:** telemetry older than 60 s, or `online: false`.
 - **Unavailable:** `updatedAt` missing, before 2000-01-01, or in the future (after correcting with `.info/serverTimeOffset`).
 
+Client clock-estimate correction (2026-11-10): web and mobile explicitly allow
+`TELEMETRY_CLOCK_SKEW_MS = 1_000` ms ahead of their corrected clock estimate.
+This prevents a few milliseconds of estimation error from blanking current
+readings. Anything further ahead remains unavailable. No timestamps are
+rewritten, and the 60 s stale boundary is unchanged. Trusted server callers
+retain the default strict future-timestamp check (no allowance), so server-side
+ingestion, rule evaluation and offline alerts keep their existing policy.
+
 ### 2.2 Validity (decision 4, AGENTS.md §5)
 
 Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets one of three results:
