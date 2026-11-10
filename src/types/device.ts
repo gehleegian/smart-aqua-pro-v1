@@ -59,6 +59,8 @@ export interface DeviceTelemetryLogEntry {
   temperatureC: number;
   temperatureReadingValid?: boolean;
   waterLevelPercent: number;
+  waterLevelReadingValid?: boolean;
+  waterLevelTargetHeightCm?: number;
   waterPresent?: boolean;
   tdsPpm?: number;
   tdsPercent?: number;

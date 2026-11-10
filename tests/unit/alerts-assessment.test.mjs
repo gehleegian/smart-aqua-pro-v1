@@ -28,11 +28,11 @@ function telemetry(patch = {}) {
   };
 }
 
-function alertsFor(shadowTelemetry, at = now) {
+function alertsFor(shadowTelemetry, at = now, config = seedRuleConfig()) {
   const shadows = shadowTelemetry === undefined
     ? {}
     : { 'aq-1': { telemetry: shadowTelemetry, control: null, latestCommand: null } };
-  return buildAlertCandidates(mergeDashboardAquariums(mapDashboardAquariums([profile]), shadows, at, seedRuleConfig()));
+  return buildAlertCandidates(mergeDashboardAquariums(mapDashboardAquariums([profile]), shadows, at, config));
 }
 
 const WATER_CATEGORIES = new Set(['temperature', 'ph', 'tds', 'turbidity', 'water_level', 'water_quality']);
@@ -67,17 +67,20 @@ test('zero, sentinel, and flagged-invalid readings never raise water-condition a
 });
 
 test('a confirmed empty tank (0% with waterPresent=false) is still a real critical alert', () => {
-  const alerts = waterAlerts(alertsFor(telemetry({ waterLevelPercent: 0, waterPresent: false })));
+  const reading = telemetry({ waterLevelPercent: 0, waterPresent: false });
+  assert.deepEqual(waterAlerts(alertsFor(reading)), [], 'draft rules cannot create live alerts');
+  const alerts = waterAlerts(alertsFor(reading, now, seedRuleConfig({ approved: true })));
   assert.deepEqual(alerts.map((a) => [a.category, a.type]), [['water_level', 'critical']]);
 });
 
 test('valid out-of-range live readings raise alerts from the shared assessment', () => {
-  const alerts = alertsFor(telemetry({ temperatureC: 26.5, ph: 8.12, waterLevelPercent: 15.7 }));
+  const approved = seedRuleConfig({ approved: true });
+  const alerts = alertsFor(telemetry({ temperatureC: 26.5, ph: 8.12, waterLevelPercent: 15.7 }), now, approved);
   const byCategory = Object.fromEntries(alerts.map((a) => [a.category, a.type]));
   assert.equal(byCategory.temperature, 'critical');
-  // Draft rule: pH critical only beyond the 7.5 max + 10% (8.25); 8.12 is a warning.
+  // The test-approved rule treats pH as critical only beyond 8.25; 8.12 is a warning.
   assert.equal(byCategory.ph, 'warning');
   assert.equal(byCategory.water_level, 'critical');
-  const critical = alertsFor(telemetry({ ph: 8.3 }));
+  const critical = alertsFor(telemetry({ ph: 8.3 }), now, approved);
   assert.equal(Object.fromEntries(critical.map((a) => [a.category, a.type])).ph, 'critical');
 });

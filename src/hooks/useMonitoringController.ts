@@ -335,6 +335,12 @@ export function useMonitoringController() {
         hasFreshTelemetry: Boolean(snapshot),
         hasFreshWaterLevelTelemetry: Boolean(snapshot?.hasFreshWaterLevelTelemetry),
         waterLevelMessage: snapshot?.waterLevelMessage,
+        waterLevelObservation: telemetry ? {
+          waterLevelPercent: telemetry.waterLevelPercent,
+          waterLevelReadingValid: telemetry.waterLevelReadingValid,
+          waterLevelTargetHeightCm: telemetry.waterLevelTargetHeightCm,
+          updatedAt: telemetry.updatedAt,
+        } : undefined,
         hasFreshTemperatureTelemetry: Boolean(snapshot?.hasFreshTemperatureTelemetry),
         hasFreshPurityTelemetry: Boolean(snapshot?.hasFreshPurityTelemetry),
         hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),

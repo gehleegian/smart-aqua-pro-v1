@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ClipboardCheck, RefreshCw, Settings, Wrench } from 'lucide-react';
 import { CommandHistory, CommandStatusBadge } from './CommandHistory';
 import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
@@ -27,6 +27,11 @@ import Badge from '../ui/Badge';
 import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import { getDeviceTelemetryHistory } from '../../services/deviceService';
+import { buildDateKeys, formatDateKey } from '../../utils/dataLogsHelpers';
+import { calculateCurrentWaterVolume, calculateHistoricalWaterLoss } from '../../utils/waterVolumeCalculations';
+import { evaluateWaterLevelProfile } from '../../utils/waterLevelProfile';
+import type { DeviceTelemetryLogEntry } from '../../types/device';
 
 const deviceUpdateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -184,6 +189,7 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
+      <WaterVolumeSummary aquarium={aquarium} now={now} />
 
       {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} aquariumName={aquarium.name} /> : null}
 
@@ -359,6 +365,65 @@ function getSeverityVariant(severity: AssessmentSeverity) {
   if (severity === 'critical') return 'danger' as const;
   if (severity === 'warning') return 'warning' as const;
   return 'default' as const;
+}
+
+function WaterVolumeSummary({ aquarium, now }: { aquarium: MonitoringAquarium; now: number }) {
+  const [history, setHistory] = useState<{
+    aquariumId: string; entries: DeviceTelemetryLogEntry[]; error: string;
+  } | null>(null);
+  const dateKey = formatDateKey(new Date(now));
+  const calibration = evaluateWaterLevelProfile(aquarium);
+  const hasCalibration = Boolean(calibration.profile);
+  useEffect(() => {
+    if (!hasCalibration || aquarium.telemetrySource === 'simulated') return;
+    let cancelled = false;
+    const keys = buildDateKeys(dateKey, 2);
+    void Promise.all(keys.map((key) => getDeviceTelemetryHistory(aquarium.id, key)))
+      .then((days) => {
+        if (!cancelled) setHistory({ aquariumId: aquarium.id, entries: days.flat().sort((a, b) => a.recordedAtEpoch - b.recordedAtEpoch), error: '' });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setHistory({ aquariumId: aquarium.id, entries: [], error: error instanceof Error ? error.message : 'History could not be loaded.' });
+      });
+    return () => { cancelled = true; };
+  }, [aquarium.id, aquarium.telemetrySource, hasCalibration, dateKey]);
+
+  const current = !hasCalibration
+    ? { status: 'unavailable' as const, reason: `Calibration required: ${calibration.message}` }
+    : aquarium.telemetrySource === 'live' && aquarium.waterLevelObservation
+      ? calculateCurrentWaterVolume(aquarium, aquarium.waterLevelObservation, now)
+      : { status: 'unavailable' as const, reason: 'Waiting for device: a fresh water-level reading is required.' };
+  const entries = history?.aquariumId === aquarium.id ? history.entries : [];
+  const recent = entries.slice(-289);
+  const loss = !hasCalibration
+    ? { status: 'unavailable' as const, reason: 'Calibration required: save valid tank dimensions and operational volume.' }
+    : history?.aquariumId !== aquarium.id
+      ? { status: 'unavailable' as const, reason: 'Loading historical measurements.' }
+      : history.error
+        ? { status: 'unavailable' as const, reason: `History unavailable: ${history.error}` }
+        : calculateHistoricalWaterLoss(aquarium, recent.map((entry) => ({
+          waterLevelPercent: entry.waterLevelPercent,
+          waterLevelReadingValid: entry.waterLevelReadingValid,
+          waterLevelTargetHeightCm: entry.waterLevelTargetHeightCm,
+          updatedAt: entry.recordedAtEpoch,
+        })));
+
+  return <Card>
+    <CardHeader><h3 className="text-lg font-semibold text-white">Water volume and observed loss</h3></CardHeader>
+    <CardContent className="space-y-3 text-sm text-slate-300">
+      {current.status === 'available' ? <>
+        <p>Estimated current volume: {current.currentVolumeLiters} L</p>
+        <p>Operational target: {current.operationalTargetLiters} L · Tank capacity: {current.tankCapacityLiters} L</p>
+        <p>Estimated volume to target: {current.volumeToOperationalTargetLiters} L</p>
+        <p className="text-xs text-slate-400">Geometry-based estimate from the current level, measured {deviceUpdateFormatter.format(current.measuredAt)}. The target is below total tank capacity.</p>
+      </> : <p>Current volume unavailable: {current.reason.startsWith('A valid synchronized') ? `Waiting for device: ${current.reason}` : current.reason}</p>}
+      {loss.status === 'available' ? <p>
+        Observed decrease: {loss.observedDecreaseLiters} L from {deviceUpdateFormatter.format(loss.from)} to {deviceUpdateFormatter.format(loss.to)}.
+        Average over that period: {loss.averageObservedDecreaseLitersPerDay} L/day.
+      </p> : <p>Historical loss unavailable: {loss.reason}</p>}
+      <p className="text-xs text-slate-400">Observed changes do not identify evaporation or leaks. A refill or water change, missing samples, or changed calibration interrupts the estimate. Values are informational; confirm the actual level before any maintenance.</p>
+    </CardContent>
+  </Card>;
 }
 
 function Reading({ label, value, status }: { label: string; value: string; status: string }) {

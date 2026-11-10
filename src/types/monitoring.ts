@@ -17,6 +17,12 @@ export type MonitoringAquarium = Aquarium & {
   hasFreshTelemetry: boolean;
   hasFreshWaterLevelTelemetry?: boolean;
   waterLevelMessage?: string;
+  waterLevelObservation?: {
+    waterLevelPercent?: number;
+    waterLevelReadingValid?: boolean;
+    waterLevelTargetHeightCm?: number;
+    updatedAt?: number;
+  };
   hasFreshTemperatureTelemetry: boolean;
   hasFreshPurityTelemetry: boolean;
   hasFreshPhTelemetry: boolean;

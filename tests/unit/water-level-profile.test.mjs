@@ -94,7 +94,7 @@ test('web and mobile keep other sensor validity and matching profile water level
 });
 
 test('new shared engine excludes invalid profile levels without suppressing valid temperature', () => {
-  const config = seedRuleConfig();
+  const config = seedRuleConfig({ approved: true });
   const aquarium = { ...profile, species: ['Goldfish'], minTemp: 20, maxTemp: 24, minLevel: 70 };
   for (const raw of [{ ...reading, waterLevelReadingValid: false }, { ...reading, waterLevelTargetHeightCm: 4 }]) {
     const result = evaluateAquariumReading(aquarium, raw, config);
@@ -121,7 +121,9 @@ test('a fresh old-geometry server summary cannot override current profile validi
 test('profile edits synchronize only geometry without creating incomplete control records', () => {
   for (const relative of ['src/services/deviceService.ts', ...(hasMobile ? ['../smart-aqua-mobile/src/services/firebase-service.ts'] : [])]) {
     const source = readFileSync(new URL(`../../${relative}`, import.meta.url), 'utf8');
-    assert.match(source, /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
+    assert.match(source, relative.startsWith('src/')
+      ? /await update\(control, \{ waterLevelProfile: evaluateWaterLevelProfile/
+      : /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
     assert.match(source, /if \(!\(await get\(control\)\)\.exists\(\)\) return/);
     assert.match(source, /profile saved, but water-level device synchronization failed|assertRealtimeDeviceAccess/);
   }

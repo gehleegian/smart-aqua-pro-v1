@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
-import { evaluateAquarium, readAquariumOverrides, resolveThresholds, toConditionAssessment } from '../../src/utils/monitoringAssessmentCore.ts';
+import { assessAquarium } from '../../src/utils/conditionAssessment.ts';
 import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 import { getFreshTelemetrySnapshot, getDeviceTelemetryState, setDeviceTelemetryClockOffsetMs } from '../../src/types/device.ts';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
@@ -58,19 +58,12 @@ function deviceFrom(patch = {}) {
     powerStatus: 'Online', online: true, updatedAt: now, ...patch,
   };
 }
-// Web side of the parity check: the Sprint 2 rule engine with the seeded draft
-// rules. The mobile adapter receives the same seeded config, as it would from
-// Firestore; mobile never bundles thresholds or rules of its own.
+// Both clients receive the same draft Firestore config through their live paths.
 const ruleConfig = seedRuleConfig();
 function webFrom(device) {
   const snapshot = getFreshTelemetrySnapshot(device, now);
-  if (!snapshot) {
-    return toConditionAssessment({ overall: 'unavailable', perParameter: [], faults: [], draft: false },
-      { source: 'unavailable', assessedAt: now, origin: 'none' });
-  }
-  const thresholds = resolveThresholds(ruleConfig.speciesById.goldfish, readAquariumOverrides(profile));
-  const result = evaluateAquarium(device, thresholds, ruleConfig.rules, { hasFiltrationSystem: profile.hasFiltrationSystem });
-  return toConditionAssessment(result, { source: 'live', assessedAt: now, origin: 'client' });
+  return assessAquarium({ aquarium: profile, reading: snapshot ? device : null,
+    source: snapshot ? 'live' : 'unavailable', now, ruleConfig });
 }
 mobileTest('web and mobile adapters produce identical assessments', () => {
   for (const patch of [
@@ -88,6 +81,43 @@ mobileTest('web and mobile adapters produce identical assessments', () => {
     const mobile = assessTelemetry(profile, device, 'live', now, ruleConfig);
     assert.deepEqual(mobile, web, JSON.stringify(patch));
   }
+});
+
+mobileTest('invalid water level retains valid measurements and records a sensor fault', () => {
+  const raw = deviceFrom({ waterLevelReadingValid: false, waterLevelPercent: undefined });
+  const web = normalizeTelemetry(raw);
+  const mobile = mapTelemetry(raw);
+  assert.ok(web && mobile);
+  assert.deepEqual(mobile, web);
+  assert.ok(getFreshTelemetrySnapshot(web, now));
+  const assessment = assessTelemetry(profile, mobile, 'live', now, ruleConfig);
+  assert.deepEqual(assessment, webFrom(web));
+  assert.equal(assessment.source, 'live');
+  assert.equal(assessment.faults.find((fault) => fault.parameter === 'waterLevelPercent')?.reason,
+    'waterLevelReadingValid is false');
+  assert.equal(assessment.parameters.find((item) => item.parameter === 'temperature')?.value, 22);
+  assert.equal(assessment.recommendations.length, 0);
+});
+
+mobileTest('draft rules and invalid TDS cannot produce actionable live recommendations', () => {
+  for (const tdsPpm of [79, 315]) {
+    const assessment = assessTelemetry(profile, mapTelemetry(deviceFrom({ tdsPpm })), 'live', now, ruleConfig);
+    assert.equal(assessment.faults.find((fault) => fault.parameter === 'tdsPpm')?.reason,
+      'TDS outside the current 80-314 ppm meter-compared span');
+    assert.equal(assessment.parameters.find((item) => item.parameter === 'tds')?.severity, 'unavailable');
+    assert.equal(assessment.recommendations.length, 0);
+  }
+  const draft = assessTelemetry(profile, mapTelemetry(deviceFrom({ temperatureC: 26 })), 'live', now, ruleConfig);
+  assert.equal(draft.draft, true);
+  assert.equal(draft.recommendations.length, 0);
+  assert.equal(draft.matchedRules.length, 0);
+});
+
+mobileTest('categorical turbidity remains separate from numeric NTU', () => {
+  const assessment = assessTelemetry(profile, mapTelemetry(deviceFrom({ turbidity: undefined,
+    turbidityState: 'Cloudy' })), 'live', now, ruleConfig);
+  assert.equal(assessment.parameters.find((item) => item.parameter === 'turbidity')?.severity, 'unavailable');
+  assert.equal(assessment.recommendations.length, 0);
 });
 
 mobileTest('mobile explicit unavailable source suppresses retained stale readings', () => {
@@ -123,8 +153,8 @@ mobileTest('zero values parse as numbers but are assessed as sensor faults, not 
   const raw = deviceFrom({ ph: 0, waterLevelPercent: 0, turbidity: 0, tdsPpm: 0 });
   assert.equal(normalizeTelemetry(raw).ph, 0);
   assert.equal(mapTelemetry(raw).waterLevelPercent, 0);
-  // Sensor faults yield only the sensor_fault "check the probe" rule, never water-quality advice (AGENTS.md §5).
-  assert.ok(webFrom(normalizeTelemetry(raw)).matchedRules.every((rule) => rule.ruleId === 'sensor_fault'));
+  assert.equal(webFrom(normalizeTelemetry(raw)).recommendations.length, 0);
+  assert.ok(webFrom(normalizeTelemetry(raw)).faults.length > 0);
   assert.deepEqual(assessTelemetry(profile, mapTelemetry(raw), 'live', now, ruleConfig), webFrom(normalizeTelemetry(raw)));
 });
 
@@ -151,8 +181,8 @@ test('water-level display hides invalid and unavailable values while preserving 
   assert.equal(formatWaterLevel(70, false), '--');
   const result = webFrom(normalizeTelemetry(deviceFrom({ waterLevelPercent: 150 })));
   assert.equal(result.parameters.find((p) => p.parameter === 'waterLevel').severity, 'unavailable');
-  // A sensor fault never yields water advice: only the single sensor_fault recommendation.
-  assert.deepEqual(result.matchedRules.map((rule) => [rule.ruleId, rule.parameter]), [['sensor_fault', 'waterLevelPercent']]);
+  assert.equal(result.recommendations.length, 0);
+  assert.equal(result.faults.find((fault) => fault.parameter === 'waterLevelPercent')?.reason, 'water level outside 0-100%');
 });
 
 mobileTest('future timestamps are unavailable in both apps, including just beyond now', () => {

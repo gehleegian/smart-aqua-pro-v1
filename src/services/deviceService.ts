@@ -14,7 +14,7 @@ import {
   normalizeTelemetry,
   selectNewestTelemetrySnapshot,
 } from '../utils/deviceTelemetryParser';
-import { getWaterLevelControl, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
+import { evaluateWaterLevelProfile, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
 import {
@@ -182,7 +182,7 @@ export async function syncDeviceControlProfile(
   const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
   await set(child(deviceRootRef, 'control'), {
     ...profile,
-    waterLevelProfile: getWaterLevelControl(aquarium as LevelProfileInput),
+    waterLevelProfile: evaluateWaterLevelProfile(aquarium as LevelProfileInput).profile,
   });
 }
 
@@ -190,10 +190,9 @@ export async function syncWaterLevelProfile(aquariumId: string): Promise<void> {
   const root = getDeviceRootRef(aquariumId);
   if (!root) return;
   const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
-  if (aquarium.deviceId !== 'SAQ-7K3M-9R2X') return;
   const control = child(root, 'control');
   if (!(await get(control)).exists()) return;
-  await update(control, { waterLevelProfile: getWaterLevelControl(aquarium as LevelProfileInput) });
+  await update(control, { waterLevelProfile: evaluateWaterLevelProfile(aquarium as LevelProfileInput).profile });
 }
 
 export async function publishDeviceCommand(command: DeviceCommandRequest): Promise<void> {
@@ -304,6 +303,8 @@ function mapTelemetryHistoryEntry(value: unknown): DeviceTelemetryLogEntry | nul
         ? entry.temperatureReadingValid
         : true,
     waterLevelPercent,
+    waterLevelReadingValid: typeof entry.waterLevelReadingValid === 'boolean' ? entry.waterLevelReadingValid : undefined,
+    waterLevelTargetHeightCm: typeof entry.waterLevelTargetHeightCm === 'number' && Number.isFinite(entry.waterLevelTargetHeightCm) ? entry.waterLevelTargetHeightCm : undefined,
     waterPresent: typeof entry.waterPresent === 'boolean' ? entry.waterPresent : true,
     tdsPpm: hasTdsPpm ? tdsPpm : undefined,
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
