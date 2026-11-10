@@ -21,6 +21,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   FileBarChart,
+  Wrench,
 } from 'lucide-react';
 
 /** Sprint 3: navigation follows the access role, not only the platform role. */
@@ -59,6 +60,7 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
     label: 'Manage',
     items: [
       { id: 'aquariums', label: 'Aquariums', icon: Fish, roles: ['owner'] },
+      { id: 'maintenance', label: 'Maintenance', icon: Wrench, roles: ['owner', 'caretaker'] },
       { id: 'add-device', label: 'Add Device', icon: PlusCircle, roles: ['owner', 'caretaker', 'none'] },
       { id: 'team', label: 'Team', icon: UserPlus, roles: ['owner'] },
       { id: 'audit', label: 'Audit Log', icon: ScrollText, roles: ['owner'] },
