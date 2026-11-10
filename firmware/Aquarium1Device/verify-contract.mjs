@@ -30,6 +30,7 @@ assert.match(source, /config\.buffer_size_tx = int\(url\.length\(\) \+ 512\)/);
 assert.match(source, /if \(url\.length\(\) > 7680\) return -1/);
 assert.ok(!source.includes('.setInsecure('));
 assert.match(config, /#define AQUARIUM_CLOUD_ENABLED 1/);
+assert.match(config, /PROFILE_LEVEL_ENABLED = false/);
 assert.match(source, /armed = !localStop/);
 assert.match(source, /commandWatermarkMs = double\(time\(nullptr\)\) \* 1000.0/);
 assert.match(source, /requestedMs <= commandWatermarkMs/);

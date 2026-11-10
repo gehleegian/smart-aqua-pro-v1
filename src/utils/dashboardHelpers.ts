@@ -264,7 +264,8 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
       title: 'Water Level',
       value: waterLevel.value,
       icon: Droplets,
-      change: changeFor(waterLevel, 'waterLevel', 'Assessment unavailable'),
+      change: live && tank.hasFreshWaterLevelTelemetry && tank.waterLevelMessage && tank.waterLevelMessage !== 'Live telemetry'
+        ? tank.waterLevelMessage : changeFor(waterLevel, 'waterLevel', 'Assessment unavailable'),
       trend: trend('waterLevel'),
       sparkline: [],
     },

@@ -11,7 +11,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, rtdb } from '../firebase';
 import { normalizeTelemetry } from '../utils/deviceTelemetryParser';
-import { getWaterLevelControl, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
+import { getWaterLevelControl, usesProfileWaterLevel, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
 import {
@@ -187,7 +187,7 @@ export async function syncWaterLevelProfile(aquariumId: string): Promise<void> {
   const root = getDeviceRootRef(aquariumId);
   if (!root) return;
   const aquarium = await assertRealtimeDeviceAccess(aquariumId, 'control');
-  if (aquarium.deviceId !== 'SAQ-7K3M-9R2X') return;
+  if (!usesProfileWaterLevel(aquarium as LevelProfileInput)) return;
   const control = child(root, 'control');
   if (!(await get(control)).exists()) return;
   await update(control, { waterLevelProfile: getWaterLevelControl(aquarium as LevelProfileInput) });

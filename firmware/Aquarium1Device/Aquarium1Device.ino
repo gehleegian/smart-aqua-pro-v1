@@ -618,6 +618,9 @@ bool cloudCycle() {
   if (temperaturesValid) telemetry["temperatureC"] = (t18 + t19) / 2.0f;
   if (!temperaturesValid) Serial.println("Temperature sensor fault: valid probe pair unavailable; other telemetry continues.");
   telemetry["waterLevelReadingValid"] = levelValid;
+  if (PROFILE_LEVEL_ENABLED)
+    Serial.printf("Water level upload: %.1f %% | profile target %.3f cm | %s\n",
+                  levelPct, profileTargetHeightCm, levelValid ? "valid current echo; volume-based" : "unavailable: echo/profile invalid");
   if (PROFILE_LEVEL_ENABLED) {
     if (profileTargetHeightCm > 0) telemetry["waterLevelTargetHeightCm"] = profileTargetHeightCm;
   }

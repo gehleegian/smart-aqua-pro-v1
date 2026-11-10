@@ -1,5 +1,134 @@
 # Aquarium 2
 
+## Current feeder: confirmed 360-degree continuous SG90 (2026-11-10)
+
+The owner confirmed the purchased servo is the 360-degree version. The old
+positional 135/45/135 degree sequence was therefore incorrect: 2000/1000us
+commands speed/direction, and retaining that signal during a 1500ms dwell
+continues rotation. Aquarium 1 remains positional and is NOT changed.
+
+FEED v7 uses direct pulse widths on GPIO23 at 50Hz with checked native PWM.
+There is no home-angle command. Nominal neutral is 1500us, with provisional
+1600/1400us opposing speeds; rightward motion at 1600us was observed by the owner,
+and the owner confirmed the 900ms forward turn is correct. Reverse 1400us/900ms
+is an INITIAL return estimate, not a verified endpoint. FEEDER_CALIBRATED stays
+false and FEEDER_RETURN_TEST_ENABLED is true. Website Feed Now performs one
+supervised round trip: forward 900ms -> neutral hold 1000ms -> reverse 900ms ->
+neutral/detach. This is NOT verified portion delivery or absolute homing.
+Scheduled feeding is blocked before reservation or motion while uncalibrated;
+relay schedules continue unchanged. Disabling return-test mode restores a
+single-leg diagnostic jog, not an automatic feeding cycle.
+
+The owner estimated the original 100ms jog moved about 10 degrees to the right.
+The initial duration estimate for 90 degrees is therefore 100ms * 90/10 = 900ms
+at the SAME 1600us pulse. A 300ms intermediate preparation was superseded before
+upload by that observation. The owner then confirmed that the 900ms turn is
+correct and requested return to its starting orientation. The forward setting
+is preserved; return timing is initially matched but must be observed separately
+because reverse speed/load can differ. The 1000ms per-leg cap remains. Serial
+prints forward, hold and return durations so the uploaded version can be checked.
+Keep the feeder empty, mark the starting orientation and click website Feed Now
+only once, then report return undershoot/overshoot. Do not repeat blindly or
+force a powered horn.
+
+Supervised calibration requires an EMPTY, unobstructed feeder. Mark its initial
+orientation, upload the matching folder and use the existing website Feed Now
+once. Observe return direction, final orientation, and any creep during the
+neutral dwell. Adjust neutral if necessary and verify it physically stops.
+If it returns short or too far, adjust ONLY FEEDER_REVERSE_MS while retaining
+the owner-accepted forward setting. Keep FEEDER_CALIBRATED=false until neutral
+and the returned position are confirmed; do not enable scheduled feeding merely
+because the code compiled. No duration here guarantees exactly 90 degrees.
+Stopping, returned orientation and dispensed quantity require physical checks.
+
+Calibrated operation is neutral -> timed forward -> neutral during the 1000ms
+hold -> separately timed reverse -> neutral/detach. Moving PWM settling is
+included in the requested leg duration, not added to it. Every motion leg is
+bounded to 40-1000ms; invalid settings reject the cycle. These are software safety
+bounds, not measured servo speed. Wi-Fi loss or serial DISARM aborts motion and
+detaches without attempting an automatic return. Cooldown remains 5000ms.
+Never hold or force a powered horn. There is no position feedback, so timed
+rotation can drift with supply/load and cannot guarantee repeatable 90-degree
+positioning. A positional servo/feedback is needed if exact positioning is required.
+
+Both repository and C:/new/Aquarium2Device sources/FeederConfig.h are updated.
+No firmware was uploaded, equipment operated, database modified, or web/mobile
+deployment needed by this change. Existing authenticated website command route,
+schedule access, water-level calibration, turbidity and optocoupler are unchanged.
+
+Software verification: all 247 unit tests passed, including 24 targeted feeder,
+firmware-isolation and relay-independence tests. Both static firmware contracts,
+changed-test lint and git diff --check passed. The exact Aquarium 2 upload folder
+compiled at 1,151,109 bytes flash / 47,988 bytes RAM with matching private identity
+and all headers present. The compiled default remains calibration-only; successful
+compilation/readback does not verify neutral, direction, angle or food portion.
+The default v7 round-trip build was compiled and its full test suite rerun.
+Regressions cover the 900/1000/900ms phase timings, neutral during dwell, independent
+relay outputs, disabled scheduled feeding before physical calibration, invalid
+return settings, cooldown, and interruption during neutral/forward/hold/return.
+The owner shortened only Aquarium 2's neutral dwell from 1500ms to 1000ms;
+the 1500us neutral pulse, 900ms motion legs, 5000ms cooldown and Aquarium 1
+settings are unchanged. Historical positional-servo timings below are superseded.
+
+The servo-v5 sections below are superseded where they describe positional motion.
+
+## Current water level: fixed calibration restored (2026-11-10)
+
+PROFILE_LEVEL_ENABLED is false in repository and C:/new/Aquarium2Device/Config.h.
+The active formula is clamp((27.0-distanceCm)/(27.0-20.2)*100, 0, 100):
+27.0cm is empty, 20.2cm is the chosen full reference. Dimensions/operational
+litres are not used. Missing echoes or distances below 20cm remain unavailable,
+not fabricated full. Web/mobile/backend must use the matching fixed policy.
+Upload the matching folder with all headers; no upload was performed here.
+Turbidity samples, servo v5, optocoupler and device identity remain unchanged.
+
+## Previous profile water level implementation (superseded)
+
+The repository and C:/new/Aquarium2Device upload now enable the same dimension /
+operational-volume calculation as Aquarium 1, not the old 20.2cm-full percentage.
+The existing 27cm mounting reference is retained. Valid current echoes remain
+measurable even if the full volume target lies in the configured blind zone;
+actual <20cm or missing echoes stay invalid, never 100%. Web/mobile show a range
+warning. The "Water level upload" Serial line matches the published target/value.
+
+Do not upload until the matching RTDB validators and ingest function are deployed,
+and an authorized owner saves profile/control settings to sync its geometry.
+Keep Config.h and WaterLevel.h in the upload folder. Turbidity samples, servo v5,
+optocoupler, other sensors and device identity remain unchanged by this correction.
+No upload, equipment command or physical verification is implied. See
+../../docs/security/profile-water-level.md for rollout and limitations.
+
+## Different-brand turbidity samples (2026-11-10)
+
+The owner clarified Aquarium 2's turbidity probe is a different brand. The first
+clear endpoint at 3.129V was subsequently confirmed clipped (raw ADC 4095/4095).
+It is superseded, along with the old 2.048-2.300V cloudy samples and Aquarium 1's
+unrelated 0.967/0.246V references. Fresh clear samples are 2.343, 2.340 and 2.336V;
+fresh flour-cloudy samples are 0.283, 0.282 and 0.291V, all reported below raw
+full-scale. Their medians 2.340V and 0.283V define the midpoint 1.3115V, retaining
+the existing 20mV hysteresis. This is only an empirical sample classifier, not
+NTU calibration or an approved water-quality rule. Consistency when the rinsed
+probe returns to clear water still needs an owner-operated physical check.
+
+Raw ADC is now logged. A full-scale 4095 sample, non-finite input, input below the
+existing 0.15V lower guard, or at/above the original 3.0V upper measurement guard
+publishes Unknown. Full-scale samples are never classified as clear water;
+if it logs ADC CLIPPED, this change does not pretend to fix the physical range.
+The assumed module-voltage multiplication is removed from this device's Serial
+output. Wiring safety still requires an appropriate divider and 3.3V-safe signal.
+
+Only Aquarium 2 repository/upload sources change. Aquarium 1 references, pH/TDS,
+servo v5, relays, power-outage boolean, identity and authorization are preserved.
+Existing categorical turbidityState is used; no numeric NTU, schema, backend or
+mobile/web business-rule changes. Upload and a supervised clear/cloudy/clear test
+are still required; compiling and offline classifier tests are not hardware proof.
+
+The fresh-sample update requires another upload and supervised clear/cloudy/clear
+test. It has not been uploaded or physically verified by the software checks.
+Verification: all 231 unit tests, targeted ESLint and static firmware checks
+passed. The exact upload folder compiled with its real device settings
+(1,151,349 bytes flash / 47,988 bytes RAM). No equipment command was sent.
+
 ## 12V outage push signal (2026-11-09)
 
 The sketch now publishes `mainsPresent` from the confirmed GPIO33 optocoupler
@@ -13,7 +142,27 @@ Upload and a supervised outage/restore push-receipt test are still required.
 ESP32 and Internet power must remain available to report 12V loss; otherwise the
 existing delayed device-offline path applies. See `../../docs/notifications.md`.
 
-## SG90 correction and pending isolation test
+## Current feeder settings: match Aquarium 1 (2026-11-09)
+
+The owner confirmed Aquarium 2's servo now moves after repairing a faulty wire.
+At the owner's request, v5 matches Aquarium 1's 500-2500us angle mapping:
+135-degree home = 2000us, 45-degree dispense = 1000us, at 50Hz. The previous
+1750/1250us test positions are superseded. Home -> dispense -> 1.5s hold -> home,
+600ms travel allowances and 5s post-cycle cooldown match Aquarium 1. These are
+electronic commands, not independently verified physical angles or feed portions.
+
+Aquarium 2 retains GPIO23 and its native attach/write/readback error checks,
+immediate local-stop handling, boot-without-PWM behavior and replay protection.
+Its device identity, power detector, outage boolean, sensors, relays and backend
+permissions are unchanged. Both repository and C:/new/Aquarium2Device upload
+copies are updated. No upload or physical test of v5 is implied; test empty with
+the arm clear after upload, as the commanded travel differs from v4.
+
+Verification: all 225 unit tests, targeted ESLint and the static firmware contract
+passed. The real-settings ESP32 compile passed (1,151,157 bytes flash / 47,980
+bytes RAM). No firmware upload or equipment command was performed.
+
+## Historical SG90 correction and isolation test (superseded settings)
 
 2026-11-09 pending v4: Aquarium 2's web-controlled feeder now uses the core-3
 LEDC API directly, checking attach/write results and frequency/duty readback

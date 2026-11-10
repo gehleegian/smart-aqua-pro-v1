@@ -80,6 +80,28 @@ after(async () => {
 
 // ---------------- Sprint 1 history behaviour (unchanged) ----------------
 
+for (const deviceId of ['SAQ-7K3M-9R2X', 'SAQ-TEST-0002']) {
+  test(`LEVEL fixed-calibration water ignores aquarium geometry on ${deviceId}; invalid echoes stay excluded`, async () => {
+    const geometry = { tankLengthCm: 60.96, tankWidthCm: 25.4, tankHeightCm: 24.13, workingWaterVolumeLiters: 19.9 };
+    const percent = (27 - 24) / (27 - 20.2) * 100;
+    await firestore.doc(`aquariums/${AQUARIUM}`).set(aquariumDoc({ ...geometry, deviceId }));
+    const result = await send({ waterLevelPercent: percent, waterLevelReadingValid: true });
+    assert.ok(result.ingested && result.written);
+    const [row] = await flatRows();
+    assert.equal(row.waterLevelPercent, percent);
+    assert.equal(row.waterLevelTargetHeightCm, undefined);
+    assert.equal(row.validity.waterLevel, 'valid');
+    assert.ok((await alerts()).some(alert => alert.parameter === 'waterLevelPercent' && alert.severity === 'critical'));
+    const fault = await send({ waterLevelPercent: undefined, waterPresent: undefined, waterLevelReadingValid: false });
+    assert.ok(fault.ingested);
+    const rows = await flatRows();
+    const latest = rows.at(-1)!;
+    assert.equal(latest.validity.waterLevel, 'invalid');
+    assert.equal(latest.waterLevelPercent, undefined);
+    assert.equal(latest.temperatureC, 22);
+  });
+}
+
 test('INGEST-01 a valid reading is written to flat and nested history with a validity summary', async () => {
   const result = await ingestTelemetry(deps(), AQUARIUM, telemetry());
   assert.ok(result.ingested && result.written && result.sampleReason === 'first_of_day');
@@ -447,17 +469,17 @@ test('CLEAN-05 an incomplete profile has no schedule rather than a guessed one',
   assert.deepEqual([cleaning.status, cleaning.reason, cleaning.nextCleaningDue], ['unavailable', 'bioload_unknown', null]);
 });
 
-test('LEVEL-01 profile-based level and its server summary record the current target', async () => {
+test('LEVEL-01 fixed level and server summary do not require geometry or target metadata', async () => {
   await firestore.doc(`aquariums/${AQUARIUM}`).update({
     deviceId: 'SAQ-7K3M-9R2X', tankLengthCm: 50, tankWidthCm: 30, tankHeightCm: 25,
     workingWaterVolumeLiters: 9,
   });
-  const result = await send({ waterLevelPercent: 80, waterLevelReadingValid: true, waterLevelTargetHeightCm: 6 });
+  const result = await send({ waterLevelPercent: 80, waterLevelReadingValid: true });
   assert.equal(result.ingested, true);
   const row = (await flatRows())[0];
   assert.equal(row.validity.waterLevel, 'valid');
-  assert.equal(row.waterLevelTargetHeightCm, 6);
-  assert.equal((await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()?.condition.waterLevelTargetHeightCm, 6);
+  assert.equal(row.waterLevelTargetHeightCm, undefined);
+  assert.equal((await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()?.condition.waterLevelTargetHeightCm, undefined);
 });
 
 test('LEVEL-02 invalid or obsolete profile level keeps other sensors and never raises low-water advice', async () => {
