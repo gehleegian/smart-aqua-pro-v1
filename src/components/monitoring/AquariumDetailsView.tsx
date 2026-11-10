@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ClipboardCheck, RefreshCw, Settings, Wrench } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, ClipboardList, RefreshCw, Settings, Wrench } from 'lucide-react';
 import { CommandHistory, CommandStatusBadge } from './CommandHistory';
 import { LogMaintenanceModal } from '../maintenance/LogMaintenanceModal';
 import { MaintenanceHistory } from '../maintenance/MaintenanceHistory';
@@ -24,7 +24,6 @@ import {
   formatEstimatedBioload,
 } from '../../utils/aquariumProfileCalculations';
 import Badge from '../ui/Badge';
-import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
@@ -43,6 +42,7 @@ interface AquariumDetailsViewProps {
   onAutomationToggle: () => void;
   onBack: () => void;
   onOpenAssessment: () => void;
+  onOpenRecommendations: () => void;
   onManualAction: (field: SystemField) => void;
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
@@ -66,6 +66,7 @@ export function AquariumDetailsView({
   onAutomationToggle,
   onBack,
   onOpenAssessment,
+  onOpenRecommendations,
   onManualAction,
   onModeChange,
   onOpenAutomationEditor,
@@ -85,6 +86,10 @@ export function AquariumDetailsView({
           <Button variant="secondary" onClick={onOpenAssessment}>
             <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
             View assessment
+          </Button>
+          <Button variant="secondary" onClick={onOpenRecommendations}>
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+            View recommendations
           </Button>
           <Button variant="secondary" onClick={onRefresh}>
             <RefreshCw className="h-4 w-4" />
@@ -157,8 +162,6 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
-
-      {aquarium.telemetrySource !== 'simulated' ? <RecommendationsPanel aquariumId={aquarium.id} aquariumName={aquarium.name} /> : null}
 
       <Card>
         <CardHeader>

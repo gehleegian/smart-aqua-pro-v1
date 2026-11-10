@@ -17,7 +17,7 @@ function renderPanel(recommendations, options = {}) {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
-    const module = { exports: {} };
+    const loadedModule = { exports: {} };
     const require = specifier => {
       if (specifier === 'react') return { ...React, useState: initial => [initial === null ? options.applying ?? null : initial, () => {}] };
       if (specifier === '../../hooks/useRecommendations') return { useRecommendations: () => ({
@@ -30,11 +30,11 @@ function renderPanel(recommendations, options = {}) {
       if (specifier.startsWith('.')) return load(new URL(specifier + '.tsx', url));
       return nodeRequire(specifier);
     };
-    new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-    return module.exports;
+    new Function('require', 'module', 'exports', compiled)(require, loadedModule, loadedModule.exports);
+    return loadedModule.exports;
   }
   const { RecommendationsPanel } = load(componentUrl);
-  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A' }));
+  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A', defaultOpen: options.defaultOpen }));
 }
 
 const recommendation = {
@@ -67,6 +67,14 @@ test('only pending recommendations appear, all inside a bounded keyboard-scrolla
   assert.doesNotMatch(html, /Dismissed recommendation/);
   assert.match(html, /WARNING/);
   assert.match(html, /CRITICAL/);
+});
+
+test('dedicated page can expand recommendations without changing the dashboard default', () => {
+  const html = renderPanel([recommendation], { defaultOpen: true });
+  assert.match(html, /<details open="" class="group">/);
+  assert.match(html, /1 pending/);
+  assert.match(html, /Applied/);
+  assert.match(html, /Dismiss/);
 });
 
 test('rule explanations, draft badge and existing action controls stay available', () => {

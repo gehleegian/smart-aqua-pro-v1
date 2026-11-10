@@ -12,7 +12,7 @@ import { Card, CardContent } from '../ui/Card';
 // Pending recommendations from the rules engine. Applied opens the
 // maintenance log form (FR20): logging marks the recommendation applied.
 // Dismiss only changes the status.
-export function RecommendationsPanel({ aquariumId, aquariumName }: { aquariumId: string; aquariumName?: string }) {
+export function RecommendationsPanel({ aquariumId, aquariumName, defaultOpen = false }: { aquariumId: string; aquariumName?: string; defaultOpen?: boolean }) {
   const { recommendations, error, savingId, setStatus } = useRecommendations(aquariumId);
   const pending = recommendations.filter((item) => item.status === 'pending');
   const [applying, setApplying] = useState<Recommendation | null>(null);
@@ -20,7 +20,7 @@ export function RecommendationsPanel({ aquariumId, aquariumName }: { aquariumId:
 
   return (
     <Card className="self-start">
-      <details key={aquariumId} className="group">
+      <details key={aquariumId} open={defaultOpen} className="group">
         <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-6 py-4 transition-colors hover:bg-slate-700/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
           <span className="flex min-w-0 items-center gap-3">
             <ClipboardList className="h-5 w-5 shrink-0 text-teal-300" aria-hidden="true" />
