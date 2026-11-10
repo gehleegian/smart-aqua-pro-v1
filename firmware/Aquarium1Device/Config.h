@@ -43,7 +43,7 @@ constexpr float POWER_DIVIDER_RATIO = 5.0f;
 // (initial ON 2.515 V). Midpoint is a presence discriminator, not undervoltage.
 constexpr float POWER_SIGNAL_OFF_V = 0.142f;
 constexpr float POWER_SIGNAL_ON_V = 2.515f;
-constexpr bool PROFILE_LEVEL_ENABLED = true;
+constexpr bool PROFILE_LEVEL_ENABLED = false; // fixed 27.0 cm empty / 20.2 cm full
 #define AQUARIUM_TDS_METER_REFERENCE_ENABLED 1
 // Digital mode is unused on Aquarium 1.
 constexpr int POWER_PRESENT_LEVEL = -1;

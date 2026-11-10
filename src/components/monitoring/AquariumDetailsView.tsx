@@ -125,7 +125,8 @@ export function AquariumDetailsView({
                 { label: 'Temperature', display: getSensorDisplay(aquarium.sensorValidity, 'temperature', live, () => `${aquarium.temp.toFixed(1)} C`) },
                 { label: 'Water Level', display: live && aquarium.hasFreshWaterLevelTelemetry === false
                   ? { value: '--', status: aquarium.waterLevelMessage || 'No valid water-level reading' }
-                  : getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)) },
+                  : { ...getSensorDisplay(aquarium.sensorValidity, 'waterLevel', live, () => formatWaterLevel(aquarium.level)),
+                    ...(live && aquarium.hasFreshWaterLevelTelemetry && aquarium.waterLevelMessage ? { status: aquarium.waterLevelMessage } : {}) } },
                 {
                   label: 'TDS',
                   display: getSensorDisplay(aquarium.sensorValidity, 'tds', live, () =>
