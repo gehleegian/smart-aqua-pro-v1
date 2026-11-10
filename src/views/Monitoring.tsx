@@ -98,6 +98,12 @@ export default function Monitoring({ onNavigate }: { onNavigate: (page: string) 
             onNavigate('assessment');
           }
         }}
+        onOpenRecommendations={() => {
+          if (monitoring.selectedAquarium) {
+            requestTankFocus(monitoring.selectedAquarium.id);
+            onNavigate('recommendations');
+          }
+        }}
         onManualAction={(field) => void actions.handleManualAction(field)}
         onModeChange={(mode) => void actions.handleSystemModeChange(mode)}
         onOpenAutomationEditor={actions.openAutomationEditor}

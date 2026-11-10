@@ -7,6 +7,7 @@ import Header from './Header';
 import Dashboard from '../../views/Dashboard';
 import Monitoring from '../../views/Monitoring';
 import Assessment from '../../views/Assessment';
+import Recommendations from '../../views/Recommendations';
 import Automation from '../../views/Automation';
 import Alerts from '../../views/Alerts';
 import DataLogs from '../../views/DataLogs';
@@ -50,6 +51,7 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   dashboard: Dashboard,
   monitoring: Monitoring,
   assessment: Assessment,
+  recommendations: Recommendations,
   automation: Automation,
   alerts: Alerts,
   datalogs: DataLogs,
@@ -86,12 +88,12 @@ const getInitialTheme = (): ThemeMode => {
 // enforce the same boundaries; this only decides what is shown.
 const rolePermissions: Record<NavRole, string[]> = {
   Admin: ['dashboard', 'organizations', 'users', 'rules', 'admin-audit', 'settings', 'support'],
-  owner: ['dashboard', 'monitoring', 'assessment', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
-  caretaker: ['dashboard', 'monitoring', 'assessment', 'alerts', 'datalogs', 'reports', 'add-device', 'setup', 'settings', 'support', 'invite'],
+  owner: ['dashboard', 'monitoring', 'assessment', 'recommendations', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
+  caretaker: ['dashboard', 'monitoring', 'assessment', 'recommendations', 'alerts', 'datalogs', 'reports', 'add-device', 'setup', 'settings', 'support', 'invite'],
   none: ['dashboard', 'add-device', 'setup', 'settings', 'support', 'invite'],
 };
 // Pages that need an active (not suspended) organization's data.
-const orgDataPages = new Set(['monitoring', 'assessment', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'team', 'setup', 'audit']);
+const orgDataPages = new Set(['monitoring', 'assessment', 'recommendations', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'team', 'setup', 'audit']);
 
 function navRoleFor(platformRole: UserRole | undefined, orgRole: 'owner' | 'caretaker' | null): NavRole {
   if (platformRole === 'Admin') return 'Admin';
