@@ -3,7 +3,7 @@
 // Called by the generateMonitoringReport callable (owners and assigned
 // caretakers) and by the weekly/monthly schedules (index.ts).
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { readAquariumOverrides, resolveThresholds, selectSpeciesConfig } from '../shared/monitoringAssessmentCore.js';
+import { resolveLiveAquariumThresholds, selectSpeciesConfig } from '../shared/monitoringAssessmentCore.js';
 import { loadRuleConfig } from '../ruleEngine.js';
 import { requireAquariumMember, requireVerifiedActor, type Actor } from '../aquariumAccess.js';
 import { MutationError } from '../trustedMutations.js';
@@ -99,7 +99,7 @@ export async function generateReport(
     .flatMap((doc) => normalizeAlert(doc.id, doc.data()) ?? [])
     .filter((alert) => alert.resolvedAt === null || alert.resolvedAt >= period.start);
   const species = selectSpeciesConfig(aquarium, config.speciesById);
-  const thresholds = resolveThresholds(species, readAquariumOverrides(aquarium));
+  const thresholds = resolveLiveAquariumThresholds(aquarium, species);
   const aquariumName = typeof aquarium.name === 'string' && aquarium.name.trim() ? aquarium.name.trim() : aquariumId;
 
   const structuredSummary = buildStructuredSummary({

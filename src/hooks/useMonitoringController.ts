@@ -315,6 +315,7 @@ export function useMonitoringController() {
       return {
         ...aquarium,
         turbidityState: snapshot?.turbidityState,
+        turbidityVoltage: snapshot?.turbidityVoltage,
         temp: snapshot ? snapshot.temperatureC : aquarium.temp,
         level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
         // TDS ppm stands on its own (firmware may send ppm without the legacy purity %).

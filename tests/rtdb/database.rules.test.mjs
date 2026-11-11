@@ -31,6 +31,22 @@ const TELEMETRY = Object.freeze({
   online: true,
 });
 
+test('TURB-VOLT voltage is optional, bounded and device-only with aquarium isolation', async () => {
+  const path = `devices/${AQUARIUM_A}/telemetry`;
+  for (const turbidityVoltage of [0, 0.967, 3.3]) {
+    const payload = { ...TELEMETRY, turbidityVoltage, turbidityState: 'Clear' };
+    await assertSucceeds(set(ref(deviceDatabase('device-a'), path), payload));
+    await assertSucceeds(get(ref(humanDatabase('user-a'), `${path}/turbidityVoltage`)));
+    await assertFails(set(ref(deviceDatabase('device-b'), path), payload));
+    await assertFails(set(ref(humanDatabase('user-a'), path), payload));
+    await assertFails(get(ref(humanDatabase('user-b'), `${path}/turbidityVoltage`)));
+  }
+  for (const turbidityVoltage of [-0.001, 3.301, '0.967', true, { unexpected: 1 }]) {
+    await assertFails(set(ref(deviceDatabase('device-a'), path), { ...TELEMETRY, turbidityVoltage }));
+  }
+  await assertSucceeds(set(ref(deviceDatabase('device-a'), path), TELEMETRY));
+});
+
 test('PARTIAL-01 explicit temperature failure allows independent readings, but not unflagged omissions or invented temperatures', async () => {
   const path = `devices/${AQUARIUM_A}/telemetry`;
   const { temperatureC, ...other } = TELEMETRY;
@@ -169,7 +185,7 @@ async function mutateFixture(path, value) {
 }
 
 before(async () => {
-  const rules = await readFile(new URL('../../database.rules.json', import.meta.url), 'utf8');
+  const rules = await readFile(process.env.SMARTAQUA_RTDB_RULES_FILE ?? new URL('../../database.rules.json', import.meta.url), 'utf8');
   testEnvironment = await initializeTestEnvironment({
     projectId: PROJECT_ID,
     database: { rules },

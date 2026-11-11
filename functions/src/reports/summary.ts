@@ -589,7 +589,7 @@ export function computeThresholdSummary(thresholds: EffectiveThresholds, rules: 
     overridden: [...thresholds.overridden],
     rules: { total: list.length, approved: list.length - draftRules, draft: draftRules, list },
     draftNote: draft
-      ? 'Draft thresholds: some thresholds or rules in force are still DRAFT and have not been approved by the adviser. Classifications and recommendations in this report follow the draft values.'
+      ? 'Draft thresholds/rules metadata is present in the application. Current limits use saved user settings and approved defaults; draft recommendation rules are not activated. Historical entries retain their recorded classifications.'
       : null,
   };
 }

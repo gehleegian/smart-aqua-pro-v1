@@ -5,6 +5,7 @@ import {
   getCommandStatus,
   derivePowerStatus,
   getTelemetryFreshness,
+  readTurbidityVoltage,
   TELEMETRY_STALE_MS,
   TELEMETRY_EPOCH_FLOOR,
   type CommandStatus,
@@ -40,6 +41,8 @@ export interface DeviceTelemetry {
   turbidityReadingValid?: boolean;
   /** Main (PR #8): categorical turbidity from a digital module (no numeric NTU invented). */
   turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
+  /** Measured ESP32 ADC input voltage; diagnostic only, never NTU. */
+  turbidityVoltage?: number;
   /** Allowed by rules; out of scope (no ammonia sensor). */
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
@@ -67,6 +70,7 @@ export interface DeviceTelemetryLogEntry {
   tdsReadingValid?: boolean;
   turbidity?: number;
   turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
+  turbidityVoltage?: number;
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
   lightState?: 'On' | 'Off';
@@ -279,7 +283,7 @@ export function getFreshTelemetrySnapshot(
     : null;
   const waterPresent = telemetry.waterPresent !== false;
   const phValid = validity.ph.status === 'valid';
-  const turbidityValid = validity.turbidity.status === 'valid';
+  const turbidityValid = validity.turbidity.status === 'valid' && typeof telemetry.turbidity === 'number' && Number.isFinite(telemetry.turbidity);
   const powerStatus = derivePowerStatus(telemetry as unknown as Record<string, unknown>);
 
   return {
@@ -296,7 +300,8 @@ export function getFreshTelemetrySnapshot(
     hasFreshPhTelemetry: phValid,
     turbidity: turbidityValid ? telemetry.turbidity! : null,
     hasFreshTurbidityTelemetry: turbidityValid,
-    turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy'
+    turbidityVoltage: readTurbidityVoltage(telemetry.turbidityVoltage),
+    turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy' || telemetry.turbidityState === 'Unknown'
       ? telemetry.turbidityState : undefined,
     powerStatus,
     hasFreshPowerTelemetry: Boolean(powerStatus),

@@ -83,8 +83,8 @@ function bounded(value: unknown, min: number, max: number): value is number {
 // - pH: 0 (unset/disconnected probe) or outside 0-14.
 // - Temperature: 0 C (unset default), 85 C (DS18B20 power-on reset value),
 //   -127 C (DallasTemperature DEVICE_DISCONNECTED_C).
-// - TDS: 0 ppm (probe out of water or disconnected), or outside the current
-//   meter-compared 80-314 ppm span documented in docs/device-contract.md.
+// - TDS: negative/zero or explicitly invalid input. The meter-compared span
+//   describes calibration coverage, not sensor validity or a water threshold.
 // - Water level: 0% is accepted only when the device also reports waterPresent === false.
 export const SENSOR_FAULT_TEMPERATURE_SENTINELS_C = [0, 85, -127] as const;
 export const TDS_METER_COMPARED_MIN_PPM = 80;
@@ -109,9 +109,8 @@ export function getSensorFault(
     case 'tds':
       if (value < 0) return 'negative TDS';
       if (value === 0) return 'TDS 0 ppm indicates a dry or disconnected probe';
-      return value < TDS_METER_COMPARED_MIN_PPM || value > TDS_METER_COMPARED_MAX_PPM
-        ? `TDS outside the current ${TDS_METER_COMPARED_MIN_PPM}-${TDS_METER_COMPARED_MAX_PPM} ppm meter-compared span`
-        : null;
+      // A calibration-check span is not a sensor failure or a user water limit.
+      return null;
     case 'waterLevel':
       if (value < 0 || value > 100) return 'water level outside 0-100%';
       return value === 0 && context.waterPresent !== false
@@ -205,8 +204,15 @@ export function evaluateTelemetryValidity(
   if (tds.status === 'missing' && raw.tdsReadingValid === false) {
     tds = { status: 'invalid', reason: 'tdsReadingValid is false' };
   }
-  const turbidity = sensorValidity('turbidity', raw.turbidity, raw.turbidityReadingValid,
+  let turbidity = sensorValidity('turbidity', raw.turbidity, raw.turbidityReadingValid,
     'turbidityReadingValid', { requireFlags });
+  if (raw.turbidityReadingValid === false) {
+    turbidity = { status: 'invalid', reason: 'turbidityReadingValid is false' };
+  } else if (turbidity.status === 'missing' &&
+      (raw.turbidityState === 'Clear' || raw.turbidityState === 'Cloudy') &&
+      isSensorFlagValid(raw.turbidityReadingValid, requireFlags)) {
+    turbidity = { status: 'valid' };
+  }
   const waterLevel = raw.waterLevelReadingValid === false
     ? { status: 'invalid' as const, reason: 'waterLevelReadingValid is false' }
     : sensorValidity('waterLevel', raw.waterLevelPercent, raw.waterLevelReadingValid,
@@ -275,6 +281,16 @@ export function getTelemetryFreshness(
 
 export function readTelemetryNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+// Electrical input range only, not an aquarium threshold or NTU conversion.
+export function readTurbidityVoltage(value: unknown): number | undefined {
+  return bounded(value, 0, 3.3) ? value : undefined;
+}
+
+export function formatTurbidityVoltage(value: unknown): string | null {
+  const voltage = readTurbidityVoltage(value);
+  return voltage === undefined ? null : `${voltage.toFixed(3)} V (ADC)`;
 }
 
 export function normalizeDevicePowerStatus(value: unknown): 'Online' | 'Offline' | 'Power Interruption' | 'Unknown' | undefined {
@@ -612,24 +628,50 @@ export function resolveThresholds(species: SpeciesConfig | null, overrides?: unk
 
 /**
  * Per-aquarium overrides stored on the aquarium doc. `thresholdOverrides`
- * (camelCase, per parameter) wins; otherwise the existing profile limits
- * (minTemp/maxTemp/minPh/maxPh/minLevel) are used as overrides so the owner's
+ * (camelCase, per parameter) wins over the existing profile limits
+ * (minTemp/maxTemp/minPh/maxPh/minLevel/minTdsPpm/maxTdsPpm) so the owner's
  * saved limits keep working. minQuality (TDS purity %) has no ppm equivalent
  * and is not used by the engine.
  */
 export function readAquariumOverrides(aquarium: Record<string, unknown>): Partial<Record<WaterParameter, RangeThreshold>> {
-  if (isPlainObject(aquarium.thresholdOverrides)) {
-    return aquarium.thresholdOverrides as Partial<Record<WaterParameter, RangeThreshold>>;
-  }
-  const overrides: Partial<Record<WaterParameter, RangeThreshold>> = {};
+  // Ppm limits are explicit owner settings, never inferred from minQuality.
+  const tds = finite(aquarium.minTdsPpm) && finite(aquarium.maxTdsPpm) &&
+    aquarium.minTdsPpm >= 0 && aquarium.minTdsPpm < aquarium.maxTdsPpm
+    ? { min: aquarium.minTdsPpm, max: aquarium.maxTdsPpm } : null;
+  const ppmOverride: Partial<Record<WaterParameter, RangeThreshold>> = tds ? { tdsPpm: tds } : {};
+  const overrides: Partial<Record<WaterParameter, RangeThreshold>> = { ...ppmOverride };
   const pair = (min: unknown, max: unknown, lo: number, hi: number): RangeThreshold | null =>
     bounded(min, lo, hi) && bounded(max, lo, hi) && min < max ? { min, max } : null;
   const temperature = pair(aquarium.minTemp, aquarium.maxTemp, -10, 60);
   if (temperature) overrides.temperatureC = temperature;
   const ph = pair(aquarium.minPh, aquarium.maxPh, 0, 14);
   if (ph) overrides.ph = ph;
-  if (bounded(aquarium.minLevel, 0, 100) && aquarium.minLevel > 0) overrides.waterLevelPercent = { min: aquarium.minLevel };
+  if (bounded(aquarium.minLevel, 0, 100)) overrides.waterLevelPercent = { min: aquarium.minLevel };
+  if (isPlainObject(aquarium.thresholdOverrides)) {
+    for (const key of WATER_PARAMETERS) {
+      const admin = aquarium.thresholdOverrides[key];
+      if (!isPlainObject(admin)) continue;
+      const merged = { ...overrides[key] };
+      if (finite(admin.min)) merged.min = admin.min;
+      if (finite(admin.max)) merged.max = admin.max;
+      if (merged.min !== undefined && merged.max !== undefined && merged.min >= merged.max) continue;
+      if (merged.min !== undefined || merged.max !== undefined) overrides[key] = merged;
+    }
+  }
   return overrides;
+}
+
+/** Saved aquarium limits are active settings; only approved species defaults fill gaps. */
+export function resolveLiveAquariumThresholds(aquarium: Record<string, unknown>, species: SpeciesConfig | null): EffectiveThresholds {
+  return resolveThresholds(species?.status === 'approved' ? species : null, readAquariumOverrides(aquarium));
+}
+
+/** Cache fingerprint only (not authorization); rejects summaries from other settings/rule versions. */
+export function assessmentConfigurationKey(thresholds: EffectiveThresholds, rules: RuleConfig[]): string {
+  const value = JSON.stringify({ thresholds, rules: [...rules].sort((a, b) => a.ruleId.localeCompare(b.ruleId)) });
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  return `per-rule-approval-v5:${(hash >>> 0).toString(16)}`;
 }
 
 /** mainsPresent (new, additive) wins over the device-reported powerStatus. Display only. */
@@ -697,7 +739,8 @@ function formatWithUnit(value: unknown, unit?: string) {
 }
 
 function describeIssue(rule: RuleConfig, parameter: RuleParameter, value: unknown, threshold?: RangeThreshold) {
-  const { label, unit } = PARAMETER_LABELS[parameter];
+  const { label } = PARAMETER_LABELS[parameter];
+  const unit = finite(value) ? PARAMETER_LABELS[parameter].unit : undefined;
   if (!rule.condition.ref) return `${label} reports ${formatWithUnit(value, unit)}.`;
   const base = threshold?.[rule.condition.ref];
   const above = rule.condition.op === 'gt' || rule.condition.op === 'gte';
@@ -746,7 +789,13 @@ function classify(
   context: Record<string, unknown>
 ): Classification {
   const matching = rules.filter((rule) => rule.parameter === parameter && conditionMatches(rule.condition, value, threshold));
-  if (matching.length === 0) return { status: 'normal', rule: null, missing: false };
+  if (matching.length === 0) {
+    // Classification and prescribed action are separate: a saved limit breach
+    // is a warning even without an active rule. Never invent a critical margin or action.
+    const outside = finite(value) && Boolean(threshold &&
+      ((finite(threshold.min) && value < threshold.min) || (finite(threshold.max) && value > threshold.max)));
+    return { status: outside ? 'warning' : 'normal', rule: null, missing: outside };
+  }
   const severity = matching.some((rule) => rule.severity === 'critical') ? 'critical' : 'warning';
   const candidates = matching.filter((rule) => rule.severity === severity && extraChecksPass(rule, context)).sort(byPriority);
   return { status: severity, rule: candidates[0] ?? null, missing: candidates.length === 0 };
@@ -797,7 +846,7 @@ export function evaluateAquarium(
   const record = (parameter: RuleParameter, value: unknown, outcome: Classification, threshold?: RangeThreshold) => {
     const { unit } = PARAMETER_LABELS[parameter];
     const result: ParameterResult = { parameter, status: outcome.status, value: finite(value) || typeof value === 'string' ? value : null };
-    if (unit) result.unit = unit;
+    if (unit && finite(value)) result.unit = unit;
     if (outcome.rule) {
       result.ruleId = outcome.rule.ruleId;
       matchedRules.push(toMatchedRule(outcome.rule, parameter, describeIssue(outcome.rule, parameter, value, threshold)));
@@ -829,6 +878,24 @@ export function evaluateAquarium(
         } else {
           missingRules.push(`${parameter}:sensor_fault`);
         }
+        continue;
+      }
+      if (parameter === 'turbidity' && sensor.status === 'valid' &&
+          (raw.turbidityState === 'Clear' || raw.turbidityState === 'Cloudy')) {
+        // Confirmed categorical policy; recommendations remain configured rules.
+        // Never convert Clear/Cloudy into an invented numeric NTU reading.
+        const categoricalRules = enabled.filter(rule => rule.parameter === parameter &&
+          rule.severity === 'warning' && !rule.condition.ref && typeof rule.condition.value === 'string');
+        if (raw.turbidityState === 'Clear') {
+          record(parameter, 'Clear', { status: 'normal', rule: null, missing: false });
+        } else {
+          const outcome = classify(parameter, 'Cloudy', undefined, categoricalRules, context);
+          record(parameter, 'Cloudy', { status: 'warning', rule: outcome.rule, missing: !outcome.rule });
+        }
+        continue;
+      }
+      if (parameter === 'turbidity' && raw.turbidityState === 'Unknown') {
+        perParameter.push({ parameter, status: 'unavailable', value: 'Unknown', reason: 'classification unknown' });
         continue;
       }
       if (sensor.status === 'missing' || !finite(value)) {
@@ -908,6 +975,7 @@ export function conditionSignature(result: EngineResult): string {
 export const CONDITION_SUMMARY_MAX_AGE_MS = 5 * 60_000 + TELEMETRY_STALE_MS;
 
 export type ConditionSummary = {
+  configurationKey?: string;
   /** Geometry used by the server for a profile-based level (Aquarium 1 only). */
   waterLevelTargetHeightCm?: number;
   overall: ConditionSeverity | 'unavailable';
@@ -920,8 +988,9 @@ export type ConditionSummary = {
   readingUpdatedAt: number | null;
 };
 
-export function toConditionSummary(result: EngineResult, evaluatedAt: number, readingUpdatedAt: number | null): ConditionSummary {
+export function toConditionSummary(result: EngineResult, evaluatedAt: number, readingUpdatedAt: number | null, configurationKey?: string): ConditionSummary {
   return {
+    ...(configurationKey ? { configurationKey } : {}),
     overall: result.overall,
     perParameter: result.perParameter,
     matchedRules: result.matchedRules,
@@ -946,6 +1015,9 @@ const LEGACY_PARAMETER: Partial<Record<RuleParameter, MonitoringParameter>> = {
 
 function parameterMessage(item: ParameterResult, rule?: MatchedRule) {
   if (rule) return rule.issueDetected;
+  if (item.parameter === 'turbidity' && (item.value === 'Clear' || item.value === 'Cloudy')) {
+    return item.reason ?? `Turbidity reports ${item.value}.`;
+  }
   switch (item.status) {
     case 'normal': return `${PARAMETER_LABELS[item.parameter].label} is within the configured range.`;
     case 'not_monitored': return item.value === 'Not installed' ? 'Not installed (aquarium profile).' : 'Not monitored: the device does not report this status yet.';
@@ -982,7 +1054,7 @@ export function toConditionAssessment(
     }];
   });
   const notes = [...(meta.notes ?? [])];
-  if (result.draft) notes.unshift('Thresholds and rules are DRAFT values awaiting adviser approval.');
+  if (result.draft) notes.unshift('Some configuration is marked DRAFT in the application. Saved aquarium limits still apply; draft recommendation rules are not activated.');
   return {
     overallSeverity: meta.source === 'unavailable' ? 'unavailable' : result.overall,
     source: meta.source,
@@ -1015,6 +1087,8 @@ export type AlertEntryState = {
   recommendationId: string | null;
   severity: 'warning' | 'critical' | null;
   ruleId: string | null;
+  /** Missing on legacy entries; refresh advice from a fresh validated match. */
+  ruleApprovalStatus?: ApprovalStatus | null;
   normalStreak: number;
   lastTouchedAt: number | null;
   /** When the last alert for this key auto-resolved (cooldown start). */
@@ -1093,10 +1167,12 @@ export function planAlertChanges(options: {
     if (finding.state === 'abnormal' && finding.severity) {
       const severity = finding.severity;
       const ruleId = finding.rule?.ruleId ?? null;
+      const ruleApprovalStatus = finding.rule?.approvalStatus ?? null;
       if (entry.alertId) {
         const escalated = entry.severity === null || conditionRank[severity] > conditionRank[entry.severity];
-        if (escalated || severity !== entry.severity || ruleId !== entry.ruleId) {
-          const newRecommendation = ruleId !== entry.ruleId;
+        const approvalChanged = Boolean(finding.rule) && ruleApprovalStatus !== entry.ruleApprovalStatus;
+        if (escalated || severity !== entry.severity || ruleId !== entry.ruleId || approvalChanged) {
+          const newRecommendation = ruleId !== entry.ruleId || approvalChanged;
           const recommendationId = newRecommendation ? (finding.rule ? alertDocId(aquariumId, finding.key, now) : null) : entry.recommendationId;
           operations.push({
             kind: escalated ? 'escalate' : 'change',
@@ -1109,7 +1185,7 @@ export function planAlertChanges(options: {
             recommendationId,
             supersededRecommendationId: newRecommendation ? entry.recommendationId : null,
           });
-          Object.assign(entry, { severity, ruleId, recommendationId, lastTouchedAt: now });
+          Object.assign(entry, { severity, ruleId, ruleApprovalStatus, recommendationId, lastTouchedAt: now });
         } else if (entry.lastTouchedAt === null || now - entry.lastTouchedAt >= ALERT_TOUCH_INTERVAL_MS) {
           operations.push({ kind: 'touch', key: finding.key, alertId: entry.alertId });
           entry.lastTouchedAt = now;
@@ -1121,7 +1197,7 @@ export function planAlertChanges(options: {
         const alertId = alertDocId(aquariumId, finding.key, now);
         const recommendationId = finding.rule ? alertId : null;
         operations.push({ kind: 'open', key: finding.key, parameter: finding.parameter, alertId, recommendationId, severity, rule: finding.rule });
-        Object.assign(entry, { alertId, recommendationId, severity, ruleId, normalStreak: 0, lastTouchedAt: now });
+        Object.assign(entry, { alertId, recommendationId, severity, ruleId, ruleApprovalStatus, normalStreak: 0, lastTouchedAt: now });
       }
     } else if (finding.state === 'normal' && entry.alertId) {
       entry.normalStreak += 1;

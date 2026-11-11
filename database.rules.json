@@ -51,6 +51,9 @@
           "turbidityState": {
             ".validate": "newData.isString() && (newData.val() == 'Clear' || newData.val() == 'Cloudy' || newData.val() == 'Unknown')"
           },
+          "turbidityVoltage": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3.3"
+          },
           "ammoniaPpm": {
             ".validate": "newData.isNumber()"
           },

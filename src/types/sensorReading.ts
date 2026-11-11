@@ -27,6 +27,7 @@ export interface SensorReadingDocument {
   turbidity?: number;
   turbidityReadingValid?: boolean;
   turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
+  turbidityVoltage?: number;
   ammoniaPpm?: number;
   filterState?: 'Active' | 'Inactive';
   lightState?: 'On' | 'Off';

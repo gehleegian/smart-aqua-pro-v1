@@ -121,6 +121,7 @@ export function buildLiveEntry(shadow: DeviceShadow | null): DeviceTelemetryLogE
     tdsReadingValid: telemetry.tdsReadingValid,
     turbidity: telemetry.turbidity,
     turbidityState: telemetry.turbidityState,
+    turbidityVoltage: telemetry.turbidityVoltage,
     ammoniaPpm: telemetry.ammoniaPpm,
     filterState:
       telemetry.filterState === 'Active' || telemetry.filterState === 'Inactive'

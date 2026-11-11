@@ -33,6 +33,8 @@ type AquariumProfileUpdateField =
   | 'maxPh'
   | 'minLevel'
   | 'minQuality'
+  | 'minTdsPpm'
+  | 'maxTdsPpm'
   | 'feeder'
   | 'light'
   | 'filter'
@@ -69,6 +71,8 @@ const AQUARIUM_UPDATE_FIELDS = new Set<AquariumUpdateField | 'status'>([
   'maxPh',
   'minLevel',
   'minQuality',
+  'minTdsPpm',
+  'maxTdsPpm',
   'feeder',
   'light',
   'filter',
@@ -234,6 +238,8 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
     maxPh: readOptionalNumber(data.maxPh),
     minLevel: readNumber(data.minLevel, 70),
     minQuality: readNumber(data.minQuality, 80),
+    minTdsPpm: readOptionalNumber(data.minTdsPpm),
+    maxTdsPpm: readOptionalNumber(data.maxTdsPpm),
     ownerId: readString(data.ownerId, ''),
     ownerName: readString(data.ownerName, 'Unknown Owner'),
     setupStatus: data.status === 'setup' ? 'setup' : 'active',

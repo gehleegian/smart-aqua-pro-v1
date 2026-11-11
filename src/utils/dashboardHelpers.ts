@@ -130,6 +130,7 @@ export function mergeDashboardAquariums(
       hasFreshPhTelemetry: Boolean(snapshot?.hasFreshPhTelemetry),
       hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
       turbidityState: snapshot?.turbidityState,
+      turbidityVoltage: snapshot?.turbidityVoltage,
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
       reportedFilterState: snapshot?.filterState,
       reportedLightState: snapshot?.lightState,

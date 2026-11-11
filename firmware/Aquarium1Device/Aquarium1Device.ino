@@ -8,6 +8,10 @@
 #include <esp_http_client.h>
 #include <esp_crt_bundle.h>
 #include <esp_log.h>
+// BEGIN AQ1 NETWORK POLICY
+#include <esp_system.h>
+int lastAuthHttpStatus = 0;
+// END AQ1 NETWORK POLICY
 #include <time.h>
 #include "Config.h"
 #include "FeederConfig.h"
@@ -95,6 +99,29 @@ void outputsOff() {
   lightOn = false;
   filterOn = false;
 }
+
+// BEGIN AQ1 WIFI HOLD
+void pauseCloudForWifiLoss() {
+  // Suspend remote actions without changing either relay's last output state.
+  // A fresh command baseline is required after reconnect; no retained replay.
+  if (armed || commandBaseline)
+    Serial.println("Network unavailable: light/filter states retained; cloud actions paused until reconnect.");
+  armed = false;
+  commandBaseline = false;
+}
+// END AQ1 WIFI HOLD
+// BEGIN AQ1 NETWORK POLICY
+bool temporaryCloudFailure(int status) {
+  return status <= 0 || status == 408 || status == 429 || (status >= 500 && status <= 599);
+}
+bool retryCloudWithoutRelayShutdown(const char *stage, int status) {
+  if (!temporaryCloudFailure(status)) return false;
+  pauseCloudForWifiLoss();
+  Serial.printf("Cloud retry: %s HTTP %d; light=%d filter=%d retained. No stale commands replayed.\n",
+                stage, status, lightOn, filterOn);
+  return true; // retry handled, NOT a successful upload or permission grant
+}
+// END AQ1 NETWORK POLICY
 
 void disarm() {
   outputsOff();
@@ -493,6 +520,9 @@ bool authenticate() {
   }
   const int status = request(url, HTTP_METHOD_POST, payload, response,
                             refreshing ? "application/x-www-form-urlencoded" : "application/json");
+  // BEGIN AQ1 NETWORK POLICY
+  lastAuthHttpStatus = status; // retained during the existing auth retry cooldown
+  // END AQ1 NETWORK POLICY
   JsonDocument result;
   if (status != 200 || deserializeJson(result, response)) {
     idToken = "";
@@ -688,9 +718,14 @@ void applyScheduledFeed(JsonDocument &control) {
 }
 
 bool cloudCycle() {
-  if (!authenticate()) return false;
+  // BEGIN AQ1 NETWORK AUTH
+  if (!authenticate()) return retryCloudWithoutRelayShutdown("authentication", lastAuthHttpStatus);
+  // END AQ1 NETWORK AUTH
   String response;
   int status = database("control", HTTP_METHOD_GET, "", response);
+  // BEGIN AQ1 NETWORK POLICY
+  if (retryCloudWithoutRelayShutdown("control", status)) return true;
+  // END AQ1 NETWORK POLICY
   JsonDocument control;
   if (status != 200 || deserializeJson(control, response) || !control.is<JsonObject>()) {
     Serial.printf("Control unavailable (HTTP %d): register/claim device and save Manual settings.\n", status);
@@ -720,6 +755,9 @@ bool cloudCycle() {
     Serial.println("Automation skipped: save complete lighting, filtration and feeding times. Manual controls remain available.");
   }
   status = database("commands/latest", HTTP_METHOD_GET, "", response);
+  // BEGIN AQ1 NETWORK POLICY
+  if (retryCloudWithoutRelayShutdown("commands/latest", status)) return true;
+  // END AQ1 NETWORK POLICY
   JsonDocument command;
   if (status != 200 || deserializeJson(command, response)) {
     Serial.printf("Command access failed (HTTP %d).\n", status);
@@ -852,6 +890,16 @@ bool cloudCycle() {
   status = database("telemetry", HTTP_METHOD_PUT, payload, response);
   Serial.printf("Telemetry snapshot HTTP %d\n", status);
   if (status == 200) telemetrySamplePending = false;
+  // BEGIN AQ1 COMMAND RELIABILITY
+  // Control/auth/command GETs already succeeded in THIS poll. A temporary
+  // telemetry-upload failure must not undo an accepted relay command.
+  // Keep the pending batch for retry; never fabricate a successful upload.
+  // Authorization and other permanent failures still fail closed.
+  if (status <= 0 || status == 408 || status == 429 || (status >= 500 && status <= 599)) {
+    Serial.println("Telemetry upload failed; controls retained after successful control poll. Retrying next poll.");
+    return true;
+  }
+  // END AQ1 COMMAND RELIABILITY
   return status == 200;
 }
 
@@ -869,6 +917,9 @@ void setup() {
   // Passive divider requires high-impedance ADC input: never enable a pull-up.
   pinMode(POWER_PIN, POWER_SENSOR_ANALOG ? INPUT : INPUT_PULLUP);
   Serial.begin(115200);
+  // BEGIN AQ1 NETWORK POLICY
+  Serial.printf("AQ1 network-hold-v3 | reset reason=%d | boot outputs OFF\n", int(esp_reset_reason()));
+  // END AQ1 NETWORK POLICY
   scheduleStoreReady = scheduleStore.begin("aq1-schedule", false);
   if (scheduleStoreReady) lastAutoFeedMinute = scheduleStore.getLong64("feedMinute", 0);
   analogReadResolution(12);
@@ -900,12 +951,16 @@ void loop() {
   if (CLOUD_ENABLED && cloudConfigurationValid()) {
     if (millis() - lastConnectionReport >= 10000) {
       lastConnectionReport = millis();
+      // BEGIN AQ1 NETWORK POLICY
+      Serial.printf("AQ1 network-hold-v3 | uptime=%lu ms | outputs light=%d filter=%d\n",
+                    (unsigned long)millis(), lightOn, filterOn);
+      // END AQ1 NETWORK POLICY
       Serial.printf("Connection: WiFi status=%d (3=connected) | network time=%s | authenticated=%s | web ready=%s\n",
                     int(WiFi.status()), time(nullptr) >= 1760000000 ? "ready" : "waiting",
                     idToken.length() ? "yes" : "no", commandBaseline && armed ? "yes" : "no");
     }
     if (WiFi.status() != WL_CONNECTED) {
-      if (armed) { disarm(); Serial.println("Wi-Fi lost: disarmed, both outputs OFF."); }
+      pauseCloudForWifiLoss();
       if (millis() - lastWifi >= 15000) { lastWifi = millis(); WiFi.reconnect(); }
     } else if (time(nullptr) < 1760000000) {
       if (armed) disarm();
@@ -913,9 +968,11 @@ void loop() {
     } else if (millis() - lastCloud >= cloudDelayMs) {
       if (cloudCycle()) cloudDelayMs = 3000;
       else {
-        disarm();
+        if (WiFi.status() != WL_CONNECTED) pauseCloudForWifiLoss();
+        else disarm();
         cloudDelayMs = min(cloudDelayMs * 2, uint32_t(30000));
-        Serial.println("Cloud unavailable: outputs OFF. Reconnect will establish a new command baseline.");
+        if (WiFi.status() == WL_CONNECTED)
+          Serial.println("Cloud unavailable: outputs OFF. Reconnect will establish a new command baseline.");
       }
       lastCloud = millis();
     }

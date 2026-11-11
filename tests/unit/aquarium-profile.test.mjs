@@ -39,6 +39,8 @@ function completeForm(overrides = {}) {
     maxPh: '7.5',
     minLevel: '70',
     minQuality: '80',
+    minTdsPpm: '100',
+    maxTdsPpm: '300',
     ...overrides,
   };
 }
@@ -47,7 +49,7 @@ test('profile limits come only from the stored species config (no hard-coded pre
   const blank = createEmptyAquariumForm();
   assert.equal(blank.tankType, CANONICAL_AQUARIUM_TYPE);
   assert.equal(blank.species, CANONICAL_FISH_SPECIES);
-  for (const field of ['minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel', 'minQuality']) {
+  for (const field of ['minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel', 'minQuality', 'minTdsPpm', 'maxTdsPpm']) {
     assert.equal(blank[field], '', `${field} has no built-in default`);
   }
   assert.equal(blank.hasFiltrationSystem, '');
@@ -62,7 +64,7 @@ test('profile limits come only from the stored species config (no hard-coded pre
     [form.minTemp, form.maxTemp, form.minPh, form.maxPh, form.minLevel],
     ['19', '23', '6.6', '7.4', '72']
   );
-  assert.deepEqual(buildSpeciesThresholdPreset({ ranges: {} }), { minTemp: '', maxTemp: '', minPh: '', maxPh: '', minLevel: '' });
+  assert.deepEqual(buildSpeciesThresholdPreset({ ranges: {} }), { minTemp: '', maxTemp: '', minPh: '', maxPh: '', minLevel: '', minTdsPpm: '', maxTdsPpm: '' });
 });
 
 test('complete canonical profile validates and builds a persistent create payload', () => {

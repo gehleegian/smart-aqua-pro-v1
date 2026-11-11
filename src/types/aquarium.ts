@@ -82,6 +82,9 @@ export interface Aquarium {
   maxPh?: number;
   minLevel: number;
   minQuality: number;
+  /** Owner-configured TDS limits in ppm; never converted from legacy purity %. */
+  minTdsPpm?: number;
+  maxTdsPpm?: number;
   ownerId: string;
   ownerName: string;
   tankType?: string;

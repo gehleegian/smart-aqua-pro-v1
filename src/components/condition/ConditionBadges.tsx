@@ -43,13 +43,14 @@ export function OverallConditionBadge({ severity }: { severity: AssessmentSeveri
 export function DraftThresholdsBadge({ draft }: { draft: boolean }) {
   if (!draft) return null;
   return (
-    <span title="Thresholds and rules are draft values awaiting adviser approval.">
-      <Badge variant="info">Draft thresholds</Badge>
+    <span title="Some configuration remains marked draft in the application. Saved user limits still apply; draft recommendation rules are not activated.">
+      <Badge variant="info">Draft configuration</Badge>
     </span>
   );
 }
 
 export function ParameterStatusBadge({ item }: { item: ParameterAssessment }) {
+  if (item.parameter === 'turbidity' && item.notMonitored && (item.value === 'Clear' || item.value === 'Cloudy')) return <Badge variant="info">{item.value}</Badge>;
   if (item.notMonitored) return <Badge variant="info">{item.value === 'Not installed' ? 'Not installed' : 'Not monitored'}</Badge>;
   if (item.severity === 'unavailable' && item.message.startsWith('Unavailable: sensor fault')) {
     return <Badge variant="warning">Sensor error</Badge>;

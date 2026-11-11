@@ -10,7 +10,8 @@ export type {
 import type { AquariumConditionAssessment, TelemetrySource } from '../utils/monitoringAssessmentCore';
 
 export type MonitoringAquarium = Aquarium & {
-  turbidityState?: 'Clear' | 'Cloudy';
+  turbidityState?: 'Clear' | 'Cloudy' | 'Unknown';
+  turbidityVoltage?: number;
   healthStatus: HealthStatus;
   assessment: AquariumConditionAssessment;
   telemetrySource: TelemetrySource;

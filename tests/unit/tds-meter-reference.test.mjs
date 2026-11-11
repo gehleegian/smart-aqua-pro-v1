@@ -74,8 +74,8 @@ test('ppm-only telemetry becomes displayable without inventing a purity percenta
       temperatureC: 24, waterLevelPercent: 80, updatedAt: now, online: true,
       tdsPpm: calculator(firmware)(voltage), tdsReadingValid: true,
     }), now);
-    assert.equal(snapshot.tdsPpm, null);
-    assert.equal(snapshot.validity.tds.status, 'invalid');
+    assert.equal(snapshot.tdsPpm, calculator(firmware)(voltage));
+    assert.equal(snapshot.validity.tds.status, 'valid');
   }
 });
 

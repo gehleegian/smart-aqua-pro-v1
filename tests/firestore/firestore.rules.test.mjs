@@ -480,6 +480,33 @@ test('FS-10 owner can update structural profile fields with a matching directory
   assert.equal(saved.data().filtrationSetup, 'Internal filter');
 });
 
+test('FS-TDS owner can save ppm limits without changing the legacy percentage or directory', async () => {
+  const database = userDatabase();
+  const tank = doc(database, 'aquariums', AQUARIUM_A);
+  await assertSucceeds(updateDoc(tank, { minTdsPpm: 150, maxTdsPpm: 250 }));
+  const saved = (await getDoc(tank)).data();
+  assert.equal(saved.minTdsPpm, 150);
+  assert.equal(saved.maxTdsPpm, 250);
+  assert.equal(saved.minQuality, aquarium.minQuality);
+});
+
+test('FS-TDS rejects malformed, partial, negative, infinite and unordered ppm limits', async () => {
+  const tank = doc(userDatabase(), 'aquariums', AQUARIUM_A);
+  for (const patch of [{ minTdsPpm: 150 }, { maxTdsPpm: 250 }, { minTdsPpm: -1, maxTdsPpm: 250 },
+    { minTdsPpm: 250, maxTdsPpm: 150 }, { minTdsPpm: 150, maxTdsPpm: 150 },
+    { minTdsPpm: '150', maxTdsPpm: 250 }, { minTdsPpm: NaN, maxTdsPpm: 250 },
+    { minTdsPpm: 150, maxTdsPpm: Infinity }]) {
+    await assertFails(updateDoc(tank, patch));
+  }
+});
+
+test('FS-TDS does not grant other users access or permit owner edits to admin overrides', async () => {
+  await assertFails(updateDoc(doc(userDatabase(USER_B), 'aquariums', AQUARIUM_A), { minTdsPpm: 150, maxTdsPpm: 250 }));
+  await assertFails(updateDoc(doc(userDatabase(), 'aquariums', AQUARIUM_A), {
+    minTdsPpm: 150, maxTdsPpm: 250, thresholdOverrides: { tdsPpm: { min: 0, max: 1000 } },
+  }));
+});
+
 test('FS-10B owner can complete and update a legacy profile without filtration presence', async () => {
   const aquariumId = 'legacy-aquarium-profile';
   const {

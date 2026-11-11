@@ -2,7 +2,7 @@ import Badge from '../ui/Badge';
 import {
   PARAMETER_LABELS,
   WATER_PARAMETERS,
-  readAquariumOverrides,
+  resolveLiveAquariumThresholds,
   resolveThresholds,
   type RangeThreshold,
   type SpeciesConfig,
@@ -34,12 +34,12 @@ export default function ThresholdReview({
   aquarium: Record<string, unknown>;
 }) {
   const defaults = resolveThresholds(species);
-  const effective = resolveThresholds(species, readAquariumOverrides(aquarium));
+  const effective = resolveLiveAquariumThresholds(aquarium, species);
 
   return (
     <div className="space-y-3">
       {effective.status !== 'approved' && (
-        <p className="text-xs text-amber-300">Draft thresholds: pending adviser sign-off (docs/rule-matrix.md).</p>
+        <p className="text-xs text-amber-300">Species defaults are inactive until marked approved in the application. Valid saved aquarium limits still apply.</p>
       )}
       <table className="w-full text-left text-sm">
         <thead className="text-xs text-slate-400">

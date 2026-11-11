@@ -6,6 +6,7 @@ import { createSimulatedTelemetry } from '../../src/utils/monitoringSimulator.ts
 import { getFreshTelemetrySnapshot } from '../../src/types/device.ts';
 import {
   CONDITION_SUMMARY_MAX_AGE_MS,
+  assessmentConfigurationKey,
   evaluateAquarium,
   readAquariumOverrides,
   resolveThresholds,
@@ -63,18 +64,19 @@ test('rules not loaded: unavailable with an explanation, never a guessed classif
   assert.match(result.ruleNotes.join(' '), /not loaded/);
 });
 
-test('draft thresholds and rules are preview-only and cannot activate a live assessment', () => {
+test('saved limits classify readings while draft recommendation rules remain inactive', () => {
   const draft = seedRuleConfig();
   const result = assessAquarium({ aquarium: profile, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig: draft });
-  assert.equal(result.overallSeverity, 'unavailable');
+  assert.equal(result.overallSeverity, 'warning');
   assert.equal(result.draft, true);
   assert.deepEqual(result.recommendations, []);
-  assert.match(result.ruleNotes.join(' '), /approval/i);
+  assert.match(result.ruleNotes.join(' '), /approved|metadata/i);
 });
 
 test('a fresh server condition summary wins over the browser evaluation', () => {
   const serverResult = evaluateAquarium(reading({ temperatureC: 25 }), resolveThresholds(ruleConfig.speciesById.goldfish), ruleConfig.rules, {});
-  const engineState = { condition: toConditionSummary(serverResult, now - 60_000, now - 60_000), cleaning: null, bioloadLevel: null };
+  const engineState = { condition: toConditionSummary(serverResult, now - 60_000, now - 60_000,
+    assessmentConfigurationKey(getEffectiveThresholds(profile, ruleConfig), ruleConfig.rules)), cleaning: null, bioloadLevel: null };
   const fresh = assess({}, { engineState });
   assert.equal(fresh.origin, 'server');
   assert.equal(fresh.overallSeverity, 'warning');
@@ -92,19 +94,19 @@ test('impossible values and explicit invalid flags are sensor faults with only t
   assert.ok(result.recommendations.every((text) => /probe connection or calibration/.test(text)));
 });
 
-test('unapproved aquarium overrides remain preview-only and cannot change a live assessment', () => {
+test('saved aquarium limits drive live assessment without changing other aquariums', () => {
   const custom = { ...profile, maxTemp: 26 };
   assert.equal(getEffectiveThresholds(custom, ruleConfig).values.temperatureC.max, 26, 'editor preview keeps the profile value');
-  assert.equal(assessAquarium({ aquarium: custom, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
+  assert.equal(assessAquarium({ aquarium: custom, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'normal');
   assert.equal(assess({ temperatureC: 25 }).overallSeverity, 'warning', 'the other aquarium is unaffected');
   const admin = { ...custom, thresholdOverrides: { temperatureC: { max: 23 } } };
-  assert.deepEqual(readAquariumOverrides(admin), { temperatureC: { max: 23 } });
+  assert.deepEqual(readAquariumOverrides(admin), { temperatureC: { min: 20, max: 23 }, ph: { min: 6.5, max: 7.5 }, waterLevelPercent: { min: 70 } });
   assert.equal(getEffectiveThresholds(admin, ruleConfig).values.temperatureC.max, 23, 'editor preview keeps the explicit override');
-  assert.equal(assessAquarium({ aquarium: admin, reading: reading({ temperatureC: 23.5 }), source: 'live', now, ruleConfig }).overallSeverity, 'normal');
+  assert.equal(assessAquarium({ aquarium: admin, reading: reading({ temperatureC: 23.5 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
 });
 
 test('inverted or out-of-range profile limits are ignored, falling back to the species defaults', () => {
-  assert.deepEqual(readAquariumOverrides({ minTemp: 30, maxTemp: 20, minPh: -1, maxPh: 20, minLevel: 0 }), {});
+  assert.deepEqual(readAquariumOverrides({ minTemp: 30, maxTemp: 20, minPh: -1, maxPh: 20, minLevel: -1 }), {});
   const broken = { ...profile, minTemp: 30, maxTemp: 20 };
   assert.equal(assessAquarium({ aquarium: broken, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
 });
