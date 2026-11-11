@@ -1,5 +1,33 @@
 # Aquarium 1 supervised Arduino test
 
+## Main-branch integration (2026-11-11)
+
+The current source combines the owner's manual-command ACK retry fix with the
+newer main-branch command-ID validation and schedule acknowledgements. Manual
+outcomes are queued once and retried independently of sensor publishing; schedule
+acknowledgements retain the main-branch best-effort write. Both use the existing
+schema. The positional feeder returns its software completion result without
+changing angles or timings, and an interrupted dwell remains a failed result.
+The fixed full reference, experimental adapter compensation and 10-second batch
+gap are preserved. The owner reports manual commands work and the intermittent
+temperature reading recovered; this does not independently establish accuracy.
+Integration updated source only, not the running ESP32. Earlier dated sections
+describe implementation-time state, not a new upload or deployment.
+
+## Main-branch integration (2026-11-11)
+
+The current source combines the owner's manual-command ACK retry fix with the
+newer main-branch command-ID validation and schedule acknowledgements. Manual
+outcomes are queued once and retried independently of sensor publishing; schedule
+acknowledgements retain the main-branch best-effort write. Both use the existing
+schema. The positional feeder returns its software completion result without
+changing angles or timings, and an interrupted dwell remains a failed result.
+The fixed full reference, experimental adapter compensation and 10-second batch
+gap are preserved. The owner reports manual commands work and the intermittent
+temperature reading recovered; this does not independently establish accuracy.
+Integration updated source only, not the running ESP32. Earlier dated sections
+describe implementation-time state, not a new upload or deployment.
+
 ## Command acknowledgements (2026-11-11; not uploaded)
 
 Both Aquarium 1 sketch copies now write the existing commandAck/latest contract,
@@ -442,8 +470,9 @@ to this divider/ESP32 combination. Its signal must stay within ESP32 limits.
    for a command baseline, then send a NEW website Light On/Off or Filter
    Active/Inactive command. Cloud mode does not require a Serial ARM command.
 6. Verify each physical response before sending another command. The existing
-   latest-command slot can overwrite rapid commands; there is no device cloud
-   acknowledgement endpoint. Website submission alone does not verify actuation.
+   latest-command slot can overwrite rapid commands. The sketch writes a terminal
+   `commandAck/latest` result, but that confirms only the software/output sequence;
+   website submission or a `done` ack does not verify physical actuation.
 
 Existing commands are skipped on startup/reconnect/ARM. New commands must match
 the aquarium, have a requester, be newer than the baseline/last applied timestamp,
@@ -509,8 +538,9 @@ The HTTPS implementation validates certificates using the ESP32 certificate
 bundle and signs in only as the expected device UID. It refreshes tokens and
 relies on existing RTDB authorization; it does not bypass access checks. No tokens,
 passwords or HTTP response bodies are printed. Polling is used for this bench
-test; streaming, production provisioning, cloud acknowledgements and unattended
-failure policy remain future integration work.
+test; streaming, production provisioning and unattended failure policy remain
+future integration work. App and scheduled-action acknowledgements are implemented
+in source but require flashing and physical hardware verification.
 
 Reference APIs: [Firebase Auth REST](https://firebase.google.com/docs/reference/rest/auth)
 and [Espressif calibrated ADC reads](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/adc.html).

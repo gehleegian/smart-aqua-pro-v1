@@ -25,6 +25,7 @@
     "device:provision": "node scripts/provision-device.mjs",
     "test:aquarium-profile": "node --experimental-strip-types --test tests/unit/aquarium-profile.test.mjs",
     "test:monitoring-assessment": "node --experimental-strip-types --test tests/unit/monitoring-assessment.test.mjs",
+    "test:water-volume": "node --experimental-strip-types --test tests/unit/water-volume-calculations.test.mjs",
     "test:device-contract": "node --experimental-strip-types --test tests/unit/device-contract.test.mjs",
     "test:alerts-assessment": "node --experimental-strip-types --test tests/unit/alerts-assessment.test.mjs",
     "test:monitoring-parity": "node --experimental-strip-types --test tests/integration/monitoring-assessment-parity.test.mjs",

@@ -17,7 +17,7 @@ import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
 // engine and the Firestore rules, and prefers the server summary when fresh.
 
 const now = 1792627200000;
-const ruleConfig = seedRuleConfig();
+const ruleConfig = seedRuleConfig({ approved: true });
 const profile = {
   id: 'aquarium-a', name: 'Indoor Goldfish Aquarium', species: ['Goldfish'],
   minTemp: 20, maxTemp: 24, minPh: 6.5, maxPh: 7.5, minLevel: 70, minQuality: 80,
@@ -63,6 +63,15 @@ test('rules not loaded: unavailable with an explanation, never a guessed classif
   assert.match(result.ruleNotes.join(' '), /not loaded/);
 });
 
+test('draft thresholds and rules are preview-only and cannot activate a live assessment', () => {
+  const draft = seedRuleConfig();
+  const result = assessAquarium({ aquarium: profile, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig: draft });
+  assert.equal(result.overallSeverity, 'unavailable');
+  assert.equal(result.draft, true);
+  assert.deepEqual(result.recommendations, []);
+  assert.match(result.ruleNotes.join(' '), /approval/i);
+});
+
 test('a fresh server condition summary wins over the browser evaluation', () => {
   const serverResult = evaluateAquarium(reading({ temperatureC: 25 }), resolveThresholds(ruleConfig.speciesById.goldfish), ruleConfig.rules, {});
   const engineState = { condition: toConditionSummary(serverResult, now - 60_000, now - 60_000), cleaning: null, bioloadLevel: null };
@@ -83,13 +92,15 @@ test('impossible values and explicit invalid flags are sensor faults with only t
   assert.ok(result.recommendations.every((text) => /probe connection or calibration/.test(text)));
 });
 
-test('owner profile limits act as per-aquarium overrides; thresholdOverrides wins over them', () => {
+test('unapproved aquarium overrides remain preview-only and cannot change a live assessment', () => {
   const custom = { ...profile, maxTemp: 26 };
-  assert.equal(assessAquarium({ aquarium: custom, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'normal');
+  assert.equal(getEffectiveThresholds(custom, ruleConfig).values.temperatureC.max, 26, 'editor preview keeps the profile value');
+  assert.equal(assessAquarium({ aquarium: custom, reading: reading({ temperatureC: 25 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
   assert.equal(assess({ temperatureC: 25 }).overallSeverity, 'warning', 'the other aquarium is unaffected');
   const admin = { ...custom, thresholdOverrides: { temperatureC: { max: 23 } } };
   assert.deepEqual(readAquariumOverrides(admin), { temperatureC: { max: 23 } });
-  assert.equal(assessAquarium({ aquarium: admin, reading: reading({ temperatureC: 23.5 }), source: 'live', now, ruleConfig }).overallSeverity, 'warning');
+  assert.equal(getEffectiveThresholds(admin, ruleConfig).values.temperatureC.max, 23, 'editor preview keeps the explicit override');
+  assert.equal(assessAquarium({ aquarium: admin, reading: reading({ temperatureC: 23.5 }), source: 'live', now, ruleConfig }).overallSeverity, 'normal');
 });
 
 test('inverted or out-of-range profile limits are ignored, falling back to the species defaults', () => {
@@ -115,8 +126,8 @@ test('critical findings are listed before warnings, each traceable to a rule id'
   for (const item of result.parameters.filter((entry) => entry.recommendation)) {
     assert.ok(item.recommendationRuleId);
   }
-  assert.equal(result.draft, true);
-  assert.equal(result.ruleVersion, 'rules:draft');
+  assert.equal(result.draft, false);
+  assert.equal(result.ruleVersion, 'rules:approved');
 });
 
 test('a confirmed empty tank (0% with waterPresent=false) is a real critical water level', () => {

@@ -53,6 +53,6 @@ export function commandLabel(type: string, state: string | null) {
   }
 }
 
-/** Live firmware does not acknowledge commands yet: "No response" is expected, not an error. */
+/** A timeout is an unknown outcome, not proof that the device failed to act. */
 export const NO_RESPONSE_EXPLANATION =
-  'The device did not confirm this command within 30 seconds. The current firmware does not send confirmations yet, so this is expected until the firmware update; it does not mean the command failed.';
+  'The device did not confirm this command within 30 seconds. Check its connection and firmware version before retrying; this does not mean the command failed.';

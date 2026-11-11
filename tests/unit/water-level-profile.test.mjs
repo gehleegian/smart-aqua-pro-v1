@@ -85,8 +85,8 @@ test('incomplete aquarium dimensions no longer hide valid fixed-calibration read
   assert.equal(snapshot.hasFreshTemperatureTelemetry, true);
   assert.equal(snapshot.hasFreshWaterLevelTelemetry, true);
   assert.equal(snapshot.waterLevelPercent, 50);
-  const assessment = assessAquarium({ aquarium: { ...invalid, minTemp: 20, maxTemp: 24, minLevel: 70 },
-    reading, source: 'live', now, ruleConfig: seedRuleConfig() });
+  const assessment = assessAquarium({ aquarium: { ...invalid, species: ['Goldfish'], minTemp: 20, maxTemp: 24, minLevel: 70 },
+    reading, source: 'live', now, ruleConfig: seedRuleConfig({ approved: true }) });
   assert.notEqual(assessment.parameters.find(p => p.parameter === 'waterLevel')?.severity, 'unavailable');
 });
 test('shared profile contract stays byte-identical on web/mobile; firmware fixes empty at 27', () => {
@@ -166,7 +166,7 @@ test('active fixed formula gives the chosen endpoints and never turns invalid ec
 });
 
 test('shared engine excludes invalid echoes and former profile levels without suppressing temperature', () => {
-  const config = seedRuleConfig();
+  const config = seedRuleConfig({ approved: true });
   const aquarium = { ...profile, species: ['Goldfish'], minTemp: 20, maxTemp: 24, minLevel: 70 };
   for (const raw of [{ ...reading, waterLevelReadingValid: false }, { ...reading, waterLevelTargetHeightCm: 4 }]) {
     const result = evaluateAquariumReading(aquarium, raw, config);
@@ -193,7 +193,9 @@ test('former profile-mode summaries cannot override fixed readings; profile edit
 test('profile synchronization remains disabled without creating control records or equipment commands', () => {
   for (const relative of ['src/services/deviceService.ts', ...(hasMobile ? ['../smart-aqua-mobile/src/services/firebase-service.ts'] : [])]) {
     const source = readFileSync(new URL(`../../${relative}`, import.meta.url), 'utf8');
-    assert.match(source, /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
+    assert.match(source, relative.startsWith('src/')
+      ? /await update\(control, \{\s*waterLevelProfile: evaluateWaterLevelProfile/
+      : /await update\(control, \{ waterLevelProfile: getWaterLevelControl/);
     assert.match(source, /if \(!\(await get\(control\)\)\.exists\(\)\) return/);
     assert.match(source, /profile saved, but water-level device synchronization failed|assertRealtimeDeviceAccess/);
   }

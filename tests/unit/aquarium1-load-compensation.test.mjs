@@ -160,7 +160,7 @@ for (const [name, folder] of [['repository', root], ['owner sketch', new URL('..
 }
 
 test('relay revisions reject mixed-state batches, including ON -> OFF transitions', () => {
-  const body = source.match(/void setOutput\(bool light, bool on\) \{([\s\S]*?)\r?\n\}/)?.[1];
+  const body = source.match(/bool setOutput\(bool light, bool on\) \{([\s\S]*?)\r?\n\}/)?.[1];
   const state = vm.createContext({ armed: true, lightOn: false, filterOn: false, relayRevision: 0,
     LIGHT_PIN: 16, FILTER_PIN: 17, HIGH: 1, LOW: 0, digitalWrite() {}, Serial: { println() {}, printf() {} } });
   vm.runInContext(`function setOutput(light, on) {${body}}`, state);

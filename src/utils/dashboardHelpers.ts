@@ -64,6 +64,9 @@ export function mapDashboardAquariums(aquariums: Aquarium[]): DashboardAquarium[
     hasFreshPhTelemetry: false,
     hasFreshTurbidityTelemetry: false,
     hasFreshPowerTelemetry: false,
+    reportedFilterState: undefined,
+    reportedLightState: undefined,
+    reportedEquipmentStatus: undefined,
     telemetryState: 'unavailable',
     lastUpdatedAt: null,
     sensorValidity: null,
@@ -128,6 +131,9 @@ export function mergeDashboardAquariums(
       hasFreshTurbidityTelemetry: Boolean(snapshot?.hasFreshTurbidityTelemetry),
       turbidityState: snapshot?.turbidityState,
       hasFreshPowerTelemetry: Boolean(snapshot?.hasFreshPowerTelemetry),
+      reportedFilterState: snapshot?.filterState,
+      reportedLightState: snapshot?.lightState,
+      reportedEquipmentStatus: snapshot?.equipmentStatus,
       telemetryState,
       lastUpdatedAt: getDeviceTelemetryUpdatedAt(telemetry),
       sensorValidity: snapshot?.validity ?? null,
@@ -141,6 +147,29 @@ export function mergeDashboardAquariums(
       engineState: engineStates[aquarium.id] ?? null,
     };
   });
+}
+
+export function getEquipmentFeedback(
+  tank: Pick<DashboardAquarium,
+    'telemetryState' | 'reportedFilterState' | 'reportedLightState' | 'reportedEquipmentStatus'>
+) {
+  if (tank.telemetryState !== 'live') {
+    return [
+      { label: 'Filter', state: 'Unknown' },
+      { label: 'Light', state: 'Unknown' },
+      { label: 'Feeder', state: 'Unknown' },
+      { label: 'Equipment diagnostic', state: 'Unknown' },
+    ];
+  }
+
+  return [
+    { label: 'Filter', state: tank.reportedFilterState ?? 'Not reported' },
+    { label: 'Light', state: tank.reportedLightState ?? 'Not reported' },
+    // There is no feeder-position sensor in the approved telemetry contract.
+    // Command acknowledgement is intentionally not presented as feedback.
+    { label: 'Feeder', state: 'Not reported' },
+    { label: 'Equipment diagnostic', state: tank.reportedEquipmentStatus ?? 'Not reported' },
+  ];
 }
 
 export function buildOwnerGroups(aquariums: DashboardAquarium[]): OwnerGroup[] {

@@ -62,9 +62,10 @@ test('telemetry transport/5xx failures do not undo accepted outputs; authorizati
 });
 
 test('ACKs cover both relay paths and failed feeds without changing pins or servo timing', () => {
-  assert.match(source, /setOutput\(true, state == "On"\);[\s\S]*?queueCommandAck\(commandId, lightOn/);
-  assert.match(source, /setOutput\(false, state == "Active"\);[\s\S]*?queueCommandAck\(commandId, filterOn/);
-  assert.match(source, /runManualFeed\(\);\s*\/\/ BEGIN AQ2 COMMAND RELIABILITY\s*queueCommandAck\(commandId, lastFeedSucceeded/);
+  assert.match(source, /completed = setOutput\(true, state == "On"\)/);
+  assert.match(source, /completed = setOutput\(false, state == "Active"\)/);
+  assert.match(source, /completed = runManualFeed\(\)/);
+  assert.match(source, /if \(validCommandId\(commandId\)\) \{[\s\S]*?queueCommandAck\(commandId, completed, failure\)/);
   assert.match(source, /lastFeedSucceeded = false/);
   assert.match(source, /lastFeedSucceeded = pwmOk/);
   assert.match(source, /LIGHT_PIN = 15, FILTER_PIN = 17, SERVO_PIN = 23/);

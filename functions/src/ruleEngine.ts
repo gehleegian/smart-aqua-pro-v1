@@ -92,6 +92,7 @@ export type AlertContext = {
   deviceId: string;
   now: number;
   readingSnapshot: Record<string, unknown> | null;
+  thresholdSnapshot?: Record<string, unknown>;
 };
 
 function alertTitle(op: { parameter: string; severity: string; rule?: MatchedRule }) {
@@ -118,6 +119,7 @@ export function recommendationDoc(ctx: AlertContext, rule: MatchedRule, alertId:
     basis: rule.basis,
     preCheck: rule.preCheck,
     readingSnapshot: ctx.readingSnapshot,
+    threshold: ctx.thresholdSnapshot?.[rule.parameter] ?? null,
     status: 'pending',
     createdAt: ctx.now,
     resolvedAt: null,
@@ -348,7 +350,7 @@ export function cleaningRecommendation(
   ruleId: 'cleaning_due' | 'cleaning_due_early',
   summary: CleaningSummary
 ): MatchedRule | null {
-  const rule = rules.find((candidate) => candidate.enabled && candidate.ruleId === ruleId);
+  const rule = rules.find((candidate) => candidate.enabled && candidate.status === 'approved' && candidate.ruleId === ruleId);
   if (!rule) return null;
   const due = summary.nextCleaningDue ? new Date(summary.nextCleaningDue).toISOString() : 'now';
   const why = summary.reason === 'tds_rise' ? 'TDS rose since the first reading after the last cleaning'

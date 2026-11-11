@@ -59,7 +59,7 @@ test('saturation, disabled reference and malformed inputs/calibration remain inv
 
 test('ppm-only telemetry becomes displayable without inventing a purity percentage', () => {
   const now = 1794000000000;
-  for (const voltage of [0.142, 1.304, 2.455]) {
+  for (const voltage of [0.169, 1.304]) {
   const snapshot = getFreshTelemetrySnapshot(normalizeTelemetry({
     temperatureC: 24, waterLevelPercent: 80, updatedAt: now, online: true,
     tdsPpm: calculator(firmware)(voltage), tdsReadingValid: true,
@@ -68,6 +68,14 @@ test('ppm-only telemetry becomes displayable without inventing a purity percenta
   assert.equal(snapshot.validity.tds.status, 'valid');
   assert.equal(snapshot.tdsPercent, null);
   assert.equal(snapshot.hasFreshPurityTelemetry, false);
+  }
+  for (const voltage of [0.142, 2.455]) {
+    const snapshot = getFreshTelemetrySnapshot(normalizeTelemetry({
+      temperatureC: 24, waterLevelPercent: 80, updatedAt: now, online: true,
+      tdsPpm: calculator(firmware)(voltage), tdsReadingValid: true,
+    }), now);
+    assert.equal(snapshot.tdsPpm, null);
+    assert.equal(snapshot.validity.tds.status, 'invalid');
   }
 });
 

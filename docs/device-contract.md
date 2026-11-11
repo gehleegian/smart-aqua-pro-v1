@@ -1,5 +1,17 @@
 # SmartAqua Pro: Device Data Contract
 
+## Main-branch integration note (2026-11-11)
+
+The command-reliability changes below are integrated with main's command-ID
+validation and scheduled acknowledgements. Manual actions produce one queued
+terminal outcome, retried in RAM without replaying equipment actions. Scheduled
+ACKs remain best effort. Optional source/type/state fields may be omitted on
+manual ACKs as allowed by the existing rules. Web and mobile use a one-shot
+SDK-local `.info` listener for server clock metadata, not a server `get()` of
+`.info/serverTimeOffset`. The mobile shared validator is synchronized with the
+already-merged web/server core; this integration adds no new thresholds or rules.
+No Firebase rules or Functions deployment is required by this fixes branch.
+
 ## Command reliability implementation (2026-11-11; rollout pending)
 
 The single commands/latest slot is retained; no queue/node/rules migration was
@@ -37,6 +49,13 @@ percentage is generated. Outside the checked input span, `tdsPpm` is omitted
 and `tdsReadingValid=false`. The existing schema and access rules already allow
 these fields; neither needs changing. Aquarium 2's comparison remains disabled.
 Earlier live-payload examples below describe the prior uncalibrated firmware.
+
+As a software safety boundary, the shared assessment validator also treats any
+reported TDS below 80 ppm or above 314 ppm as unavailable and routes it to the
+sensor-fault path. This preserves the rest of the telemetry snapshot while
+preventing extrapolated values from reaching water-condition rules. The current
+prepared firmware still requires separate physical verification that it omits
+out-of-span values as this contract requires.
 
 ## Partial sensor-fault update (2026-11-08)
 
@@ -129,7 +148,7 @@ The device writes the whole node in one `set`. Any field not in this table is re
 ### 2.1 Freshness (decision 2)
 
 - **Target interval:** the device sends every **15 s**.
-- **Stale window:** `TELEMETRY_STALE_MS = 60_000`, which is 3 missed sends. It is a single constant in `monitoringAssessmentCore.ts`.
+- **Stale window:** `TELEMETRY_STALE_MS = 60_000`; exactly 60 s remains live and older telemetry is offline. At the 15 s target cadence, this is more than four expected send opportunities. It is a single constant in `monitoringAssessmentCore.ts`.
 - **Offline:** telemetry older than 60 s, or `online: false`.
 - **Unavailable:** `updatedAt` missing, before 2000-01-01, or in the future (after correcting with `.info/serverTimeOffset`).
 
@@ -192,41 +211,46 @@ Each sensor is evaluated separately by `evaluateTelemetryValidity()`, and gets o
 | Field | Type | Notes | Status |
 |---|---|---|---|
 | `aquariumId` | string | must equal the path ID | current |
-| `commandId` | string | `{type}-{requestedAt}` | current |
+| `commandId` | string | 1–160 characters; ASCII letters, digits, `_`, `.`, `:`, `-` only | current |
 | `type` | string | `feed_now` \| `set_filter_state` \| `set_light_state` \| `sync_control` | current |
 | `requestedAt` | number | epoch ms (client clock) | current |
 | `requestedBy` | string | must equal the sender's UID | current |
 | `durationMs` | number > 0 | `feed_now` only | current |
 | `state` | string | `Active`/`Inactive` for filter, `On`/`Off` for light | current |
 
-### 4.2 `devices/{aquariumId}/commandAck/latest`: device writes (new)
+### 4.2 `devices/{aquariumId}/commandAck/latest`: device writes
 
 | Field | Type | Notes |
 |---|---|---|
 | `commandId` | string | **Must equal `commands/latest/commandId`**, or the rules reject the write |
 | `status` | `"done"` \| `"failed"` | |
 | `executedAt` | number | **Must be the server timestamp** `{".sv":"timestamp"}` (rule: `== now`) |
-| `error` | string ≤ 200 chars | optional, normally sent with `failed` |
+| `error` | string ≤ 200 chars | optional; accepted only with `failed` |
 | `source` | `"app"` \| `"schedule"` | **new in Sprint 4, additive, optional.** Absent or `"app"` = an ack for `commands/latest` |
 | `type` | `"feed_now"` \| `"set_filter_state"` \| `"set_light_state"` | **new, required when `source` is `"schedule"`** |
 | `state` | `"Active"` \| `"Inactive"` \| `"On"` \| `"Off"` | new, optional (light/filter) |
 
 **Scheduled actions (Sprint 4, FR18/FR19).** When the device runs a schedule entry on its own (§3 `control`), it acks it too, so it appears in the command log:
-- `source: "schedule"`, a `type`, and a `commandId` that starts with `schedule-` (for example `schedule-feed_now-<epoch seconds>`).
+- `source: "schedule"`, a `type`, and a `commandId` that starts with `schedule-` (the repository firmware uses `schedule-<type>-<epoch minute>`).
 - The rules accept a `schedule-*` id without a matching `commands/latest`. Every other ack must still match `commands/latest/commandId`.
-- Old firmware that never sends `source` is unaffected.
+- App acknowledgement `type` and `state`, when present, must match the current command. Type/state combinations are validated for both app and scheduled acknowledgements.
+- Old firmware that omits `source`, `type`, and `state` remains compatible.
 
 **Who can write:**
 - Only a principal with `principalType: device` that is listed in `deviceUids` for this aquarium, and only while the aquarium is `active`.
 - Humans, other devices and admins cannot write here.
-- Acks live on a separate path, so a new web command can never overwrite an ack, and the device can never write into `commands/`.
+- Acks live on a separate path, so a new web command does not overwrite an ack already stored there, and the device can never write into `commands/`. However, an older app ack submitted after a newer command replaces `commands/latest` is rejected because it no longer matches the current command.
 
 **What the UI shows** (`getCommandStatus()`, `COMMAND_ACK_TIMEOUT_MS = 30_000`):
 - **Pending** ("Waiting for device"): sent, no matching ack yet.
-- **Done** or **Failed**: a matching ack arrived.
-- **No response**: no matching ack 30 s after `requestedAt`. Shown in neutral grey with an explanation, not as an error: the live firmware does not ack yet.
+- **Done** or **Failed**: a matching ack arrived. `Done` confirms the device software/output sequence, not physical equipment operation unless separate feedback exists.
+- **No response**: no matching ack 30 s after `requestedAt`. Shown neutrally because a lost acknowledgement cannot prove whether equipment acted.
 
-**Command log (Sprint 4).** Cloud Functions copy every `commands/latest` write and every ack into Firestore `command_logs/{aquariumId}_{commandId}`: type, state, requestedBy (uid and name), requestedAt, `status` `pending → done | failed | no_response`, executedAt, error, `source`. A scheduled check marks `no_response` after 30 s; a late ack still turns it into `done` (with `lateAck: true`). Only functions write the log; the tank's members read it.
+The Aquarium 1 and Aquarium 2 sketches in this repository write app and schedule acknowledgements. This remains **REQUIRES PHYSICAL HARDWARE VERIFICATION** until the reviewed firmware is flashed and exercised against the deployed rules and Functions.
+
+**Command log (Sprint 4).** Cloud Functions copy every `commands/latest` write and every ack into Firestore `command_logs/{aquariumId}_{commandId}`: type, state, requestedBy (uid and name), requestedAt, `status` `pending → done | failed | no_response`, executedAt, error, `source`. The ack trigger also reads the matching current command so a fast ack can create the final log before the independent command trigger runs. A scheduled check marks `no_response` after 30 s; a late ack still turns it into `done` (with `lateAck: true`). Only functions write the log; the tank's members read it.
+
+**Known delivery limitations:** `commands/latest` remains a single slot, not a queue. Updated clients protect a recent unresolved command with a compare-and-set transaction; older unconditional writers can still replace it and invalidate a pending acknowledgement. Manual terminal outcomes retry in RAM while their command remains current, without repeating actuation. Scheduled acknowledgements remain one best-effort PUT. No acknowledgement or app-command outcome is persisted across restart, so a lost response or restart can still leave `no_response` even when equipment acted. Duplicate IDs are not re-actuated during a session; retained commands are baselined after restart and scheduled feeding reserves its minute before motion. A restart before handling a command can skip that retained request, while a restart/reconnect during a scheduled feeding minute can conservatively skip the feed to avoid duplication. Schedules require a successful cloud cycle; there is no durable offline action queue.
 
 ---
 

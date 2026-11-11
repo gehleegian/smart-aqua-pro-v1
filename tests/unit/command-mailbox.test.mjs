@@ -133,6 +133,6 @@ test('web/mobile use identical mailbox logic, existing scoped nodes, authorizati
     assert.match(source, /applyLocally: false/);
     assert.match(source, /\.info\/serverTimeOffset/);
     assert.match(source, /commandAck\/latest/);
-    assert.match(source, /assertRealtimeDeviceAccess\(command.aquariumId, 'write'\)|requireAquariumAccess\(options.aquariumId, 'command'\)/);
+    assert.match(source, /assertRealtimeDeviceAccess\(command.aquariumId, ['"]write['"]\)|requireAquariumAccess\(options.aquariumId, 'command'\)/);
   }
 });

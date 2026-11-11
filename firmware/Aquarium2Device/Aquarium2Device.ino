@@ -95,15 +95,16 @@ void disarm() {
   stopFeederPwm();
 }
 
-void setOutput(bool light, bool on) {
+bool setOutput(bool light, bool on) {
   if (on && !armed) {
     Serial.println("IGNORED: command path not ready or local stop is latched.");
-    return;
+    return false;
   }
   digitalWrite(light ? LIGHT_PIN : FILTER_PIN, on ? LOW : HIGH);
   if (light) lightOn = on; else filterOn = on;
   Serial.printf("%s output commanded %s; physical operation NOT verified.\n",
                 light ? "LIGHT" : "FILTER", on ? "ON" : "OFF");
+  return true;
 }
 
 // Native core-3 LEDC calls expose errors hidden by ESP32Servo's attached flag.
@@ -169,29 +170,28 @@ bool runFeederTimed(int pulseUs, uint32_t duration, const char *phase) {
   if (duration < 40 || duration > FEEDER_MAX_RUN_MS) return false;
   const uint32_t started = millis();
   bool ok = writeFeederPulse(pulseUs, phase);
-  // Include PWM settling/readback in the run time, not an extra moving dwell.
   const uint32_t elapsed = millis() - started;
   if (ok && elapsed < duration) ok = waitFeederMs(duration - elapsed);
   if (!ok) { stopFeederPwm(); return false; }
   return writeFeederPulse(FEEDER_STOP_US, "stop");
 }
 
-void runManualFeed() {
+bool runManualFeed() {
   // BEGIN AQ2 COMMAND RELIABILITY
   lastFeedSucceeded = false;
   // END AQ2 COMMAND RELIABILITY
   if (!FEEDER_TEST_ENABLED || !armed || localStop) {
     Serial.println("Feed rejected: feeder not enabled or controls not ready.");
-    return;
+    return false;
   }
   if (feedCompleted && millis() - lastFeedEnd < FEEDER_COOLDOWN_MS) {
     Serial.println("Feed rejected: cooldown active.");
-    return;
+    return false;
   }
   const bool roundTrip = FEEDER_CALIBRATED || FEEDER_RETURN_TEST_ENABLED;
   if (roundTrip && !feederTimingValid()) {
     Serial.println("Feed rejected: continuous-servo calibration settings invalid.");
-    return;
+    return false;
   }
   Serial.println(FEEDER_CALIBRATED
     ? "FEED v7: calibrated TIMED continuous SG90, GPIO23; angles/home are not measured."
@@ -203,7 +203,7 @@ void runManualFeed() {
                   (unsigned long)(roundTrip ? FEEDER_REVERSE_MS : 0));
   if (!ledcAttach(SERVO_PIN, 50, 16)) {
     Serial.println("FEED PWM ERROR: attach failed; cycle not started.");
-    return;
+    return false;
   }
   feederPwmAttached = true;
   // No positional "home" pulse: on this servo that would command rotation.
@@ -224,6 +224,7 @@ void runManualFeed() {
   // END AQ2 COMMAND RELIABILITY
   Serial.println(pwmOk ? "Continuous-servo PWM ended/detached; angle, physical stop and return NOT verified."
                        : "Feed aborted: PWM error, local stop, or Wi-Fi loss. Movement NOT verified.");
+  return pwmOk;
 }
 
 void help() {
@@ -572,6 +573,44 @@ void flushCommandAck(const String &currentCommandId) {
   } else Serial.printf("Command acknowledgement pending (HTTP %d); action will NOT be replayed.\n", status);
 }
 // END AQ2 COMMAND RELIABILITY
+
+bool validCommandId(const String &commandId) {
+  if (commandId.isEmpty() || commandId.length() > 160) return false;
+  for (size_t i = 0; i < commandId.length(); ++i) {
+    const char value = commandId[i];
+    const bool alphaNumeric = (value >= 'A' && value <= 'Z') ||
+      (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9');
+    if (!alphaNumeric && value != '_' && value != '.' && value != ':' && value != '-') return false;
+  }
+  return true;
+}
+
+bool writeCommandAck(const String &commandId, bool success, const char *error = "",
+                     const char *source = "app", const char *type = "",
+                     const String &state = "") {
+  if (!validCommandId(commandId)) {
+    Serial.println("Command acknowledgement skipped: invalid commandId.");
+    return false;
+  }
+  JsonDocument acknowledgement;
+  acknowledgement["commandId"] = commandId;
+  acknowledgement["status"] = success ? "done" : "failed";
+  acknowledgement["executedAt"][".sv"] = "timestamp";
+  acknowledgement["source"] = source;
+  if (strlen(type)) acknowledgement["type"] = type;
+  if (state.length()) acknowledgement["state"] = state;
+  if (!success) acknowledgement["error"] = strlen(error) ? error : "device rejected command";
+  String payload, response;
+  serializeJson(acknowledgement, payload);
+  const int status = database("commandAck/latest", HTTP_METHOD_PUT, payload, response);
+  Serial.printf("Command acknowledgement %s HTTP %d. This confirms software execution only, not physical operation.\n",
+                success ? "done" : "failed", status);
+  return status == 200;
+}
+
+String scheduleCommandId(const char *type, int64_t epochMinute) {
+  return String("schedule-") + type + "-" + String((long)epochMinute);
+}
 bool cloudConfigurationValid() {
   const String aquarium = AQUARIUM_ID;
   if (!strlen(WIFI_SSID) || !strlen(FIREBASE_API_KEY) || !strlen(DEVICE_EMAIL) ||
@@ -627,10 +666,18 @@ void applyRelaySchedules(JsonDocument &control) {
   const int filterMinutes = int(control["filtrationRuntimeHours"].as<double>() * 60);
   const bool scheduledLight = ScheduleLogic::inWindow(now, on, lightMinutes);
   const bool scheduledFilter = ScheduleLogic::inWindow(now, start, filterMinutes);
-  if (lightSchedule.evaluate(scheduledLight, ScheduleLogic::latestBoundary(minute, on, lightMinutes)) &&
-      lightOn != scheduledLight) setOutput(true, scheduledLight);
-  if (filterSchedule.evaluate(scheduledFilter, ScheduleLogic::latestBoundary(minute, start, filterMinutes)) &&
-      filterOn != scheduledFilter) setOutput(false, scheduledFilter);
+  const int64_t lightBoundary = ScheduleLogic::latestBoundary(minute, on, lightMinutes);
+  const int64_t filterBoundary = ScheduleLogic::latestBoundary(minute, start, filterMinutes);
+  if (lightSchedule.evaluate(scheduledLight, lightBoundary) && lightOn != scheduledLight) {
+    const bool applied = setOutput(true, scheduledLight);
+    writeCommandAck(scheduleCommandId("set_light_state", lightBoundary), applied,
+      "light relay command rejected", "schedule", "set_light_state", scheduledLight ? "On" : "Off");
+  }
+  if (filterSchedule.evaluate(scheduledFilter, filterBoundary) && filterOn != scheduledFilter) {
+    const bool applied = setOutput(false, scheduledFilter);
+    writeCommandAck(scheduleCommandId("set_filter_state", filterBoundary), applied,
+      "filter relay command rejected", "schedule", "set_filter_state", scheduledFilter ? "Active" : "Inactive");
+  }
 }
 
 void applyScheduledFeed(JsonDocument &control) {
@@ -645,10 +692,14 @@ void applyScheduledFeed(JsonDocument &control) {
     lastAutoFeedMinute = minute;
     if (!scheduleStoreReady || scheduleStore.putLong64("feedMinute", minute) != sizeof(int64_t)) {
       Serial.println("Scheduled feed skipped: persistent reservation failed.");
+      writeCommandAck(scheduleCommandId("feed_now", minute), false,
+        "persistent feed reservation failed", "schedule", "feed_now");
       return;
     }
     Serial.println("Scheduled feeding due (UTC+8).");
-    runManualFeed();
+    const bool completed = runManualFeed();
+    writeCommandAck(scheduleCommandId("feed_now", minute), completed,
+      "feeder sequence rejected or interrupted", "schedule", "feed_now");
     return;
   }
 }
@@ -713,44 +764,47 @@ bool cloudCycle() {
     const String state = command["state"] | "";
     const double requestedMs = command["requestedAt"] | 0.0;
     const double nowMs = double(time(nullptr)) * 1000.0;
-    if (aquarium != AQUARIUM_ID || requester.isEmpty() || !command["requestedAt"].is<double>()) {
+    bool completed = false;
+    const char *failure = "unsupported or invalid command";
+    if (!validCommandId(commandId)) {
+      Serial.println("Rejected command with invalid commandId.");
+      failure = "invalid commandId";
+    } else if (aquarium != AQUARIUM_ID || requester.isEmpty() || !command["requestedAt"].is<double>()) {
       Serial.println("Rejected malformed/mismatched command.");
-      // BEGIN AQ2 COMMAND RELIABILITY
-      queueCommandAck(commandId, false, "Malformed or mismatched command; no action.");
-      // END AQ2 COMMAND RELIABILITY
+      failure = "malformed or mismatched command";
     } else if (requestedMs <= commandWatermarkMs || requestedMs > nowMs + 5000 ||
                nowMs - requestedMs > 30000) {
       // Supervised-test freshness policy: new since baseline, max age 30 seconds.
       Serial.println("Rejected old/replayed/future command. Send a new command with a correct client clock.");
-      // BEGIN AQ2 COMMAND RELIABILITY
-      queueCommandAck(commandId, false, "Stale/replayed/future command; send a new command.");
-      // END AQ2 COMMAND RELIABILITY
+      failure = "old, replayed, or future command";
     } else if (type == "set_light_state" && (state == "On" || state == "Off")) {
       commandWatermarkMs = requestedMs;
-      setOutput(true, state == "On");
-      lightSchedule.manual();
-      // BEGIN AQ2 COMMAND RELIABILITY
-      queueCommandAck(commandId, lightOn == (state == "On") && (state == "Off" || armed), "Light command blocked: controls not armed.");
-      // END AQ2 COMMAND RELIABILITY
+      completed = setOutput(true, state == "On");
+      if (completed) lightSchedule.manual();
+      else failure = "light relay command rejected";
     } else if (type == "set_filter_state" && (state == "Active" || state == "Inactive")) {
       commandWatermarkMs = requestedMs;
-      setOutput(false, state == "Active");
-      filterSchedule.manual();
-      // BEGIN AQ2 COMMAND RELIABILITY
-      queueCommandAck(commandId, filterOn == (state == "Active") && (state == "Inactive" || armed), "Filter command blocked: controls not armed.");
-      // END AQ2 COMMAND RELIABILITY
+      completed = setOutput(false, state == "Active");
+      if (completed) filterSchedule.manual();
+      else failure = "filter relay command rejected";
     } else if (type == "feed_now" && command["durationMs"].is<double>() &&
                command["durationMs"].as<double>() > 0) {
       commandWatermarkMs = requestedMs;
       // Fixed physical dwell applies to both existing web and mobile clients;
       // legacy durationMs must never lengthen this device's configured hold.
-      runManualFeed();
-      // BEGIN AQ2 COMMAND RELIABILITY
-      queueCommandAck(commandId, lastFeedSucceeded, "Feed rejected or aborted; check cooldown, arming and PWM settings.");
-      // END AQ2 COMMAND RELIABILITY
+      completed = runManualFeed();
+      if (!completed) failure = "feeder sequence rejected or interrupted";
       lastAutoFeedMinute = max(lastAutoFeedMinute, localEpochMinute());
       if (scheduleStoreReady) scheduleStore.putLong64("feedMinute", lastAutoFeedMinute);
+    } else if (type == "sync_control") {
+      commandWatermarkMs = requestedMs;
+      completed = scheduleValid;
+      if (!completed) failure = "automation profile is incomplete or invalid";
     } else Serial.println("Command not actuated: unsupported or invalid command.");
+    if (validCommandId(commandId)) {
+      // App ACKs use the retry outbox; absent source/type/state is backwards compatible.
+      queueCommandAck(commandId, completed, failure);
+    }
   }
   // BEGIN AQ2 COMMAND RELIABILITY
   flushCommandAck(commandId);

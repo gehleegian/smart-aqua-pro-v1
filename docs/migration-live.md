@@ -251,7 +251,7 @@ Deploy together with 7b. They are emulator-tested only (`npm run test:sprint4-fu
 3. **Rules and indexes:** included in 7d (`fcmTokens`, `notificationPrefs`, `command_logs`, `security_audit_events`, scheduled acks, `coOwnerUids`, and three new indexes).
 4. **Check real delivery** (FCM cannot be emulated). Follow `docs/notifications.md` §6.
 
-**Expected after deploy:** the live firmware does not ack commands yet, so every command shows **No response** (grey) in the command log until Gian's firmware update (`docs/firmware-changes.md` §4, §11).
+**Expected after deploy:** devices still running older firmware show **No response** (grey). The repository firmware now writes app and schedule acknowledgements, but each physical device must be flashed and verified before `Done`/`Failed` is expected (`docs/firmware-changes.md` §4, §11).
 
 ### 7g. Sprint 5: reports, Storage and indexes
 

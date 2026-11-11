@@ -50,11 +50,20 @@ export function evaluateAquariumReading(
   ruleConfig: RuleConfigSnapshot | null,
   serverBioload: AquariumEngineState['bioloadLevel'] = null
 ): EngineResult | null {
-  const thresholds = getEffectiveThresholds(aquarium, ruleConfig);
-  if (!thresholds || !ruleConfig) return null;
-  const species = selectSpeciesConfig(aquarium, ruleConfig.speciesById);
+  if (!ruleConfig?.loaded) return null;
+  const configuredSpecies = selectSpeciesConfig(aquarium, ruleConfig.speciesById);
+  const enabledRules = ruleConfig.rules.filter((rule) => rule.enabled);
+  const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
+  // Draft configuration remains available to the Rules Editor preview, but it
+  // must never activate a user-facing assessment or recommendation.
+  const species = configuredSpecies?.status === 'approved' && ruleSetApproved ? configuredSpecies : null;
+  // Aquarium profile limits/overrides do not currently carry approval metadata.
+  // Keep them available to the editor preview above, but do not silently make
+  // them authoritative in a live assessment.
+  const thresholds = resolveThresholds(species);
+  const approvedRules = ruleSetApproved ? ruleConfig.rules.filter((rule) => rule.status === 'approved') : [];
   const bioloadLevel = serverBioload ?? computeBioload(aquarium, species?.bioloadBandsGPerL)?.level ?? null;
-  return evaluateAquarium(reading ? withWaterLevelProfile(aquarium, reading) : null, thresholds, ruleConfig.rules, {
+  return evaluateAquarium(reading ? withWaterLevelProfile(aquarium, reading) : null, thresholds, approvedRules, {
     hasFiltrationSystem: aquarium.hasFiltrationSystem,
     fishCount: aquarium.fishCount,
     bioloadLevel,
@@ -95,5 +104,11 @@ export function assessAquarium(options: {
       notes: [options.ruleConfig?.error || 'Thresholds and rules have not loaded from Firestore yet.'],
     });
   }
-  return { ...toConditionAssessment(result, { source, assessedAt: now, origin: 'client' }), overallSeverity: result.overall };
+  const approvalNote = result.draft
+    ? ['No live classification or maintenance recommendation is activated until the applicable thresholds and rules are approved.']
+    : [];
+  return {
+    ...toConditionAssessment(result, { source, assessedAt: now, origin: 'client', notes: approvalNote }),
+    overallSeverity: result.overall,
+  };
 }

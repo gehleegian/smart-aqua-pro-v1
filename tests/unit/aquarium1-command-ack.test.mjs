@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const aq2 = readFileSync(new URL('../../firmware/Aquarium2Device/Aquarium2Device.ino', import.meta.url), 'utf8');
-const body = (source, name) => source.match(new RegExp(`void ${name}\\([^\\n]*\\) \\{([\\s\\S]*?)\\r?\\n\\}`))?.[1];
+const body = (source, name) => source.match(new RegExp(`(?:void|bool) ${name}\\([^\\n]*\\) \\{([\\s\\S]*?)\\r?\\n\\}`))?.[1];
 for (const [name, path] of [
   ['repository', new URL('../../firmware/Aquarium1Device/Aquarium1Device.ino', import.meta.url)],
   ['owner upload', new URL('../../../Aquarium1Device/Aquarium1Device.ino', import.meta.url)],
@@ -18,11 +18,12 @@ for (const [name, path] of [
     const cloud = source.slice(source.indexOf('bool cloudCycle()'), source.indexOf('void setup()'));
     assert.ok(cloud.indexOf('flushCommandAck(commandId)') < cloud.indexOf('if (!telemetrySamplePending) return true;'));
     assert.ok(cloud.indexOf('flushCommandAck(commandId)') < cloud.indexOf('sampleSensorsIfDue()'));
-    assert.match(cloud, /queueCommandAck\(commandId, lightOn == \(state == "On"\)/);
-    assert.match(cloud, /queueCommandAck\(commandId, filterOn == \(state == "Active"\)/);
-    assert.match(cloud, /queueCommandAck\(commandId, lastFeedSucceeded/);
-    assert.match(cloud, /queueCommandAck\(commandId, false, "Malformed or mismatched command/);
-    assert.match(cloud, /queueCommandAck\(commandId, false, "Stale\/replayed\/future command/);
+    assert.match(cloud, /completed = setOutput\(true, state == "On"\)/);
+    assert.match(cloud, /completed = setOutput\(false, state == "Active"\)/);
+    assert.match(cloud, /completed = runManualFeed\(\)/);
+    assert.match(cloud, /failure = "malformed or mismatched command"/);
+    assert.match(cloud, /failure = "old, replayed, or future command"/);
+    assert.match(cloud, /if \(validCommandId\(commandId\)\) \{[\s\S]*?queueCommandAck\(commandId, completed, failure\)/);
     const baseline = cloud.slice(cloud.indexOf('  if (!commandBaseline)'), cloud.indexOf('} else if ('));
     assert.doesNotMatch(baseline, /queueCommandAck|runManualFeed|setOutput/);
     assert.match(source, /FULL_CM = 22\.4134f/);
@@ -51,7 +52,7 @@ for (const [name, path] of [
       serialCommands: () => { if (options.stop) { state.localStop = true; state.armed = false; } },
     });
     const routine = body(source, 'runManualFeed').replace(/const uint32_t/g, 'const')
-      .replace(/bool feedDwellCompleted/g, 'let feedDwellCompleted');
+      .replace(/bool (feedDwellCompleted|sequenceOk)/g, 'let $1');
     assert.ok(routine);
     vm.runInContext(`function runManualFeed() { ${routine} }`, state);
     state.runManualFeed();

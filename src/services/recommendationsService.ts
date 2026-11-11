@@ -10,6 +10,21 @@ function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
+function readRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readThreshold(value: unknown) {
+  const record = readRecord(value);
+  if (!record) return null;
+  const threshold: { min?: number; max?: number } = {};
+  if (typeof record.min === 'number' && Number.isFinite(record.min)) threshold.min = record.min;
+  if (typeof record.max === 'number' && Number.isFinite(record.max)) threshold.max = record.max;
+  return threshold.min === undefined && threshold.max === undefined ? null : threshold;
+}
+
 export function mapRecommendation(id: string, data: Record<string, unknown>): Recommendation {
   const status = data.status;
   return {
@@ -23,6 +38,8 @@ export function mapRecommendation(id: string, data: Record<string, unknown>): Re
     action: readString(data.action),
     basis: readString(data.basis),
     preCheck: readString(data.preCheck),
+    readingSnapshot: readRecord(data.readingSnapshot),
+    threshold: readThreshold(data.threshold),
     ruleStatus: data.ruleStatus === 'approved' ? 'approved' : 'draft',
     alertId: typeof data.alertId === 'string' ? data.alertId : null,
     status: status === 'applied' || status === 'resolved' || status === 'dismissed' ? status : 'pending',

@@ -1,5 +1,27 @@
 # Aquarium 2
 
+## Main-branch integration (2026-11-11)
+
+The current source preserves GPIO15 lighting, existing servo pulses/timings and
+the telemetry-transport reliability fix while integrating newer main-branch
+command-ID validation and schedule acknowledgements. Manual outcomes use the
+retry outbox instead of issuing a second direct ACK; schedule ACKs keep their
+best-effort write. Invalid feeder timing explicitly returns failure. This source
+integration is not another ESP32 upload. The successful owner-reported upload
+below refers to the earlier tested revision, not independent verification of
+every integration path.
+
+## Main-branch integration (2026-11-11)
+
+The current source preserves GPIO15 lighting, existing servo pulses/timings and
+the telemetry-transport reliability fix while integrating newer main-branch
+command-ID validation and schedule acknowledgements. Manual outcomes use the
+retry outbox instead of issuing a second direct ACK; schedule ACKs keep their
+best-effort write. Invalid feeder timing explicitly returns failure. This source
+integration is not another ESP32 upload. The successful owner-reported upload
+below refers to the earlier tested revision, not independent verification of
+every integration path.
+
 ## Owner-reported upload result (2026-11-11)
 
 The owner reports the updated Aquarium 2 sketch uploaded successfully and its

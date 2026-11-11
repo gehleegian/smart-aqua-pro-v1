@@ -40,7 +40,7 @@ test('contract constants match the agreed decisions', () => {
   assert.equal(REQUIRE_SENSOR_VALIDITY_FLAGS, false, 'flip only at the scheduled firmware switchover');
 });
 
-test('freshness: 60 s window (3 missed 15 s sends); the live ~7.5 s firmware cadence stays live', () => {
+test('freshness: exactly 60 s stays live and older telemetry is offline', () => {
   const now = 1793980261525;
   assert.equal(getTelemetryFreshness({ updatedAt: now - 7_500, online: true }, now), 'live');
   assert.equal(getTelemetryFreshness({ updatedAt: now - 60_000, online: true }, now), 'live');
@@ -138,7 +138,8 @@ test('history rows: invalid values show "Sensor error" and never classify as wat
   const config = seedRuleConfig();
   assert.equal(getRowStatus(zero, profile, config), 'sensor error');
   assert.equal(getRowStatus(entry(), profile, config), 'normal');
-  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, config), 'critical');
+  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, config), 'normal', 'draft rules cannot classify live history');
+  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, seedRuleConfig({ approved: true })), 'critical');
   assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, null), 'normal', 'no rules loaded: never invents a classification');
   assert.equal(formatHistoryValue(entry({ turbidity: undefined }), 'turbidity', () => 'x'), '--');
   if (typeof buildSummaryItems === 'function') {

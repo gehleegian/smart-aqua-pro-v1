@@ -60,7 +60,7 @@ test('Monitoring links to recommendations instead of embedding the panel', () =>
   assert.match(detail, /onClick=\{onOpenRecommendations\}/);
   assert.match(detail, /View recommendations/);
   assert.match(detail, /<CommandHistory/);
-  assert.match(detail, /<h3[^>]*>Manual Controls<\/h3>/);
+  assert.match(detail, /<h3[^>]*>\s*Manual Controls\s*<\/h3>/);
   const monitoring = read('views/Monitoring.tsx');
   assert.match(monitoring, /onOpenRecommendations=\{\(\) => \{\s*if \(monitoring\.selectedAquarium\) \{\s*requestTankFocus\(monitoring\.selectedAquarium\.id\);\s*onNavigate\('recommendations'\)/);
 });

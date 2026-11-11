@@ -14,7 +14,7 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   // AQ2 ACK/telemetry-failure additions have dedicated behavioral tests below.
   const b = (await readFile(new URL('Aquarium2Device/Aquarium2Device.ino', root), 'utf8'))
     .replace(/^[ \t]*\/\/ BEGIN AQ2 COMMAND RELIABILITY\r?\n[\s\S]*?^[ \t]*\/\/ END AQ2 COMMAND RELIABILITY\r?\n/gm, '');
-  const feedRoutine = a.replace(/\r\n/g, '\n').match(/void runManualFeed\(\) \{[\s\S]*?(?=\nvoid help\(\))/)?.[0];
+  const feedRoutine = a.replace(/\r\n/g, '\n').match(/bool runManualFeed\(\) \{[\s\S]*?(?=\nvoid help\(\))/)?.[0];
   assert.ok(feedRoutine);
   const turbConstants = a.match(/constexpr float CLEAR_V[\s\S]*?(?=#ifndef AQUARIUM_TDS_METER_REFERENCE_ENABLED)/)?.[0];
   const turbClassifier = a.match(/  if \(turbV >= 0\.15f[\s\S]*?else turbKnown = false;\r?\n/)?.[0];
