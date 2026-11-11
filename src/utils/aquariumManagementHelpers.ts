@@ -16,7 +16,7 @@ import {
 
 export const CANONICAL_AQUARIUM_TYPE = 'Freshwater';
 export const CANONICAL_FISH_SPECIES = 'Goldfish';
-type ThresholdPresetFields = Pick<AquariumFormData, 'minTemp' | 'maxTemp' | 'minPh' | 'maxPh' | 'minLevel'>;
+type ThresholdPresetFields = Pick<AquariumFormData, 'minTemp' | 'maxTemp' | 'minPh' | 'maxPh' | 'minLevel' | 'minTdsPpm' | 'maxTdsPpm'>;
 
 // Profile limits are prefilled from the species defaults stored in Firestore
 // (`species/{id}`, seeded by scripts/seed-rules.ts). There are no hard-coded
@@ -29,6 +29,8 @@ export function buildSpeciesThresholdPreset(species: SpeciesConfig | null): Thre
     minPh: text(species?.ranges.ph?.min),
     maxPh: text(species?.ranges.ph?.max),
     minLevel: text(species?.minWaterLevelPercent),
+    minTdsPpm: text(species?.ranges.tdsPpm?.min),
+    maxTdsPpm: text(species?.ranges.tdsPpm?.max),
   };
 }
 
@@ -88,7 +90,9 @@ export function populateAquariumForm(aquarium: Aquarium): AquariumFormData {
     minPh: typeof aquarium.minPh === 'number' ? String(aquarium.minPh) : '',
     maxPh: typeof aquarium.maxPh === 'number' ? String(aquarium.maxPh) : '',
     minLevel: String(aquarium.minLevel),
-    minQuality: String(aquarium.minQuality),
+    minQuality: typeof aquarium.minQuality === 'number' ? String(aquarium.minQuality) : '',
+    minTdsPpm: typeof aquarium.minTdsPpm === 'number' ? String(aquarium.minTdsPpm) : '',
+    maxTdsPpm: typeof aquarium.maxTdsPpm === 'number' ? String(aquarium.maxTdsPpm) : '',
   };
 }
 
@@ -128,7 +132,8 @@ export function validateAquariumForm(formData: AquariumFormData) {
     minPh,
     maxPh,
     minLevel,
-    minQuality,
+    minTdsPpm,
+    maxTdsPpm,
   } = formData;
 
   if (
@@ -144,7 +149,8 @@ export function validateAquariumForm(formData: AquariumFormData) {
     !minPh.trim() ||
     !maxPh.trim() ||
     !minLevel.trim() ||
-    !minQuality.trim()
+    !minTdsPpm.trim() ||
+    !maxTdsPpm.trim()
   ) {
     return 'Complete all required profile fields, select whether a filtration system is installed, and enter every fish weight.';
   }
@@ -169,7 +175,7 @@ export function validateAquariumForm(formData: AquariumFormData) {
     return 'Enter one valid weight greater than zero for every Goldfish.';
   }
 
-  const thresholdValues = [minTemp, maxTemp, minPh, maxPh, minLevel, minQuality].map(Number);
+  const thresholdValues = [minTemp, maxTemp, minPh, maxPh, minLevel, minTdsPpm, maxTdsPpm].map(Number);
   if (thresholdValues.some((value) => !Number.isFinite(value))) {
     return 'Monitoring values must be valid numbers.';
   }
@@ -190,8 +196,8 @@ export function validateAquariumForm(formData: AquariumFormData) {
     return 'Water level minimum must be between 0 and 100.';
   }
 
-  if (Number(minQuality) < 0 || Number(minQuality) > 100) {
-    return 'Water purity minimum (TDS percentage) must be between 0 and 100.';
+  if (Number(minTdsPpm) < 0 || Number(minTdsPpm) >= Number(maxTdsPpm)) {
+    return 'TDS limits must be non-negative ppm values, with minimum TDS lower than maximum TDS.';
   }
 
   return '';
@@ -234,7 +240,9 @@ export function buildAquariumCreatePayload(options: {
     minPh: Number(formData.minPh),
     maxPh: Number(formData.maxPh),
     minLevel: Number(formData.minLevel),
-    minQuality: Number(formData.minQuality),
+    ...(formData.minQuality.trim() ? { minQuality: Number(formData.minQuality) } : {}),
+    minTdsPpm: Number(formData.minTdsPpm),
+    maxTdsPpm: Number(formData.maxTdsPpm),
     temp: Number(formData.minTemp),
     level: 100,
     quality: 100,
@@ -265,7 +273,9 @@ export function buildAquariumUpdatePayload(
     minPh: Number(formData.minPh),
     maxPh: Number(formData.maxPh),
     minLevel: Number(formData.minLevel),
-    minQuality: Number(formData.minQuality),
+    ...(formData.minQuality.trim() ? { minQuality: Number(formData.minQuality) } : {}),
+    minTdsPpm: Number(formData.minTdsPpm),
+    maxTdsPpm: Number(formData.maxTdsPpm),
   };
 }
 

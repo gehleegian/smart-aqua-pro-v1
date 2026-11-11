@@ -180,7 +180,7 @@ export function AquariumFormModal({
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-300">
                     {species
-                      ? `Fills temperature, pH and water level from the stored ${species.name} thresholds${species.status === 'draft' ? ', which are drafts awaiting adviser approval' : ''}. These limits override the species defaults for this aquarium. TDS purity % is a legacy field and is not used by the rules engine.`
+                      ? `Fills temperature, pH, water level and TDS ppm from the stored ${species.name} defaults${species.status === 'draft' ? ' (marked draft in the application)' : ''}. Your saved limits are used for this aquarium’s assessment. Recommendation-rule approval is managed separately.`
                       : 'No species thresholds are stored yet, so there is nothing to fill in.'}
                   </p>
                 </div>
@@ -194,7 +194,11 @@ export function AquariumFormModal({
             <Input label="Minimum pH" type="number" min="0" max="14" step="any" value={formData.minPh} disabled={saving} onChange={(event) => onFieldChange('minPh', event.target.value)} />
             <Input label="Maximum pH" type="number" min="0" max="14" step="any" value={formData.maxPh} disabled={saving} onChange={(event) => onFieldChange('maxPh', event.target.value)} />
             <Input label="Minimum Water Level %" type="number" value={formData.minLevel} disabled={saving} onChange={(event) => onFieldChange('minLevel', event.target.value)} />
-            <Input label="Minimum TDS Purity % (legacy)" type="number" value={formData.minQuality} disabled={saving} onChange={(event) => onFieldChange('minQuality', event.target.value)} />
+            <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+              <Input label="Minimum TDS (ppm)" type="number" min="0" step="any" value={formData.minTdsPpm} disabled={saving} onChange={(event) => onFieldChange('minTdsPpm', event.target.value)} />
+              <Input label="Maximum TDS (ppm)" type="number" min="0" step="any" value={formData.maxTdsPpm} disabled={saving} onChange={(event) => onFieldChange('maxTdsPpm', event.target.value)} />
+            </div>
+            <p className="text-xs text-slate-400 sm:col-span-2">Enter ppm directly; the old purity percentage is not converted. Sensor calibration checks still apply, and administrator overrides take priority.</p>
           </div>
           </>
           )}

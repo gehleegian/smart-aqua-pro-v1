@@ -84,6 +84,9 @@ const RULE_CASES = [
   ['ph_low_warning', { ph: 6.2 }, {}, 'warning'],
   ['ph_low_critical', { ph: 5.8 }, {}, 'critical'],
   ['tds_low_warning', { tdsPpm: 80 }, {}, 'warning'],
+  ['tds_high_warning', { tdsPpm: 450 }, {}, 'warning'],
+  ['tds_high_warning_heavy_bioload', { tdsPpm: 450 }, { bioloadLevel: 'heavy' }, 'warning'],
+  ['tds_high_critical', { tdsPpm: 501 }, {}, 'critical'],
   ['turbidity_warning_filter_on', { turbidity: 7 }, {}, 'warning'],
   ['turbidity_warning_filter_off', { turbidity: 7, filterState: 'Inactive' }, {}, 'warning'],
   ['turbidity_warning', { turbidity: 7, filterState: undefined }, {}, 'warning'],
@@ -110,10 +113,7 @@ for (const [ruleId, overrides, profile, severity] of RULE_CASES) {
 test('every seeded rule is covered by a test case', () => {
   // power_offline is covered by the "placeholder powerStatus" test below: it is not
   // reached from telemetry until a device sends mainsPresent (docs/rule-engine.md §3).
-  // The three high-TDS rules are covered by the calibration-span regression test:
-  // their configured thresholds cannot be reached by a currently verified reading.
-  const covered = new Set([...RULE_CASES.map(([id]) => id), 'tds_high_warning',
-    'tds_high_warning_heavy_bioload', 'tds_high_critical', 'power_offline',
+  const covered = new Set([...RULE_CASES.map(([id]) => id), 'power_offline',
     'device_offline', 'sensor_fault', 'cleaning_due', 'cleaning_due_early']);
   assert.deepEqual(ruleIds.filter((id) => !covered.has(id)), []);
 });
@@ -128,13 +128,13 @@ test('same turbidity WARNING gives different advice with the filter on vs off', 
   assert.match(on.action, /rinse the filter media/);
 });
 
-test('configured rule boundaries and the current TDS meter-compared boundaries are enforced', () => {
+test('configured rule boundaries are enforced independently of the TDS calibration-check span', () => {
   const cases = [
     ['temperatureC', 24, 'normal'], ['temperatureC', 24.01, 'warning'], ['temperatureC', 26.4, 'warning'], ['temperatureC', 26.41, 'critical'],
     ['temperatureC', 20, 'normal'], ['temperatureC', 18, 'warning'], ['temperatureC', 17.99, 'critical'],
     ['ph', 7.5, 'normal'], ['ph', 8.25, 'warning'], ['ph', 8.26, 'critical'], ['ph', 6.5, 'normal'], ['ph', 5.85, 'warning'], ['ph', 5.84, 'critical'],
-    ['tdsPpm', 80, 'warning'], ['tdsPpm', 79.99, 'unavailable'], ['tdsPpm', 100, 'normal'],
-    ['tdsPpm', 314, 'normal'], ['tdsPpm', 314.01, 'unavailable'],
+    ['tdsPpm', 80, 'warning'], ['tdsPpm', 79.99, 'warning'], ['tdsPpm', 100, 'normal'],
+    ['tdsPpm', 314, 'normal'], ['tdsPpm', 314.01, 'normal'],
     ['turbidity', 5, 'normal'], ['turbidity', 10, 'warning'], ['turbidity', 10.01, 'critical'],
     ['waterLevelPercent', 70, 'normal'], ['waterLevelPercent', 59.5, 'warning'], ['waterLevelPercent', 59.4, 'critical'],
   ];
@@ -158,19 +158,21 @@ test('sensor faults never produce water rules: one sensor_fault recommendation p
   assert.equal(result.overall, 'normal');
 });
 
-test('TDS outside the documented 80-314 ppm meter-compared span cannot produce a water recommendation', () => {
+test('TDS outside the calibration-check span is evaluated as water data, not a sensor fault', () => {
   for (const tdsPpm of [79.9, 314.1, 450, 501]) {
     const result = evaluate({ tdsPpm, tdsReadingValid: true });
-    assert.equal(param(result, 'tdsPpm').status, 'unavailable', `tdsPpm=${tdsPpm}`);
-    assert.equal(result.faults.some((fault) => fault.parameter === 'tdsPpm'), true);
+    assert.notEqual(param(result, 'tdsPpm').status, 'unavailable', `tdsPpm=${tdsPpm}`);
+    assert.equal(result.faults.some((fault) => fault.parameter === 'tdsPpm'), false);
     const tdsRules = result.matchedRules.filter((rule) => rule.parameter === 'tdsPpm');
-    assert.deepEqual(tdsRules.map((rule) => rule.ruleId), ['sensor_fault']);
+    assert.equal(tdsRules.some(rule => rule.ruleId === 'sensor_fault'), false);
   }
 });
 
 test('categorical turbidity cannot be evaluated by numeric NTU rules', () => {
   const result = evaluate({ turbidity: undefined, turbidityReadingValid: undefined, turbidityState: 'Cloudy' });
-  assert.deepEqual([param(result, 'turbidity').status, param(result, 'turbidity').reason], ['unavailable', 'not reported']);
+  assert.equal(param(result, 'turbidity').status, 'warning');
+  assert.equal(param(result, 'turbidity').value, 'Cloudy');
+  assert.match(param(result, 'turbidity').reason, /no rule matches/);
   assert.equal(result.matchedRules.some((rule) => rule.parameter === 'turbidity'), false);
 });
 
@@ -275,7 +277,8 @@ test('thresholds: species defaults, then per-aquarium overrides; no species mean
 test('a disabled rule is ignored, and a classification with no matching rule is reported missing', () => {
   const withoutGeneric = rules.map((rule) => (rule.ruleId.startsWith('turbidity_warning') ? { ...rule, enabled: false } : rule));
   const result = evaluateAquarium(reading({ turbidity: 7 }), thresholds, withoutGeneric, {});
-  assert.equal(param(result, 'turbidity').status, 'normal', 'no enabled warning rule: not classified');
+  assert.equal(param(result, 'turbidity').status, 'warning', 'limit breach remains visible without an enabled recommendation rule');
+  assert.ok(result.missingRules.includes('turbidity:warning'));
   const onlyFilterOff = rules.filter((rule) => rule.ruleId !== 'turbidity_warning' && rule.ruleId !== 'turbidity_warning_filter_on');
   const missing = evaluateAquarium(reading({ turbidity: 7, filterState: 'Active' }), thresholds, onlyFilterOff, {});
   assert.equal(param(missing, 'turbidity').status, 'warning');

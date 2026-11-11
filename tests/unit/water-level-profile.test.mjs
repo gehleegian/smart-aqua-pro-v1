@@ -4,9 +4,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { evaluateWaterLevelProfile, getWaterLevelControl, resolveWaterLevel, AQUARIUM1_DEVICE_ID } from '../../src/utils/waterLevelProfile.ts';
 import { getFreshTelemetrySnapshot } from '../../src/types/device.ts';
 import { normalizeTelemetry } from '../../src/utils/deviceTelemetryParser.ts';
-import { evaluateAquariumReading, assessAquarium } from '../../src/utils/conditionAssessment.ts';
+import { evaluateAquariumReading, assessAquarium, getEffectiveThresholds } from '../../src/utils/conditionAssessment.ts';
 import { seedRuleConfig } from '../helpers/seedRuleConfig.mjs';
-import { evaluateTelemetryValidity, toConditionSummary } from '../../src/utils/monitoringAssessmentCore.ts';
+import { evaluateTelemetryValidity, toConditionSummary, assessmentConfigurationKey } from '../../src/utils/monitoringAssessmentCore.ts';
 const mobileRoot = new URL('../../../smart-aqua-mobile/', import.meta.url);
 const hasMobile = existsSync(new URL('src/utils/waterLevelProfile.ts', mobileRoot));
 let mapTelemetry, assessTelemetry, mobileSnapshot;
@@ -181,7 +181,7 @@ test('former profile-mode summaries cannot override fixed readings; profile edit
   const config = seedRuleConfig();
   const aquarium = { ...profile, species: ['Goldfish'], minTemp: 20, maxTemp: 24, minLevel: 70 };
   const result = evaluateAquariumReading(aquarium, reading, config);
-  const summary = toConditionSummary(result, now, now);
+  const summary = toConditionSummary(result, now, now, assessmentConfigurationKey(getEffectiveThresholds(aquarium, config), config.rules));
   const options = { aquarium, reading, source: 'live', now, ruleConfig: config,
     engineState: { condition: summary, cleaning: null, bioloadLevel: null } };
   assert.equal(assessAquarium(options).origin, 'server');

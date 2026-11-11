@@ -138,7 +138,7 @@ test('history rows: invalid values show "Sensor error" and never classify as wat
   const config = seedRuleConfig();
   assert.equal(getRowStatus(zero, profile, config), 'sensor error');
   assert.equal(getRowStatus(entry(), profile, config), 'normal');
-  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, config), 'normal', 'draft rules cannot classify live history');
+  assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, config), 'warning', 'saved limit warns without activating draft critical rules');
   assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, seedRuleConfig({ approved: true })), 'critical');
   assert.equal(getRowStatus(entry({ temperatureC: 26.5 }), profile, null), 'normal', 'no rules loaded: never invents a classification');
   assert.equal(formatHistoryValue(entry({ turbidity: undefined }), 'turbidity', () => 'x'), '--');

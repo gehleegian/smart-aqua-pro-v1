@@ -31,7 +31,7 @@ const PARAMETER_LABELS: Record<string, { label: string; unit?: string }> = {
 function measurementText(item: Recommendation) {
   const value = item.readingSnapshot?.[item.parameter];
   if (typeof value !== 'number' && typeof value !== 'string') return 'Not available';
-  const unit = PARAMETER_LABELS[item.parameter]?.unit;
+  const unit = typeof value === 'number' ? PARAMETER_LABELS[item.parameter]?.unit : undefined;
   return `${value}${unit === '%' ? '%' : unit ? ` ${unit}` : ''}`;
 }
 
@@ -80,7 +80,7 @@ export function RecommendationsPanel({ aquariumId, aquariumName, defaultOpen = f
           {notice ? <div className="mb-3"><StatusMessage variant="success">{notice}</StatusMessage></div> : null}
           {withheld.length > 0 ? (
             <div className="mb-3 rounded-lg border border-teal-300/20 bg-teal-400/10 p-3 text-sm text-teal-100">
-              <p>{withheld.length} draft recommendation{withheld.length === 1 ? '' : 's'} withheld pending scientific approval.</p>
+              <p>{withheld.length} saved draft recommendation{withheld.length === 1 ? '' : 's'} withheld. Rule approval has not been recorded in the app for these saved recommendations.</p>
               <div className="mt-2"><Badge variant="info">Draft rule</Badge></div>
             </div>
           ) : null}

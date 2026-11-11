@@ -94,7 +94,7 @@ test('details retain parameter explanations, draft status and existing recommend
     parameters: [{ parameter: 'temperature', label: 'Temperature', severity: 'warning', status: 'warning', notMonitored: false, value: 25, unit: '°C', message: 'Existing parameter explanation' }],
     recommendations: ['Existing maintenance recommendation'],
   } } });
-  for (const text of ['WARNING', 'Draft thresholds', 'Temperature', '25 °C', 'Existing parameter explanation', 'Existing maintenance recommendation']) assert.ok(html.includes(text), text);
+  for (const text of ['WARNING', 'Draft configuration', 'Temperature', '25 °C', 'Existing parameter explanation', 'Existing maintenance recommendation']) assert.ok(html.includes(text), text);
 });
 
 test('selector and return link preserve the selected aquarium', () => {

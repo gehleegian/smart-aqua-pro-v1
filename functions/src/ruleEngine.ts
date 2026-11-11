@@ -66,6 +66,8 @@ export type EngineState = {
   entries: Record<string, AlertEntryState>;
   lastSignature: string | null;
   lastParameterStatus: Record<string, string>;
+  /** Unknown/invalid readings do not end a turbidity episode. */
+  lastValidTurbidityStatus: 'normal' | 'warning' | 'critical' | null;
   cleaning: CleaningState | null;
 };
 
@@ -79,6 +81,9 @@ export function readEngineState(data: Record<string, unknown> | undefined): Engi
     lastSignature: typeof data?.lastSignature === 'string' ? data.lastSignature : null,
     lastParameterStatus: (data?.lastParameterStatus && typeof data.lastParameterStatus === 'object'
       ? data.lastParameterStatus : {}) as Record<string, string>,
+    lastValidTurbidityStatus: data?.lastValidTurbidityStatus === 'normal' ||
+      data?.lastValidTurbidityStatus === 'warning' || data?.lastValidTurbidityStatus === 'critical'
+      ? data.lastValidTurbidityStatus : null,
     cleaning: (data?.cleaning && typeof data.cleaning === 'object' ? data.cleaning : null) as CleaningState | null,
   };
 }

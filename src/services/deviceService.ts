@@ -25,6 +25,7 @@ import { getCurrentUserProfile } from "./userService";
 import { assertCurrentEmailAccess } from "./emailVerificationPolicyService";
 import { mailboxCommandId, publishConfirmedCommand, type MailboxCommand } from "../utils/commandMailbox";
 import { readServerClockOffset } from "../utils/firebaseServerClock";
+import { readTurbidityVoltage } from "../utils/monitoringAssessmentCore";
 import {
   appendSensorReading,
   buildSensorReadingDocument,
@@ -356,6 +357,7 @@ function mapTelemetryHistoryEntry(
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid,
     turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
+    turbidityVoltage: readTurbidityVoltage(entry.turbidityVoltage),
     turbidityState:
       entry.turbidityState === "Clear" ||
       entry.turbidityState === "Cloudy" ||

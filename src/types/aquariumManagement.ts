@@ -28,6 +28,8 @@ export type AquariumFormData = {
   maxPh: string;
   minLevel: string;
   minQuality: string;
+  minTdsPpm: string;
+  maxTdsPpm: string;
 };
 
 export type AquariumManagementData = {
@@ -49,14 +51,17 @@ export type AquariumUpdatePayload = Pick<
   | 'minTemp'
   | 'maxTemp'
   | 'minLevel'
-  | 'minQuality'
+  | 'minTdsPpm'
+  | 'maxTdsPpm'
 > & {
+  minQuality?: number;
   hasFiltrationSystem: boolean;
   minPh: number;
   maxPh: number;
 };
 
-export type AquariumCreatePayload = Omit<Aquarium, 'id' | 'hasFiltrationSystem'> & {
+export type AquariumCreatePayload = Omit<Aquarium, 'id' | 'hasFiltrationSystem' | 'minQuality'> & {
+  minQuality?: number;
   hasFiltrationSystem: boolean;
 };
 

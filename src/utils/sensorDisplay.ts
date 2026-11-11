@@ -8,13 +8,15 @@ export function getTurbidityDisplay(
   hasLiveTelemetry: boolean,
   state: unknown
 ): SensorDisplay {
-  if (hasLiveTelemetry) {
-    const category = state === 'Clear' || state === 'Cloudy' ? state : null;
-    if (category) {
-      return { value: category, status: 'Live telemetry', isError: false };
+  if (hasLiveTelemetry && validity) {
+    const category = state === 'Clear' || state === 'Cloudy' || state === 'Unknown' ? state : null;
+    if (category && validity?.turbidity.status !== 'invalid') {
+      return { value: category, status: category === 'Unknown' ? 'Turbidity classification unavailable' : 'Live telemetry', isError: false };
     }
   }
-  return getSensorDisplay(validity, 'turbidity', hasLiveTelemetry, () => '--');
+  const display = getSensorDisplay(validity, 'turbidity', hasLiveTelemetry, () =>
+    '--');
+  return display;
 }
 
 // Validity-aware sensor display (device contract decision 4). An invalid sensor

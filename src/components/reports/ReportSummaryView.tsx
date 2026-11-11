@@ -121,7 +121,7 @@ export default function ReportSummaryView({ summary }: { summary: StructuredRepo
       {summary.thresholds.draftNote ? (
         <div role="note" className="flex gap-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p><strong>Draft thresholds.</strong> {summary.thresholds.draftNote}</p>
+          <p><strong>Draft configuration.</strong> {summary.thresholds.draftNote}</p>
         </div>
       ) : null}
       {summary.period.effectiveEnd < summary.period.end ? (

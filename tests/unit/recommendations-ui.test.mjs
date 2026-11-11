@@ -94,7 +94,9 @@ test('rule explanations, draft badge and existing action controls stay available
 test('draft recommendations are withheld from active actions without losing their approval status', () => {
   const html = renderPanel([{ ...recommendation, ruleStatus: 'draft' }]);
   assert.match(html, /0 active/);
-  assert.match(html, /1 draft recommendation withheld pending scientific approval/);
+  assert.match(html, /1 saved draft recommendation withheld/);
+  assert.match(html, /Rule approval has not been recorded in the app/);
+  assert.doesNotMatch(html, /pending scientific approval/);
   assert.match(html, /Draft rule/);
   assert.doesNotMatch(html, />Applied</);
   assert.doesNotMatch(html, />Dismiss</);

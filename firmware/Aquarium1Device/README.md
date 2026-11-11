@@ -1,5 +1,63 @@
 # Aquarium 1 supervised Arduino test
 
+## Complete cloud-network hold, v3 (2026-11-11; upload required)
+
+The remaining shutdown path was a temporary failure of `control` or
+`commands/latest` while Wi-Fi was still connected. Those reads and temporary
+authentication failures now classify transport errors, HTTP 408/429 and HTTP
+5xx as retryable rather than switching the relay outputs OFF. The previous
+authentication HTTP result remains available during the existing retry cooldown;
+a denied or malformed authentication response is not treated as a timeout.
+No RTDB actions run while authentication is unavailable. Control/command retries
+return before schedules or manual actions and clear the command baseline without
+changing either output, so stale commands are not replayed on recovery.
+
+HTTP 400/401/403, missing or malformed controls, invalid response objects and
+other non-retryable errors retain fail-closed behavior. Explicit OFF, schedules,
+local DISARM and safe boot-OFF still work. Telemetry upload retries remain as
+documented below; a handled retry never writes a fake heartbeat or success ACK.
+No database schema, permissions, backend, sensor compensation, GPIO or feeder
+timing changes are required. This supersedes the older policy below that shut
+down on every control/command read failure while Wi-Fi was connected.
+
+Serial now prints `AQ1 network-hold-v3`, the numeric ESP32 reset reason at boot,
+uptime every connection report, and `Cloud retry: <stage> HTTP <status>` for these
+retry paths (no secrets or response bodies). The reported 20:41 shutdown has no
+stored device-side failure/reset trace, so its exact trigger is not proven.
+Upload the whole updated sketch folder, verify the version label, then perform
+a supervised disconnect/reconnect and ON-state test. Resets/brownouts still
+start OFF; source changes cannot guarantee hardware power stability.
+
+## Owner-requested Wi-Fi-loss hold (2026-11-11; upload required)
+
+Loss of Wi-Fi now retains each light/filter relay's last state (ON stays ON,
+OFF stays OFF) while suspending cloud actions. A disconnect detected during a
+failed cloud poll uses the same hold path. Reconnect still establishes a new
+command baseline, so commands queued during the outage are not replayed. Normal
+automation resumes from its existing schedule after a successful reconnect;
+offline schedule execution or feeding has not been added. Local DISARM, explicit
+OFF, authorization/invalid-control failures and safe boot-OFF remain intact.
+Retention is in RAM/GPIO state only: it does not survive a power cycle, reset or
+brownout. No live telemetry is fabricated while offline. No backend, database,
+access rules, pins, sensor compensation or feeder timing changes are required.
+Upload and supervised physical Wi-Fi disconnect/reconnect verification are still
+required; software tests/compilation alone cannot prove relay or pump operation.
+
+## Temporary telemetry-upload failures (2026-11-11; upload required)
+
+Aquarium 1 now matches Aquarium 2's narrow upload-error handling: after a
+successful authentication/control/command poll, a telemetry transport failure,
+HTTP 408/429, or HTTP 5xx no longer disarms both relay outputs. The pending sample
+remains eligible for retry; failed uploads do not create successful heartbeats.
+Failed control/command reads while Wi-Fi is connected, authorization errors,
+invalid controls and local DISARM still use the shutdown behavior. The newer
+Wi-Fi-loss hold above supersedes shutdown on Wi-Fi disconnection. Reconnect does not
+replay retained commands. Sensor compensation, pins, schedules and servo timing
+are unchanged. No Firebase schema, access rules, backend or app changes are needed.
+This fixes a code path consistent with the reported shutdown; the triggering
+HTTP error on the physical device has not been independently confirmed. Compile
+and offline regression checks do not replace a supervised post-upload test.
+
 ## Main-branch integration (2026-11-11)
 
 The current source combines the owner's manual-command ACK retry fix with the

@@ -34,11 +34,12 @@ export function parseClaimInput(value: unknown) {
   const p = input.profile as Record<string, unknown>;
   const allowed = ['name', 'species', 'tankType', 'tankLengthCm', 'tankWidthCm', 'tankHeightCm',
     'workingWaterVolumeLiters', 'hasFiltrationSystem', 'fishCount', 'fishWeightsG',
-    'minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel', 'minQuality'];
+    'minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel'];
+  const optional = ['minQuality', 'minTdsPpm', 'maxTdsPpm'];
   const numeric = ['tankLengthCm', 'tankWidthCm', 'tankHeightCm', 'workingWaterVolumeLiters',
-    'fishCount', 'minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel', 'minQuality'];
+    'fishCount', 'minTemp', 'maxTemp', 'minPh', 'maxPh', 'minLevel'];
   const invalid = () => { throw new ClaimError(400, 'invalid-profile', 'Check the aquarium profile values.'); };
-  if (Object.keys(p).length !== allowed.length || Object.keys(p).some(key => !allowed.includes(key))) invalid();
+  if (allowed.some(key => !Object.hasOwn(p, key)) || Object.keys(p).some(key => !allowed.includes(key) && !optional.includes(key))) invalid();
   if (typeof p.name !== 'string' || !p.name.trim() || p.name.trim().length > 120) invalid();
   if (p.tankType !== 'Freshwater' || !Array.isArray(p.species) || p.species.length !== 1 || p.species[0] !== 'Goldfish') invalid();
   if (typeof p.hasFiltrationSystem !== 'boolean') invalid();
@@ -50,7 +51,12 @@ export function parseClaimInput(value: unknown) {
   if (!Array.isArray(p.fishWeightsG) || p.fishWeightsG.length !== n.fishCount ||
     p.fishWeightsG.some(weight => typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0)) invalid();
   if (n.minTemp > n.maxTemp || n.minPh < 0 || n.maxPh > 14 || n.minPh > n.maxPh ||
-      n.minLevel < 0 || n.minLevel > 100 || n.minQuality < 0 || n.minQuality > 100) invalid();
+      n.minLevel < 0 || n.minLevel > 100) invalid();
+  if (Object.hasOwn(p, 'minQuality') && (typeof p.minQuality !== 'number' || !Number.isFinite(p.minQuality) || n.minQuality < 0 || n.minQuality > 100)) invalid();
+  const hasTds = Object.hasOwn(p, 'minTdsPpm') || Object.hasOwn(p, 'maxTdsPpm');
+  if (hasTds && (typeof p.minTdsPpm !== 'number' || typeof p.maxTdsPpm !== 'number' ||
+      !Number.isFinite(p.minTdsPpm) || !Number.isFinite(p.maxTdsPpm) || n.minTdsPpm < 0 || n.minTdsPpm >= n.maxTdsPpm)) invalid();
+  if (!hasTds && !Object.hasOwn(p, 'minQuality')) invalid();
   const profile: Record<string, unknown> = { ...p, name: (p.name as string).trim() };
   return { deviceId, profile };
 }

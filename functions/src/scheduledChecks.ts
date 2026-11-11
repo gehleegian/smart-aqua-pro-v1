@@ -44,9 +44,7 @@ export async function checkDeviceHeartbeats(dependencies: ScheduledDependencies)
   const summary = { checked: 0, offline: 0, opened: 0, resolved: 0, skipped: 0 };
   if (!isRecord(authorization)) return summary;
   const config = await loadRuleConfig(firestore, now);
-  const enabledRules = config.rules.filter((rule) => rule.enabled);
-  const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
-  const approvedRules = ruleSetApproved ? config.rules.filter((rule) => rule.status === 'approved') : [];
+  const approvedRules = config.rules.filter((rule) => rule.enabled && rule.status === 'approved');
 
   for (const [aquariumId, entry] of Object.entries(authorization)) {
     if (!isRecord(entry) || entry.state !== 'active' || !isRecord(entry.deviceUids) || Object.keys(entry.deviceUids).length === 0) {
@@ -116,10 +114,8 @@ export async function refreshCleaningSchedule(
     if (!aquarium || typeof aquarium.ownerId !== 'string') return { updated: false, recommend: null };
     const state = readEngineState(stateSnap.data());
     const configuredSpecies = selectSpeciesConfig(aquarium, config.speciesById);
-    const enabledRules = config.rules.filter((rule) => rule.enabled);
-    const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
-    const species = configuredSpecies?.status === 'approved' && ruleSetApproved ? configuredSpecies : null;
-    const approvedRules = ruleSetApproved ? config.rules.filter((rule) => rule.status === 'approved') : [];
+    const species = configuredSpecies?.status === 'approved' ? configuredSpecies : null;
+    const approvedRules = config.rules.filter((rule) => rule.enabled && rule.status === 'approved');
     const bioload = computeBioload(aquarium, species?.bioloadBandsGPerL);
     const created = readCreatedAt(aquarium);
     const lastCleaned = logged !== null ? { at: logged, source: 'maintenance_actions' as const }

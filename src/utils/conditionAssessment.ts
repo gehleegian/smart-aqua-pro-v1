@@ -1,8 +1,9 @@
 import {
   CONDITION_SUMMARY_MAX_AGE_MS,
+  assessmentConfigurationKey,
   computeBioload,
   evaluateAquarium,
-  readAquariumOverrides,
+  resolveLiveAquariumThresholds,
   resolveThresholds,
   selectSpeciesConfig,
   toConditionAssessment,
@@ -26,7 +27,7 @@ type AquariumLike = {
 export function getEffectiveThresholds(aquarium: AquariumLike, ruleConfig: RuleConfigSnapshot | null): EffectiveThresholds | null {
   if (!ruleConfig?.loaded) return null;
   const species = selectSpeciesConfig(aquarium, ruleConfig.speciesById);
-  return resolveThresholds(species, readAquariumOverrides(aquarium));
+  return resolveLiveAquariumThresholds(aquarium, species);
 }
 
 /**
@@ -54,20 +55,19 @@ export function evaluateAquariumReading(
   const configuredSpecies = selectSpeciesConfig(aquarium, ruleConfig.speciesById);
   const enabledRules = ruleConfig.rules.filter((rule) => rule.enabled);
   const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
-  // Draft configuration remains available to the Rules Editor preview, but it
-  // must never activate a user-facing assessment or recommendation.
-  const species = configuredSpecies?.status === 'approved' && ruleSetApproved ? configuredSpecies : null;
-  // Aquarium profile limits/overrides do not currently carry approval metadata.
-  // Keep them available to the editor preview above, but do not silently make
-  // them authoritative in a live assessment.
-  const thresholds = resolveThresholds(species);
-  const approvedRules = ruleSetApproved ? ruleConfig.rules.filter((rule) => rule.status === 'approved') : [];
+  // Species bioload/cleaning bands and recommendation rules retain approval gating.
+  // Saved numeric limits are resolved independently below.
+  const species = configuredSpecies?.status === 'approved' ? configuredSpecies : null;
+  // Saved limits classify this aquarium independently of recommendation approval.
+  const thresholds = resolveLiveAquariumThresholds(aquarium, configuredSpecies);
+  const approvedRules = ruleConfig.rules.filter((rule) => rule.enabled && rule.status === 'approved');
   const bioloadLevel = serverBioload ?? computeBioload(aquarium, species?.bioloadBandsGPerL)?.level ?? null;
-  return evaluateAquarium(reading ? withWaterLevelProfile(aquarium, reading) : null, thresholds, approvedRules, {
+  const result = evaluateAquarium(reading ? withWaterLevelProfile(aquarium, reading) : null, thresholds, approvedRules, {
     hasFiltrationSystem: aquarium.hasFiltrationSystem,
     fishCount: aquarium.fishCount,
     bioloadLevel,
   });
+  return { ...result, draft: result.draft || !ruleSetApproved };
 }
 
 const UNAVAILABLE = { overall: 'unavailable' as const, perParameter: [], faults: [], draft: false };
@@ -91,7 +91,9 @@ export function assessAquarium(options: {
     return toConditionAssessment(UNAVAILABLE, { source: 'unavailable', assessedAt: now, origin: 'none' });
   }
   const condition = options.engineState?.condition;
+  const thresholds = getEffectiveThresholds(options.aquarium, options.ruleConfig);
   if (source === 'live' && condition && now - condition.evaluatedAt <= CONDITION_SUMMARY_MAX_AGE_MS &&
+      thresholds && condition.configurationKey === assessmentConfigurationKey(thresholds, options.ruleConfig!.rules) &&
       waterLevelSummaryMatches(options.aquarium, options.reading, condition)) {
     return toConditionAssessment(condition, { source, assessedAt: condition.evaluatedAt, origin: 'server' });
   }
@@ -105,7 +107,7 @@ export function assessAquarium(options: {
     });
   }
   const approvalNote = result.draft
-    ? ['No live classification or maintenance recommendation is activated until the applicable thresholds and rules are approved.']
+    ? ['Saved user limits are used for classification. Recommendation-rule activation requires approved application metadata.']
     : [];
   return {
     ...toConditionAssessment(result, { source, assessedAt: now, origin: 'client', notes: approvalNote }),

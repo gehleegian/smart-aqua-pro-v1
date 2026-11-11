@@ -9,6 +9,11 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   // AQ1's explicitly requested compensation is tested separately. Remove only
   // its marked blocks here, so the existing shared control comparison remains.
   const a = (await readFile(new URL('Aquarium1Device/Aquarium1Device.ino', root), 'utf8'))
+    .replace(/^[ \t]*\/\/ BEGIN AQ1 TURBIDITY VOLTAGE\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 TURBIDITY VOLTAGE\r?\n/gm, '')
+    .replace(/^[ \t]*\/\/ BEGIN AQ1 NETWORK POLICY\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 NETWORK POLICY\r?\n/gm, '')
+    .replace(/^[ \t]*\/\/ BEGIN AQ1 NETWORK AUTH\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 NETWORK AUTH\r?\n/gm, '  if (!authenticate()) return false;\n')
+    .replace(/^[ \t]*\/\/ BEGIN AQ1 WIFI HOLD\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 WIFI HOLD\r?\n\r?\n/gm, '')
+    .replace(/^[ \t]*\/\/ BEGIN AQ1 COMMAND RELIABILITY\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 COMMAND RELIABILITY\r?\n/gm, '')
     .replace(/^[ \t]*\/\/ BEGIN AQ1 COMMAND ACK\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 COMMAND ACK\r?\n/gm, '')
     .replace(/^[ \t]*\/\/ BEGIN AQ1 LOAD COMPENSATION\r?\n[\s\S]*?^[ \t]*\/\/ END AQ1 LOAD COMPENSATION\r?\n/gm, '');
   // AQ2 ACK/telemetry-failure additions have dedicated behavioral tests below.
@@ -42,6 +47,10 @@ test('Aquarium 2 preserves Aquarium 1 control logic with isolated identity and f
   // AQ1 alone has the owner's requested batch interval/publish guard. Strip
   // only those explicit differences when checking unchanged control logic.
   const commonA = a.replace(/\r\n/g, '\n')
+    // AQ1 alone retains the last relay states during owner-requested Wi-Fi loss.
+    .replace('      pauseCloudForWifiLoss();', '      if (armed) { disarm(); Serial.println("Wi-Fi lost: disarmed, both outputs OFF."); }')
+    .replace('        if (WiFi.status() != WL_CONNECTED) pauseCloudForWifiLoss();\n        else disarm();', '        disarm();')
+    .replace('        if (WiFi.status() == WL_CONNECTED)\n          Serial.println(', '        Serial.println(')
     .replace('FULL_CM = 22.4134f', 'FULL_CM = 20.2f') // AQ1 owner-confirmed full-mark calibration only
     .replace('// Pause between completed batches; do not block cloud command polling.\nconstexpr uint32_t SENSOR_READ_INTERVAL_MS = 10000;\nbool telemetrySamplePending = false;\n', '')
     .replace(/void sampleSensorsIfDue\(\) \{[\s\S]*?\n\}\n\n/, '')

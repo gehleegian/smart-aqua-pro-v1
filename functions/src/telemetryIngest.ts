@@ -5,7 +5,9 @@ import {
   conditionSignature,
   evaluateAquarium,
   planAlertChanges,
-  resolveThresholds,
+  assessmentConfigurationKey,
+  resolveLiveAquariumThresholds,
+  readTurbidityVoltage,
   selectSpeciesConfig,
   TELEMETRY_STALE_MS,
   TELEMETRY_EPOCH_FLOOR,
@@ -48,7 +50,7 @@ const TELEMETRY_FIELDS = [
   'temperatureC', 'temperatureReadingValid', 'waterLevelPercent', 'waterPresent',
   'waterLevelReadingValid', 'waterLevelTargetHeightCm',
   'tdsPpm', 'tdsPercent', 'tdsReadingValid', 'turbidity', 'turbidityReadingValid',
-  'turbidityState', 'ph', 'phReadingValid', 'filterState', 'lightState',
+  'turbidityState', 'turbidityVoltage', 'ph', 'phReadingValid', 'filterState', 'lightState',
   'equipmentStatus', 'powerStatus', 'mainsPresent', 'online',
 ] as const;
 
@@ -115,7 +117,9 @@ function readString(value: unknown) {
 
 function pickTelemetry(raw: Record<string, unknown>) {
   return Object.fromEntries(
-    TELEMETRY_FIELDS.filter((field) => raw[field] !== undefined && raw[field] !== null).map((field) => [field, raw[field]])
+    TELEMETRY_FIELDS.filter((field) => raw[field] !== undefined && raw[field] !== null &&
+      (field !== 'turbidityVoltage' || readTurbidityVoltage(raw[field]) !== undefined))
+      .map((field) => [field, raw[field]])
   );
 }
 
@@ -172,24 +176,22 @@ export async function ingestTelemetry(
   const configuredSpecies = selectSpeciesConfig(aquarium, config.speciesById);
   const enabledRules = config.rules.filter((rule) => rule.enabled);
   const ruleSetApproved = enabledRules.length > 0 && enabledRules.every((rule) => rule.status === 'approved');
-  // Only approved configuration is authoritative. Draft values remain stored
-  // for admin preview/sign-off but cannot create live classifications, alerts,
-  // recommendations, cleaning schedules, or bioload bands.
-  const species = configuredSpecies?.status === 'approved' && ruleSetApproved ? configuredSpecies : null;
-  const approvedRules = ruleSetApproved ? config.rules.filter((rule) => rule.status === 'approved') : [];
-  // Profile limits and thresholdOverrides currently have no approval metadata.
-  // They remain editable/previewable, but only approved species thresholds are
-  // authoritative for live classifications and persisted recommendations.
-  const thresholds = resolveThresholds(species);
+  // Draft rules and species bioload/cleaning bands stay inactive. Saved aquarium
+  // limits classify valid readings independently of recommendation approval.
+  const species = configuredSpecies?.status === 'approved' ? configuredSpecies : null;
+  const approvedRules = config.rules.filter((rule) => rule.enabled && rule.status === 'approved');
+  const thresholds = resolveLiveAquariumThresholds(aquarium, configuredSpecies);
+  const configurationKey = assessmentConfigurationKey(thresholds, config.rules);
   const bioload = computeBioload(aquarium, species?.bioloadBandsGPerL);
   const checkedReading = withWaterLevelProfile(aquarium as LevelProfileInput, raw);
   const validity = evaluateTelemetryValidity(checkedReading);
-  const result = evaluateAquarium(checkedReading, thresholds, approvedRules, {
+  const evaluated = evaluateAquarium(checkedReading, thresholds, approvedRules, {
     hasFiltrationSystem: typeof aquarium.hasFiltrationSystem === 'boolean' ? aquarium.hasFiltrationSystem : undefined,
     bioloadLevel: bioload?.level ?? null,
     fishCount: typeof aquarium.fishCount === 'number' ? aquarium.fishCount : undefined,
   });
-  const signature = conditionSignature(result);
+  const result = { ...evaluated, draft: evaluated.draft || !ruleSetApproved };
+  const signature = `${conditionSignature(result)}|config=${configurationKey}`;
   const classification = result.overall;
 
   const { dateKey, recordedAt, timeKey } = localParts(recordedAtEpoch);
@@ -239,8 +241,16 @@ export async function ingestTelemetry(
 
     // 4. Cleaning schedule.
     const turbidityNow = statusOf(result, 'turbidity');
-    const turbidityBefore = state.lastParameterStatus.turbidity;
     const abnormal = (status?: string) => status === 'warning' || status === 'critical';
+    const previousStatus = state.lastParameterStatus.turbidity;
+    // Legacy entries may lack last-valid state. A recorded episode plus an
+    // unknown previous reading is not evidence that the water became Normal.
+    const turbidityBefore = state.lastValidTurbidityStatus ??
+      (previousStatus === 'normal' || abnormal(previousStatus) ? previousStatus :
+        state.cleaning?.turbidityWarningTimes.length ? 'warning' : undefined);
+    const lastValidTurbidityStatus = turbidityNow === 'normal' || turbidityNow === 'warning' || turbidityNow === 'critical'
+      ? turbidityNow : turbidityBefore === 'normal' || turbidityBefore === 'warning' || turbidityBefore === 'critical'
+        ? turbidityBefore : null;
     const tdsValid = statusOf(result, 'tdsPpm');
     const cleaning = advanceCleaning({
       state: state.cleaning,
@@ -339,7 +349,7 @@ export async function ingestTelemetry(
     const aquariumUpdate: Record<string, unknown> = {};
     if (sampleReason) {
       aquariumUpdate.condition = {
-        ...toConditionSummary(result, now, recordedAtEpoch),
+        ...toConditionSummary(result, now, recordedAtEpoch, configurationKey),
         ...(validity.waterLevel.status === 'valid' && typeof checkedReading.waterLevelTargetHeightCm === 'number'
           ? { waterLevelTargetHeightCm: checkedReading.waterLevelTargetHeightCm } : {}),
       };
@@ -357,6 +367,7 @@ export async function ingestTelemetry(
         entries: plan.entries,
         lastSignature: signature,
         lastParameterStatus: Object.fromEntries(result.perParameter.map((item) => [item.parameter, item.status])),
+        lastValidTurbidityStatus,
         cleaning: cleaning.state,
         updatedAt: now,
       });

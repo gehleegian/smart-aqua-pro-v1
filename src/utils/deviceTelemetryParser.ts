@@ -1,5 +1,5 @@
 import type { DeviceTelemetry } from '../types/device';
-import { readTelemetryNumber, normalizeDevicePowerStatus } from './monitoringAssessmentCore.ts';
+import { readTelemetryNumber, readTurbidityVoltage, normalizeDevicePowerStatus } from './monitoringAssessmentCore.ts';
 
 export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -45,8 +45,10 @@ export function normalizeTelemetry(value: unknown): DeviceTelemetry | null {
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid,
     turbidity: Number.isFinite(turbidity) ? turbidity : undefined,
+    turbidityVoltage: readTurbidityVoltage(telemetry.turbidityVoltage),
     turbidityReadingValid:
-      typeof telemetry.turbidityReadingValid === 'boolean' ? telemetry.turbidityReadingValid : undefined,
+      telemetry.turbidity != null && turbidity === undefined ? false :
+        typeof telemetry.turbidityReadingValid === 'boolean' ? telemetry.turbidityReadingValid : undefined,
     turbidityState: telemetry.turbidityState === 'Clear' || telemetry.turbidityState === 'Cloudy' || telemetry.turbidityState === 'Unknown'
       ? telemetry.turbidityState : undefined,
     ammoniaPpm: Number.isFinite(ammoniaPpm) ? ammoniaPpm : undefined,

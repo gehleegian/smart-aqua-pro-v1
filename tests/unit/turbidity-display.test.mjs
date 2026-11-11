@@ -15,17 +15,17 @@ test('Clear/Cloudy display without NTU with the requested subtitle', () => {
   }
 });
 
-test('numeric telemetry never adds NTU to the categorical display', () => {
+test('category-only mode hides numeric NTU and invalid inputs cannot be masked', () => {
   for (const ntu of [0, 2.4, 25]) {
     const validity = evaluateTelemetryValidity({ turbidity: ntu, turbidityReadingValid: true });
-    assert.equal(getTurbidityDisplay(validity, true, 'Clear').value, 'Clear');
+    assert.deepEqual(getTurbidityDisplay(validity, true, 'Clear'), { value: 'Clear', status: 'Live telemetry', isError: false });
   }
   for (const ntu of [NaN, Infinity, -1, '2.4', undefined]) {
     const validity = evaluateTelemetryValidity({ turbidity: ntu });
-    assert.equal(getTurbidityDisplay(validity, true, 'Cloudy').value, 'Cloudy');
+    assert.equal(getTurbidityDisplay(validity, true, 'Cloudy').value, ntu === undefined ? 'Cloudy' : 'Sensor error');
   }
   const failed = evaluateTelemetryValidity({ turbidity: 25, turbidityReadingValid: false });
-  assert.equal(getTurbidityDisplay(failed, true, 'Cloudy').value, 'Cloudy');
+  assert.equal(getTurbidityDisplay(failed, true, 'Cloudy').value, 'Sensor error');
 });
 
 test('stale/offline readings do not retain a Clear/Cloudy or numeric live value', () => {

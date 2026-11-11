@@ -14,6 +14,7 @@ import {
   type DeviceTelemetryLogEntry,
 } from '../types/device';
 import type { SensorReadingDocument, SensorReadingSource } from '../types/sensorReading';
+import { readTurbidityVoltage } from '../utils/monitoringAssessmentCore';
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -122,6 +123,7 @@ function mapSensorReadingDocument(value: unknown): DeviceTelemetryLogEntry | nul
     tdsPercent: hasTdsPercent ? tdsPercent : undefined,
     tdsReadingValid: readBoolean(reading.tdsReadingValid, hasTdsPercent),
     turbidity,
+    turbidityVoltage: readTurbidityVoltage(reading.turbidityVoltage),
     turbidityState:
       reading.turbidityState === 'Clear' || reading.turbidityState === 'Cloudy' || reading.turbidityState === 'Unknown'
         ? reading.turbidityState
@@ -193,6 +195,7 @@ export function buildSensorReadingDocument(options: {
     waterQualityPercent: options.telemetry.tdsPercent,
     tdsReadingValid: options.telemetry.tdsReadingValid,
     turbidity: options.telemetry.turbidity,
+    turbidityVoltage: readTurbidityVoltage(options.telemetry.turbidityVoltage),
     turbidityReadingValid: options.telemetry.turbidityReadingValid,
     turbidityState: options.telemetry.turbidityState,
     ammoniaPpm: options.telemetry.ammoniaPpm,
@@ -235,6 +238,7 @@ export function buildSensorReadingDocumentFromHistoryEntry(options: {
     waterQualityPercent: options.entry.tdsPercent,
     tdsReadingValid: options.entry.tdsReadingValid,
     turbidity: options.entry.turbidity,
+    turbidityVoltage: readTurbidityVoltage(options.entry.turbidityVoltage),
     turbidityReadingValid: options.entry.turbidityReadingValid,
     turbidityState: options.entry.turbidityState,
     ammoniaPpm: options.entry.ammoniaPpm,

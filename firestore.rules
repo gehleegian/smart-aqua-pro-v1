@@ -325,6 +325,8 @@ service cloud.firestore {
         'maxPh',
         'minLevel',
         'minQuality',
+        'minTdsPpm',
+        'maxTdsPpm',
         'feeder',
         'light',
         'filter',
@@ -463,6 +465,17 @@ service cloud.firestore {
         && data.fishWeightsG[0] > 0;
     }
 
+    function validTdsPpmRange(data) {
+      return !data.keys().hasAny(['minTdsPpm', 'maxTdsPpm'])
+        || (data.keys().hasAll(['minTdsPpm', 'maxTdsPpm'])
+          && data.minTdsPpm is number
+          && data.maxTdsPpm is number
+          && data.minTdsPpm >= 0
+          && data.minTdsPpm < data.maxTdsPpm
+          // Reject infinity/NaN without imposing a water-quality upper limit.
+          && data.maxTdsPpm - data.maxTdsPpm == 0);
+    }
+
     function validAquariumFieldValues(changed) {
       return (!changed.hasAny(['name']) || request.resource.data.name is string)
         && (!changed.hasAny(['species'])
@@ -479,6 +492,7 @@ service cloud.firestore {
             && request.resource.data.minPh <= request.resource.data.maxPh))
         && (!changed.hasAny(['minLevel']) || request.resource.data.minLevel is number)
         && (!changed.hasAny(['minQuality']) || request.resource.data.minQuality is number)
+        && (!changed.hasAny(['minTdsPpm', 'maxTdsPpm']) || validTdsPpmRange(request.resource.data))
         && (!changed.hasAny(['feeder'])
           || request.resource.data.feeder in ['Active', 'Inactive'])
         && (!changed.hasAny(['light'])

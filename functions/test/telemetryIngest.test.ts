@@ -80,6 +80,59 @@ after(async () => {
 
 // ---------------- Sprint 1 history behaviour (unchanged) ----------------
 
+test('TDS above calibration-check span uses owner bounds; categorical turbidity and voltage are retained without invented NTU', async () => {
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({ minTdsPpm: 100, maxTdsPpm: 400 });
+  await send({ tdsPpm: 500, turbidity: undefined, turbidityReadingValid: undefined, turbidityState: 'Cloudy', turbidityVoltage: 0.246 });
+  const [row] = await flatRows();
+  assert.equal(row.validity.tds, 'valid');
+  assert.equal(row.tdsPpm, 500);
+  assert.equal(row.parameterStatus.tdsPpm, 'warning');
+  assert.equal(row.turbidityState, 'Cloudy');
+  assert.equal(row.turbidityVoltage, 0.246);
+  assert.equal(row.turbidity, undefined);
+  assert.equal(row.parameterStatus.turbidity, 'warning');
+  assert.ok((await alerts()).some(alert => alert.parameter === 'tdsPpm'));
+  assert.ok((await alerts()).some(alert => alert.parameter === 'turbidity'));
+});
+
+test('TDS owner ppm limits reach server classification and historical threshold snapshots', async () => {
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({ minTdsPpm: 150, maxTdsPpm: 250 });
+  await send({ tdsPpm: 200 });
+  await send({ tdsPpm: 280 });
+  const rows = await flatRows();
+  assert.deepEqual(rows.at(-1)!.thresholdSnapshot.values.tdsPpm, { min: 150, max: 250 });
+  assert.ok(rows.at(-1)!.thresholdSnapshot.overridden.includes('tdsPpm'));
+  assert.equal(rows.at(-1)!.parameterStatus.tdsPpm, 'warning');
+  assert.ok((await alerts()).some(alert => alert.parameter === 'tdsPpm'));
+});
+
+test('categorical warning uses configured filter advice; Unknown never creates water advice', async () => {
+  for (const ruleId of ['turbidity_warning', 'turbidity_warning_filter_on', 'turbidity_warning_filter_off']) {
+    await firestore.doc(`rules/${ruleId}`).update({ condition: { op: 'eq', value: 'Cloudy' } });
+  }
+  clearRuleConfigCache();
+  await send({ turbidity: undefined, turbidityState: 'Clear' });
+  assert.deepEqual(await recommendations(), []);
+  await send({ turbidity: undefined, turbidityState: 'Cloudy', filterState: 'Active' });
+  assert.equal((await recommendations()).at(-1)!.ruleId, 'turbidity_warning_filter_on');
+  await send({ turbidity: undefined, turbidityState: 'Cloudy', filterState: 'Inactive' });
+  assert.ok((await recommendations()).some(rec => rec.ruleId === 'turbidity_warning_filter_off'));
+  const count = (await recommendations()).length;
+  await send({ turbidity: undefined, turbidityState: 'Unknown' });
+  assert.equal((await flatRows()).at(-1)!.parameterStatus.turbidity, 'unavailable');
+  assert.equal((await recommendations()).length, count);
+});
+
+test('invalid optional voltage is omitted from history without corrupting independent sensor readings', async () => {
+  await send({ turbidity: undefined, turbidityReadingValid: undefined, turbidityState: 'Clear', turbidityVoltage: '0.967' });
+  const [row] = await flatRows();
+  assert.equal(row.turbidityVoltage, undefined);
+  assert.equal(row.temperatureC, 22);
+  assert.equal(row.turbidityState, 'Clear');
+  assert.equal(row.validity.turbidity, 'valid');
+  assert.equal(row.turbidity, undefined);
+});
+
 for (const deviceId of ['SAQ-7K3M-9R2X', 'SAQ-TEST-0002']) {
   test(`LEVEL fixed-calibration water ignores aquarium geometry on ${deviceId}; invalid echoes stay excluded`, async () => {
     const geometry = { tankLengthCm: 60.96, tankWidthCm: 25.4, tankHeightCm: 24.13, workingWaterVolumeLiters: 19.9 };
@@ -262,19 +315,59 @@ test('INGEST-07 rows, alerts and recommendations stay isolated per aquarium', as
 
 // ---------------- Sprint 2: rules engine ----------------
 
-test('RULES-00 draft configuration is recorded as unavailable and creates no active alert or recommendation', async () => {
+test('approved advice works with unrelated drafts and refreshes legacy draft recommendations on fresh telemetry', async () => {
+  await firestore.doc('rules/tds_high_warning').update({ status: 'draft' });
+  clearRuleConfigCache();
+  await send({ temperatureC: 25 });
+  const [old] = await recommendations();
+  assert.equal(old.ruleStatus, 'approved');
+  // Simulate an existing historical draft record/legacy engine entry only in the emulator.
+  await firestore.doc(`recommendations/${old.id}`).update({ ruleStatus: 'draft' });
+  const ref = firestore.doc(`aquariums/${AQUARIUM}/engine/state`);
+  const state = (await ref.get()).data()!;
+  delete state.entries.temperatureC.ruleApprovalStatus;
+  await ref.update({ entries: state.entries });
+  await send({ temperatureC: 25 });
+  const recs = await recommendations();
+  assert.equal(recs.length, 2);
+  assert.equal(recs[0].status, 'resolved');
+  assert.equal(recs[0].ruleStatus, 'draft');
+  assert.equal(recs[1].status, 'pending');
+  assert.equal(recs[1].ruleStatus, 'approved');
+  await send({ temperatureC: 25 });
+  assert.equal((await recommendations()).length, 2, 'no duplicate on repeated matching data');
+});
+
+test('RULES-00 saved limits warn with draft rules, without activating a recommendation', async () => {
   await clearCollections(firestore, ['sensor_readings', 'alert_records', 'recommendations', 'species', 'rules']);
   await seedRules(firestore, readSeed());
   clearRuleConfigCache();
 
   const result = await send({ temperatureC: 25 });
   assert.ok(result.ingested && result.written);
-  assert.equal(result.classification, 'unavailable');
-  assert.deepEqual(await alerts(), []);
+  assert.equal(result.classification, 'warning');
+  assert.ok((await alerts()).every(a => a.ruleId == null));
   assert.deepEqual(await recommendations(), []);
   const aquarium = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!;
   assert.equal(aquarium.condition.draft, true);
-  assert.equal(aquarium.condition.overall, 'unavailable');
+  assert.equal(aquarium.condition.overall, 'warning');
+});
+
+test('user temperature/pH limits drive server classifications, snapshots and cache refresh', async () => {
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({ maxTemp: 28, maxPh: 10.5 });
+  await send({ temperatureC: 25.8, ph: 10.2 });
+  const first = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!.condition;
+  assert.equal(first.perParameter.find((p: FirebaseFirestore.DocumentData) => p.parameter === 'temperatureC').status, 'normal');
+  assert.equal(first.perParameter.find((p: FirebaseFirestore.DocumentData) => p.parameter === 'ph').status, 'normal');
+  assert.match(first.configurationKey, /^per-rule-approval-v5:/);
+  assert.deepEqual((await flatRows()).at(-1)!.thresholdSnapshot.values.ph, { min: 6.5, max: 10.5 });
+  await firestore.doc(`aquariums/${AQUARIUM}`).update({ maxTemp: 29 });
+  const next = await send({ temperatureC: 25.8, ph: 10.2 });
+  assert.ok(next.written, 'settings change refreshes the snapshot even when classification stays normal');
+  const second = (await firestore.doc(`aquariums/${AQUARIUM}`).get()).data()!.condition;
+  assert.notEqual(first.configurationKey, second.configurationKey);
+  assert.deepEqual((await flatRows()).at(-1)!.thresholdSnapshot.values.temperatureC, { min: 20, max: 29 });
+  assert.deepEqual(await recommendations(), []);
 });
 
 test('RULES-01 a bad reading produces the classification, a recommendation, an alert and the condition summary', async () => {
@@ -527,6 +620,76 @@ test('CLEAN-05 an incomplete profile has no schedule rather than a guessed one',
   await send();
   const cleaning = await cleaningOf();
   assert.deepEqual([cleaning.status, cleaning.reason, cleaning.nextCleaningDue], ['unavailable', 'bioload_unknown', null]);
+});
+
+for (const [label, gap] of [
+  ['Unknown', { turbidity: undefined, turbidityState: 'Unknown' }],
+  ['missing', { turbidity: undefined }],
+  ['invalid', { turbidity: -1 }],
+  ['explicit fault', { turbidity: 7, turbidityReadingValid: false }],
+] as const) {
+  test(`CLEAN turbidity ${label} does not split an abnormal episode`, async () => {
+    await send({ turbidity: 7 });
+    await send(gap);
+    await send({ turbidity: 7 });
+    await send({ turbidity: 12 }); // Warning -> Critical is still one episode.
+    const ref = firestore.doc(`aquariums/${AQUARIUM}/engine/state`);
+    assert.equal((await ref.get()).get('cleaning.turbidityWarningTimes').length, 1);
+    assert.equal((await cleaningOf()).reason, 'interval');
+    assert.equal((await recommendations()).some(rec => rec.ruleId === 'cleaning_due_early'), false);
+    await send(); // A real Normal reading re-arms the next entry.
+    await send(gap); // It must not erase that valid Normal either.
+    await send({ turbidity: 7 });
+    assert.equal((await ref.get()).get('cleaning.turbidityWarningTimes').length, 2);
+    assert.equal((await cleaningOf()).reason, 'turbidity_repeat');
+    assert.equal((await recommendations()).filter(rec => rec.ruleId === 'cleaning_due_early').length, 1);
+    await send({ turbidity: 7 });
+    assert.equal((await recommendations()).filter(rec => rec.ruleId === 'cleaning_due_early').length, 1);
+  });
+}
+
+test('CLEAN legacy state with an unknown gap conservatively waits for Normal', async () => {
+  await send({ turbidity: 7 });
+  const ref = firestore.doc(`aquariums/${AQUARIUM}/engine/state`);
+  const state = (await ref.get()).data()!;
+  delete state.lastValidTurbidityStatus;
+  state.lastParameterStatus.turbidity = 'unavailable';
+  await ref.set(state);
+  await send({ turbidity: 7 });
+  assert.equal((await ref.get()).get('cleaning.turbidityWarningTimes').length, 1);
+  assert.equal((await cleaningOf()).reason, 'interval');
+  await send();
+  await send({ turbidity: 7 });
+  assert.equal((await cleaningOf()).reason, 'turbidity_repeat');
+});
+
+test('CLEAN legacy valid Normal survives multiple unknown gaps after upgrade', async () => {
+  await send({ turbidity: 7 });
+  await send();
+  const ref = firestore.doc(`aquariums/${AQUARIUM}/engine/state`);
+  const state = (await ref.get()).data()!;
+  delete state.lastValidTurbidityStatus;
+  await ref.set(state);
+  await send({ turbidity: undefined, turbidityState: 'Unknown' });
+  await send({ turbidity: undefined, turbidityState: 'Unknown' });
+  assert.equal((await ref.get()).get('lastValidTurbidityStatus'), 'normal');
+  await send({ turbidity: 7 });
+  assert.equal((await cleaningOf()).reason, 'turbidity_repeat');
+});
+
+test('CLEAN categorical Cloudy needs a valid Clear between separate episodes', async () => {
+  for (const id of ['turbidity_warning', 'turbidity_warning_filter_on', 'turbidity_warning_filter_off']) {
+    await firestore.doc(`rules/${id}`).update({ condition: { op: 'eq', value: 'Cloudy' } });
+  }
+  clearRuleConfigCache();
+  await send({ turbidity: undefined, turbidityState: 'Cloudy' });
+  await send({ turbidity: undefined, turbidityState: 'Unknown' });
+  await send({ turbidity: undefined, turbidityState: 'Cloudy' });
+  assert.equal((await cleaningOf()).reason, 'interval');
+  await send({ turbidity: undefined, turbidityState: 'Clear' });
+  await send({ turbidity: undefined, turbidityState: 'Cloudy' });
+  assert.equal((await cleaningOf()).reason, 'turbidity_repeat');
+  assert.equal((await recommendations()).filter(rec => rec.ruleId === 'cleaning_due_early').length, 1);
 });
 
 test('LEVEL-01 fixed level and server summary do not require geometry or target metadata', async () => {

@@ -68,7 +68,8 @@ test('zero, sentinel, and flagged-invalid readings never raise water-condition a
 
 test('a confirmed empty tank (0% with waterPresent=false) is still a real critical alert', () => {
   const reading = telemetry({ waterLevelPercent: 0, waterPresent: false });
-  assert.deepEqual(waterAlerts(alertsFor(reading)), [], 'draft rules cannot create live alerts');
+  assert.deepEqual(waterAlerts(alertsFor(reading)).map(a => [a.category, a.type]), [['water_level', 'warning']],
+    'saved minimum level raises a warning without activating a draft critical/recommendation rule');
   const alerts = waterAlerts(alertsFor(reading, now, seedRuleConfig({ approved: true })));
   assert.deepEqual(alerts.map((a) => [a.category, a.type]), [['water_level', 'critical']]);
 });
