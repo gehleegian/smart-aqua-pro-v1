@@ -16,14 +16,24 @@
 #include "EchoFilter.h"
 #include "PowerSignal.h"
 #include "WaterLevel.h"
+// BEGIN AQ1 LOAD COMPENSATION
+#include "LoadCompensation.h"
+// END AQ1 LOAD COMPENSATION
 
 // Aquarium 1 supervised integration-test firmware. No fabricated telemetry.
 constexpr uint8_t PH_PIN = 34, TDS_PIN = 32, TURB_PIN = 35;
 constexpr uint8_t TRIG_PIN = 26, ECHO_PIN = 27;
 constexpr uint8_t LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 15;
 constexpr uint8_t POWER_PIN = 33;
+// Pause between completed batches; do not block cloud command polling.
+constexpr uint32_t SENSOR_READ_INTERVAL_MS = 10000;
+bool telemetrySamplePending = false;
+// BEGIN AQ1 LOAD COMPENSATION
+uint32_t relayRevision = 0, sampleRelayRevision = 0;
+float rawPhValue = NAN, rawTdsPpm = NAN, rawDistanceCm = NAN;
+// END AQ1 LOAD COMPENSATION
 constexpr float PH4_V = 2.438f, PH686_V = 2.287f, PH918_V = 2.103f;
-constexpr float EMPTY_CM = 27.0f, FULL_CM = 20.2f;
+constexpr float EMPTY_CM = 27.0f, FULL_CM = 22.4134f;
 constexpr float CLEAR_V = 0.967f, CLOUDY_V = 0.246f;
 // Midpoint separates the two tested samples, NOT a calibrated NTU threshold.
 constexpr float TURB_MID_V = (CLEAR_V + CLOUDY_V) / 2.0f;
@@ -71,8 +81,15 @@ String scheduleSignature;
 bool automationWasEnabled = false;
 constexpr int64_t LOCAL_UTC_OFFSET_SECONDS = 8 * 60 * 60; // Asia/Singapore
 double commandWatermarkMs = 0;
+// BEGIN AQ1 COMMAND ACK
+String pendingAckId, pendingAckPayload;
+bool lastFeedSucceeded = false;
+// END AQ1 COMMAND ACK
 
 void outputsOff() {
+  // BEGIN AQ1 LOAD COMPENSATION
+  if (lightOn || filterOn) ++relayRevision;
+  // END AQ1 LOAD COMPENSATION
   digitalWrite(LIGHT_PIN, HIGH);
   digitalWrite(FILTER_PIN, HIGH);
   lightOn = false;
@@ -90,6 +107,9 @@ void setOutput(bool light, bool on) {
     Serial.println("IGNORED: command path not ready or local stop is latched.");
     return;
   }
+  // BEGIN AQ1 LOAD COMPENSATION
+  if ((light ? lightOn : filterOn) != on) ++relayRevision;
+  // END AQ1 LOAD COMPENSATION
   digitalWrite(light ? LIGHT_PIN : FILTER_PIN, on ? LOW : HIGH);
   if (light) lightOn = on; else filterOn = on;
   Serial.printf("%s output commanded %s; physical operation NOT verified.\n",
@@ -97,6 +117,10 @@ void setOutput(bool light, bool on) {
 }
 
 void runManualFeed() {
+  // BEGIN AQ1 COMMAND ACK
+  lastFeedSucceeded = false;
+  bool feedDwellCompleted = false;
+  // END AQ1 COMMAND ACK
   if (!FEEDER_TEST_ENABLED || !armed || localStop) {
     Serial.println("Feed rejected: feeder not enabled or controls not ready.");
     return;
@@ -125,6 +149,10 @@ void runManualFeed() {
       serialCommands();
       delay(2);
     }
+    // BEGIN AQ1 COMMAND ACK
+    feedDwellCompleted = armed && !localStop && WiFi.status() == WL_CONNECTED &&
+      millis() - holdStart >= FEEDER_HOLD_MS;
+    // END AQ1 COMMAND ACK
   }
   feeder.write(FEEDER_HOME_DEG);
   responsiveWait(FEEDER_TRAVEL_MS);
@@ -133,6 +161,9 @@ void runManualFeed() {
   digitalWrite(SERVO_PIN, LOW);
   lastFeedEnd = millis();
   feedCompleted = true;
+  // BEGIN AQ1 COMMAND ACK
+  lastFeedSucceeded = feedDwellCompleted && armed && !localStop && WiFi.status() == WL_CONNECTED;
+  // END AQ1 COMMAND ACK
   Serial.println("Feed cycle ended; home commanded. Mechanical position NOT verified.");
 }
 
@@ -241,6 +272,10 @@ float fitPH(float v) {
 }
 
 void sampleSensors() {
+  // BEGIN AQ1 LOAD COMPENSATION
+  sampleRelayRevision = relayRevision;
+  const bool sampleLight = lightOn, sampleFilter = filterOn;
+  // END AQ1 LOAD COMPENSATION
   recoverTemperatureProbe(temp18, 18, t18, temp18RetryAt);
   recoverTemperatureProbe(temp19, 19, t19, temp19RetryAt);
   temp18.requestTemperatures();
@@ -255,7 +290,13 @@ void sampleSensors() {
   temperaturesValid = ok18 && ok19;
 
   phV = voltage(PH_PIN);
+  // BEGIN AQ1 LOAD COMPENSATION
+  phV = LoadCompensation::voltage(phV, analogRead(PH_PIN) >= 4095);
+  // END AQ1 LOAD COMPENSATION
   tdsV = voltage(TDS_PIN);
+  // BEGIN AQ1 LOAD COMPENSATION
+  tdsV = LoadCompensation::voltage(tdsV, analogRead(TDS_PIN) >= 4095);
+  // END AQ1 LOAD COMPENSATION
   // ADC clipping cannot measure a higher concentration; never publish it as ppm.
   tdsPpm = analogRead(TDS_PIN) >= 4095 ? NAN : meterReferencedTds(tdsV);
   turbV = voltage(TURB_PIN);
@@ -268,6 +309,17 @@ void sampleSensors() {
   // Buffer points define the transfer curve, not hard input-voltage limits.
   // Extrapolation is identified below; its accuracy needs an independent check.
   phValue = fitPH(phV);
+  // BEGIN AQ1 LOAD COMPENSATION
+  // The observations used live 12V equipment, not just energized relay coils.
+  // Do not apply that profile during a detected outage or unknown power state.
+  const bool compensationPowered = measuredPower == PowerSignal::State::Present;
+  const bool compensateLight = sampleLight && compensationPowered;
+  const bool compensateFilter = sampleFilter && compensationPowered;
+  rawPhValue = phValue;
+  rawTdsPpm = tdsPpm;
+  phValue = LoadCompensation::ph(rawPhValue, compensateLight, compensateFilter);
+  tdsPpm = LoadCompensation::tds(rawTdsPpm, compensateLight, compensateFilter);
+  // END AQ1 LOAD COMPENSATION
   if (turbV >= 0.15f && turbV < 3.0f) {
     if (!turbKnown) cloudy = turbV < TURB_MID_V;
     else if (turbV < TURB_MID_V - TURB_HYST_V) cloudy = true;
@@ -293,6 +345,11 @@ void sampleSensors() {
   }
   const uint32_t us = medianEcho(echoes);
   distanceCm = us ? us * 0.0343f / 2.0f : NAN;
+  // BEGIN AQ1 LOAD COMPENSATION
+  rawDistanceCm = distanceCm;
+  distanceCm = LoadCompensation::distance(rawDistanceCm, PROFILE_LEVEL_ENABLED ? 0.0f :
+    LoadCompensation::distanceShift(compensateLight, compensateFilter));
+  // END AQ1 LOAD COMPENSATION
   // AJ-SR04M assumption: below 20 cm is blind zone, not a valid full reading.
   levelValid = isfinite(distanceCm) && distanceCm >= 20.0f && distanceCm <= 800.0f;
   levelPct = levelValid ? constrain((EMPTY_CM - distanceCm) * 100.0f /
@@ -303,6 +360,18 @@ void sampleSensors() {
     levelPct = levelValid ? result : NAN;
   }
   sampleAt = millis();
+  // BEGIN AQ1 LOAD COMPENSATION
+  if (sampleRelayRevision != relayRevision) {
+    phValue = NAN;
+    tdsPpm = NAN;
+    levelValid = false;
+    levelPct = NAN;
+  }
+  Serial.printf("Load compensation %s: EXPERIMENTAL 5V/2A adapter profile; accuracy not verified; disable for laptop USB.\n", LoadCompensation::ENABLED ? (compensationPowered ? "ON" : "BYPASSED: 12V absent/unknown") : "OFF");
+  Serial.printf("Raw -> adjusted: pH %.3f -> %.3f | TDS %.3f -> %.3f ppm | distance %.3f -> %.3f cm | sample L=%d F=%d | state %s\n",
+                rawPhValue, phValue, rawTdsPpm, tdsPpm, rawDistanceCm, distanceCm, sampleLight, sampleFilter,
+                sampleRelayRevision == relayRevision ? "unchanged" : "changed; batch not published");
+  // END AQ1 LOAD COMPENSATION
   Serial.println("\n--- AQUARIUM 1 REAL SENSOR SAMPLE ---");
   Serial.printf("Temp GPIO18: %.2f C | GPIO19: %.2f C | mean: %.2f C\n",
                 t18, t19, temperaturesValid ? (t18 + t19) / 2.0f : NAN);
@@ -314,7 +383,7 @@ void sampleSensors() {
   if (PROFILE_LEVEL_ENABLED)
     Serial.printf("Distance: %.1f cm | level %.1f %% | empty 27.0 cm | profile target height %.3f cm\n",
                   distanceCm, levelPct, profileTargetHeightCm);
-  else Serial.printf("Distance: %.1f cm | level %.1f %% (27.0 empty / 20.2 chosen full)\n", distanceCm, levelPct);
+  else Serial.printf("Distance: %.1f cm | level %.1f %% (%.1f empty / %.4f chosen full)\n", distanceCm, levelPct, EMPTY_CM, FULL_CM);
   Serial.printf("Ultrasonic: %u/5 valid echoes; current-batch median only\n", validEchoes);
   if (isfinite(tdsPpm)) {
     Serial.printf("TDS: %.0f ppm | GPIO32 %.3f V | %s; no temperature compensation\n", tdsPpm, tdsV,
@@ -329,6 +398,14 @@ void sampleSensors() {
                   POWER_PRESENT_LEVEL < 0 ? "UNCONFIRMED" : "configured");
   }
   Serial.printf("Outputs light=%d filter=%d\n", lightOn, filterOn);
+}
+
+void sampleSensorsIfDue() {
+  if (!lastSample || millis() - lastSample >= SENSOR_READ_INTERVAL_MS) {
+    sampleSensors();
+    lastSample = millis();
+    telemetrySamplePending = true;
+  }
 }
 
 // HTTPS uses ESP-IDF's built-in root certificate bundle; never setInsecure().
@@ -444,6 +521,35 @@ int database(const char *child, esp_http_client_method_t method,
   return status;
 }
 
+// BEGIN AQ1 COMMAND ACK
+// An ACK reports software actuation/rejection, NOT physical lamp/pump feedback.
+// Retrying the ACK NEVER retries the equipment action.
+void queueCommandAck(const String &commandId, bool ok, const char *error = "") {
+  JsonDocument ack;
+  ack["commandId"] = commandId;
+  ack["status"] = ok ? "done" : "failed";
+  ack["executedAt"][".sv"] = "timestamp";
+  if (!ok) ack["error"] = error;
+  pendingAckId = commandId;
+  pendingAckPayload = "";
+  serializeJson(ack, pendingAckPayload);
+}
+void flushCommandAck(const String &currentCommandId) {
+  if (pendingAckId.isEmpty()) return;
+  if (pendingAckId != currentCommandId) {
+    pendingAckId = "";
+    pendingAckPayload = "";
+    return; // latest-only rules prohibit ACKing an overwritten command
+  }
+  String response;
+  const int status = database("commandAck/latest", HTTP_METHOD_PUT, pendingAckPayload, response);
+  if (status == 200) {
+    pendingAckId = "";
+    pendingAckPayload = "";
+    Serial.println("Command acknowledgement saved; physical equipment operation NOT verified.");
+  } else Serial.printf("Command acknowledgement pending (HTTP %d); action will NOT be replayed.\n", status);
+}
+// END AQ1 COMMAND ACK
 bool cloudConfigurationValid() {
   const String aquarium = AQUARIUM_ID;
   if (!strlen(WIFI_SSID) || !strlen(FIREBASE_API_KEY) || !strlen(DEVICE_EMAIL) ||
@@ -586,33 +692,62 @@ bool cloudCycle() {
     const double nowMs = double(time(nullptr)) * 1000.0;
     if (aquarium != AQUARIUM_ID || requester.isEmpty() || !command["requestedAt"].is<double>()) {
       Serial.println("Rejected malformed/mismatched command.");
+      // BEGIN AQ1 COMMAND ACK
+      queueCommandAck(commandId, false, "Malformed or mismatched command; no action.");
+      // END AQ1 COMMAND ACK
     } else if (requestedMs <= commandWatermarkMs || requestedMs > nowMs + 5000 ||
                nowMs - requestedMs > 30000) {
       // Supervised-test freshness policy: new since baseline, max age 30 seconds.
       Serial.println("Rejected old/replayed/future command. Send a new command with a correct client clock.");
+      // BEGIN AQ1 COMMAND ACK
+      queueCommandAck(commandId, false, "Stale/replayed/future command; send a new command.");
+      // END AQ1 COMMAND ACK
     } else if (type == "set_light_state" && (state == "On" || state == "Off")) {
       commandWatermarkMs = requestedMs;
       setOutput(true, state == "On");
       lightSchedule.manual();
+      // BEGIN AQ1 COMMAND ACK
+      queueCommandAck(commandId, lightOn == (state == "On") && (state == "Off" || armed), "Light command blocked: controls not armed.");
+      // END AQ1 COMMAND ACK
     } else if (type == "set_filter_state" && (state == "Active" || state == "Inactive")) {
       commandWatermarkMs = requestedMs;
       setOutput(false, state == "Active");
       filterSchedule.manual();
+      // BEGIN AQ1 COMMAND ACK
+      queueCommandAck(commandId, filterOn == (state == "Active") && (state == "Inactive" || armed), "Filter command blocked: controls not armed.");
+      // END AQ1 COMMAND ACK
     } else if (type == "feed_now" && command["durationMs"].is<double>() &&
                command["durationMs"].as<double>() > 0) {
       commandWatermarkMs = requestedMs;
       // Fixed physical dwell applies to both existing web and mobile clients;
       // legacy durationMs must never lengthen this device's configured hold.
       runManualFeed();
+      // BEGIN AQ1 COMMAND ACK
+      queueCommandAck(commandId, lastFeedSucceeded, "Feed rejected or aborted; check cooldown, arming and PWM settings.");
+      // END AQ1 COMMAND ACK
       lastAutoFeedMinute = max(lastAutoFeedMinute, localEpochMinute());
       if (scheduleStoreReady) scheduleStore.putLong64("feedMinute", lastAutoFeedMinute);
     } else Serial.println("Command not actuated: unsupported or invalid command.");
   }
+  // BEGIN AQ1 COMMAND ACK
+  flushCommandAck(commandId);
+  if (idToken.isEmpty()) return false; // authentication failures still disarm
+  // END AQ1 COMMAND ACK
   if (!establishingBaseline && scheduleValid) applyScheduledFeed(control);
 
   // Connection freshness is independent of sensor health. Never substitute a
   // sentinel/old value, and never let one failed probe hide working sensors.
-  if (millis() - sampleAt > 15000) sampleSensors();
+  sampleSensorsIfDue();
+  // Keep polling commands between batches, but never re-stamp an old sample.
+  if (!telemetrySamplePending) return true;
+  // BEGIN AQ1 LOAD COMPENSATION
+  // Never associate a batch captured in one relay state with another state.
+  // Wait for the next scheduled batch; cloud commands and safety stay active.
+  if (sampleRelayRevision != relayRevision) {
+    telemetrySamplePending = false;
+    return true;
+  }
+  // END AQ1 LOAD COMPENSATION
   JsonDocument telemetry;
   telemetry["temperatureReadingValid"] = temperaturesValid;
   if (temperaturesValid) telemetry["temperatureC"] = (t18 + t19) / 2.0f;
@@ -656,6 +791,7 @@ bool cloudCycle() {
   serializeJson(telemetry, payload);
   status = database("telemetry", HTTP_METHOD_PUT, payload, response);
   Serial.printf("Telemetry snapshot HTTP %d\n", status);
+  if (status == 200) telemetrySamplePending = false;
   return status == 200;
 }
 
@@ -700,10 +836,7 @@ void setup() {
 
 void loop() {
   serialCommands();
-  if (!lastSample || millis() - lastSample >= 5000) {
-    sampleSensors();
-    lastSample = millis();
-  }
+  sampleSensorsIfDue();
   if (CLOUD_ENABLED && cloudConfigurationValid()) {
     if (millis() - lastConnectionReport >= 10000) {
       lastConnectionReport = millis();

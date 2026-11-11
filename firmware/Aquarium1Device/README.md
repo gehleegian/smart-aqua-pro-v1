@@ -1,9 +1,167 @@
 # Aquarium 1 supervised Arduino test
 
-## Current water level: fixed calibration restored (2026-11-10)
+## Command acknowledgements (2026-11-11; not uploaded)
+
+Both Aquarium 1 sketch copies now write the existing commandAck/latest contract,
+matching Aquarium 2's ACK serialization/retry behavior. A manual light/filter
+command reports done when its software output state is applied, or failed when
+blocked. Malformed/stale/mismatched commands report failed without actuation.
+Feeding reports done only after the existing software home/dispense/hold/home
+path completes while armed, without local stop or detected Wi-Fi interruption.
+Disabled/cooldown/PWM-attach rejection and interrupted cycles report failed.
+No position, food-dispensing, lamp-contact or pump-flow feedback was added.
+
+ACK writes use the current command ID and Firebase server timestamp. Failed ACK
+writes retry only the ACK, never the action. If a newer command has replaced the
+slot, the old pending ACK is discarded as required by existing database rules.
+ACK flushing occurs BEFORE sampling and the pending-sample/relay-revision guards,
+so a command can be reported without waiting for the next 10-second sensor batch.
+Boot/reconnect still establishes a baseline without executing retained commands.
+
+This update changes acknowledgement reporting only: experimental pH/TDS/level
+compensation, FULL_CM=22.4134, EMPTY_CM=27.0, the 10-second batch gap, relay pins,
+servo positions/dwell/cooldown, schedules and existing safety behavior remain.
+Aquarium 1's telemetry-upload error/disarm policy is unchanged in this ACK update.
+There are no database schema/rules, backend, authentication, web or mobile changes.
+Existing clients already subscribe to commandAck/latest for Last command status.
+Upload this Aquarium 1 folder to Aquarium 1, not Aquarium 2; verify Done/Failed on
+fresh explicit commands after Web controls ready. Done means software command
+processing, NOT independently verified physical operation. Nothing was uploaded,
+pushed or deployed by the assistant for this update; physical verification remains.
+
+## Current full-water mark recalibration (2026-11-11)
+
+The owner confirmed the current water surface is the intended 100% mark, while
+the dashboard's detailed value is 67.45% (large display rounds to 67.5%). Using
+the previously active 27.0 cm empty / 20.2 cm full formula, the corresponding
+compensated distance is 27 - 0.6745 * (27 - 20.2) = 22.4134 cm. This is derived
+from rounded displayed telemetry, NOT a new tape-measure/raw-distance sample.
+It assumes the preceding fixed-calibration/compensation sketch was running.
+
+Both Aquarium 1 sketch copies now use FULL_CM = 22.4134 cm; EMPTY_CM stays 27.0.
+The new formula is clamp((27 - compensatedDistance)/(27 - 22.4134)*100, 0, 100).
+It marks this observed full reference as 100%, but still decreases as water
+falls: 24.7067 cm gives 50% and 27 cm gives 0%. It does not force all readings
+into 90-99%. Invalid raw/adjusted echoes remain unavailable. The chosen 27 cm
+empty reference remains unchanged and has not been independently revalidated.
+
+LoadCompensation.h preserves OBSERVATION_SPAN_CM = 27.0 - 20.2 from the original
+load tests. Filter-only 1.0574 cm and both-ON 0.9792 cm corrections therefore do
+not shrink when FULL_CM changes. These remain approximate experimental offsets.
+Future physical changes in water height remain visible. Serial prints the
+actual configured endpoints dynamically. pH, TDS, the 10-second interval,
+equipment/servo controls, power logic and Aquarium 2 are unchanged by this step.
+
+Existing web/mobile/server paths consume the firmware's valid percentage;
+there are no backend, schema, authentication or rules changes and no new
+dimension/operational-volume dependency. Upload the entire Aquarium1Device
+folder, including its updated LoadCompensation.h. This revision was not uploaded,
+pushed or deployed here. A fresh full-mark and lower-water hardware test is
+still required; noise may prevent an exact 100% on every batch.
+
+## Experimental load compensation: 5V/2A adapter profile (2026-11-11)
+
+The owner's requested pH, TDS and water-level compensation replaces the earlier
+disabled laptop profile. Both the repository and owner upload folder contain
+the same `LoadCompensation.h`, with `ENABLED=true` for a supervised adapter test.
+Set it to false for laptop USB or to return to unadjusted current readings.
+There is no USB-source detection, runtime offset learning, baseline lock, replay
+of OFF readings, or automatic equipment cycling.
+
+### Observations and calculation
+
+These are displayed values from the owner's two adapter-powered test passes,
+not raw voltages, independent reference measurements, or a validation dataset:
+
+| State | pH observations | TDS ppm observations | Level % observations |
+|---|---|---|---|
+| Both OFF | 8.9 initially and settled again; intermediate 9.3 | 89 | 68.7 |
+| Light only | 4.7, 4.8 | 179, 183 | 68.7, 68.7 |
+| Filter only | 10.0, 9.5 | 105, 102 | 53.8, 52.5 |
+| Both ON | 5.2, 5.2 | 204, 172 | 53.8, 54.8 |
+
+The OFF reference is 8.9 pH / 89 ppm / 68.7%, as observed initially and after
+settling. The intermediate 9.3 pH remains documented drift; OFF measurements
+are never forced to 8.9. For each ON state use the arithmetic midpoint of its
+two observations. Subtract (state midpoint - OFF reference) from each fresh
+pH/TDS measurement AFTER the unchanged transfer curve. Do not infer measured
+voltages from rounded screenshots or add the two single-load corrections:
+
+| State | Added pH | Subtracted ppm | Added level points on ORIGINAL scale |
+|---|---:|---:|---:|
+| Both OFF | 0 | 0 | 0 |
+| Light only | 4.15 | 92 | 0 |
+| Filter only | -0.85 | 14.5 | 15.55 |
+| Both ON | 3.70 | 99 | 14.40 |
+
+For level, derive the equivalent distance shift using the original observation
+(27.0 - 20.2) cm span: 1.0574 cm for filter-only and 0.9792 cm for both.
+Subtract it from each new valid median distance before the level formula, NOT
+after percentage clamping. The separate full-mark recalibration above changes
+only the final percentage scale; it does not change these historical shifts.
+Dimensions/operational volume are not used. Profile-derived level mode bypasses
+this fixed-span adjustment if enabled in future. Serial shows raw -> adjusted.
+
+The profile applies only with measured 12V power present. During a detected
+outage/unknown power state it is bypassed, with an explicit Serial message:
+energized coils without 12V loads were not this calibration condition.
+A relay revision change during acquisition or before publication discards
+the batch. Invalid/clipped voltage, invalid raw pH/TDS and raw or adjusted
+distance outside 20-800 cm remain unavailable. Out-of-range adjusted pH or
+negative ppm become unavailable, not clamped to a plausible water condition.
+The existing 10-second batch gap and cloud/command safety checks remain.
+
+### Limitations and verification
+
+This is approximate experimental compensation, NOT a repair of interference
+or reference calibration. It assumes additive load-associated offsets and
+unchanged water, mounting, probes and power/wiring. Filter flow could change
+actual surface height; the screenshots cannot separate this from measurement
+error. Real subsequent sensor changes are preserved, not canceled automatically.
+No smoothing is added to make an inaccurate constant shift appear stable.
+
+Residual variation remains visible: both-ON TDS 204 -> 105 ppm and 172 -> 73 ppm;
+filter-only pH 10.0 -> 9.15 and 9.5 -> 8.65. Matching midpoints by construction
+does not establish sensor accuracy. Independent references and physical tests
+are still required; do not chemically adjust water from these estimates alone.
+
+Serial identifies the experimental adapter profile and logs current raw and
+adjusted pH/ppm/distance. Existing telemetry fields carry the adjusted estimates
+when uploaded; existing web/mobile alerts and analytics will evaluate them.
+No new UI badge or schema field was added. There are no Firebase rules, backend,
+authentication, relay pin, servo, temperature, turbidity, power-detector or
+Aquarium 2 changes in this compensation update.
+Nothing was uploaded, pushed or deployed as part of implementation.
+
+## Sensor reading interval (2026-11-11)
+
+Aquarium 1 now waits 10 seconds after completing a sensor batch before starting
+the next one (`SENSOR_READ_INTERVAL_MS = 10000`). Actual batch-to-batch output
+also includes acquisition time and any intervening network work; this is not
+an exact 10-second real-time schedule. The loop and cloud path share one timer
+so neither can trigger an extra batch during the interval. Cloud authentication,
+commands, schedules and Wi-Fi safety checks keep their existing polling path;
+there is no added 10-second blocking delay and no automatic equipment cycling.
+
+Telemetry is uploaded only when a measured batch is pending, not repeatedly
+given a newer `updatedAt` between samples. A failed upload keeps the pending
+batch eligible for retry; newer batches replace it. Reported output states and
+analog power detection can consequently take until the next batch/upload to
+appear (normally roughly 10-15 seconds, longer on network faults). The existing
+60-second app offline policy, validity checks, pin assignments, calibrations and
+feeder remain unchanged. Aquarium 2 is unchanged. No backend, rules or schema
+changes are required. This request changes timing, not measurement values; it
+does not repair the sustained relay-related pH/TDS offsets observed by the owner.
+
+Both this repository sketch and `C:/new/Aquarium1Device/Aquarium1Device.ino`
+receive the interval change. Existing owner edits in the latter are preserved;
+the two complete sketches are not asserted identical. Not uploaded or physically
+verified as part of this change.
+
+## Previous fixed calibration restored (2026-11-10; full reference superseded above)
 
 PROFILE_LEVEL_ENABLED is false in repository and C:/new/Aquarium1Device/Config.h.
-The active formula is clamp((27.0-distanceCm)/(27.0-20.2)*100, 0, 100):
+The formula at that revision was clamp((27.0-distanceCm)/(27.0-20.2)*100, 0, 100):
 27.0cm is empty, 20.2cm is the chosen full reference. Dimensions/operational
 litres are not used. No valid echo or distance below 20cm remains unavailable,
 not fabricated full. Web/mobile/backend must use the matching fixed policy.

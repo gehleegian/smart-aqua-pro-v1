@@ -111,7 +111,7 @@ test('both actual upload folders disable profile level and preserve fixed refere
       assert.match(readFileSync(new URL('Config.h', root), 'utf8'), /PROFILE_LEVEL_ENABLED = false/);
       const sketch = readFileSync(new URL(`Aquarium${device}Device.ino`, root), 'utf8');
       assert.match(sketch, /EMPTY_CM = 27\.0f/);
-      assert.match(sketch, /FULL_CM = 20\.2f/);
+      assert.equal(Number(sketch.match(/FULL_CM = ([\d.]+)f/)?.[1]), device === 1 ? 22.4134 : 20.2);
       assert.match(sketch, /\(EMPTY_CM - distanceCm\) \* 100\.0f\s*\/\s*\(EMPTY_CM - FULL_CM\)/);
       assert.match(sketch, /levelValid\s*=\s*isfinite\(distanceCm\)\s*&&\s*distanceCm >= 20\.0f\s*&&\s*distanceCm <= 800\.0f/);
       const helper = readFileSync(new URL('WaterLevel.h', root), 'utf8');
@@ -149,11 +149,14 @@ test('active fixed formula gives the chosen endpoints and never turns invalid ec
       // Execute only the existing pure formula as offline test fixtures, never telemetry.
       const calculate = new Function('distanceCm', 'EMPTY_CM', 'FULL_CM', 'isfinite', 'constrain', 'NAN',
         `let levelValid, levelPct; ${calculation.replace(/(?<=\d)f\b/g, '')}; return { levelValid, levelPct };`);
-      const run = distance => calculate(distance, 27, 20.2, Number.isFinite, (n, min, max) => Math.min(max, Math.max(min, n)), NaN);
+      const full = Number(source.match(/FULL_CM = ([\d.]+)f/)?.[1]);
+      assert.equal(full, device === 1 ? 22.4134 : 20.2);
+      const run = distance => calculate(distance, 27, full, Number.isFinite, (n, min, max) => Math.min(max, Math.max(min, n)), NaN);
       assert.equal(run(27).levelPct, 0);
-      assert.equal(run(20.2).levelPct, 100);
+      assert.equal(run(full).levelPct, 100);
       assert.equal(run(20).levelPct, 100);
-      assert.ok(Math.abs(run(22.1).levelPct - 72.0588235294) < 0.0001);
+      assert.ok(Math.abs(run((27 + full) / 2).levelPct - 50) < 0.0001);
+      assert.ok(run(full + 1).levelPct < 90, 'must still detect lower water, not force 90-99%');
       for (const invalid of [NaN, Infinity, 0, 19.9, 801]) {
         assert.equal(run(invalid).levelValid, false);
         assert.ok(Number.isNaN(run(invalid).levelPct));

@@ -4,6 +4,7 @@ import {
   get,
   onValue,
   ref,
+  runTransaction,
   set,
   update,
   type DatabaseReference,
@@ -11,6 +12,8 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, rtdb } from '../firebase';
 import { normalizeTelemetry } from '../utils/deviceTelemetryParser';
+import { mailboxCommandId, publishConfirmedCommand, type MailboxCommand } from '../utils/commandMailbox';
+import { readServerClockOffset } from '../utils/firebaseServerClock';
 import { getWaterLevelControl, usesProfileWaterLevel, type LevelProfileInput } from '../utils/waterLevelProfile.ts';
 import { getCurrentUserProfile } from './userService';
 import { assertCurrentEmailAccess } from './emailVerificationPolicyService';
@@ -208,14 +211,27 @@ export async function publishDeviceCommand(command: DeviceCommandRequest): Promi
 
   await assertRealtimeDeviceAccess(command.aquariumId, 'write');
 
+  const clockOffset = await readServerClockOffset(rtdb!);
   const payload = Object.fromEntries(
     Object.entries({
       ...command,
       requestedBy: currentUser.uid,
+      commandId: `${command.commandId}-${Math.random().toString(36).slice(2, 10)}`,
+      requestedAt: Math.round(Date.now() + clockOffset),
     }).filter(([, value]) => value !== undefined)
   );
 
-  await set(child(deviceRootRef, 'commands/latest'), payload);
+  const latest = child(deviceRootRef, 'commands/latest');
+  await publishConfirmedCommand(payload as MailboxCommand, {
+    readLatest: async () => (await get(latest)).val(),
+    readAck: async () => (await get(child(deviceRootRef, 'commandAck/latest')).catch(() => null))?.val() ?? null,
+    readTelemetry: async () => (await get(child(deviceRootRef, 'telemetry'))).val(),
+    claim: async (expectedId, next) => (await runTransaction(latest,
+      current => mailboxCommandId(current) === expectedId ? next : undefined,
+      { applyLocally: false })).committed,
+    now: () => Date.now() + clockOffset,
+    pause: () => new Promise(resolve => setTimeout(resolve, 500)),
+  });
 }
 
 /**

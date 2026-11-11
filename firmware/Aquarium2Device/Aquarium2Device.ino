@@ -20,7 +20,7 @@
 // Aquarium 2 supervised integration-test firmware. No fabricated telemetry.
 constexpr uint8_t PH_PIN = 34, TDS_PIN = 32, TURB_PIN = 35;
 constexpr uint8_t TRIG_PIN = 26, ECHO_PIN = 27;
-constexpr uint8_t LIGHT_PIN = 16, FILTER_PIN = 17, SERVO_PIN = 23;
+constexpr uint8_t LIGHT_PIN = 15, FILTER_PIN = 17, SERVO_PIN = 23;
 constexpr uint8_t POWER_PIN = 33;
 constexpr float PH4_V = 2.438f, PH686_V = 2.287f, PH918_V = 2.103f;
 constexpr float EMPTY_CM = 27.0f, FULL_CM = 20.2f;
@@ -76,6 +76,10 @@ String scheduleSignature;
 bool automationWasEnabled = false;
 constexpr int64_t LOCAL_UTC_OFFSET_SECONDS = 8 * 60 * 60; // Asia/Singapore
 double commandWatermarkMs = 0;
+// BEGIN AQ2 COMMAND RELIABILITY
+String pendingAckId, pendingAckPayload;
+bool lastFeedSucceeded = false;
+// END AQ2 COMMAND RELIABILITY
 
 void outputsOff() {
   digitalWrite(LIGHT_PIN, HIGH);
@@ -173,6 +177,9 @@ bool runFeederTimed(int pulseUs, uint32_t duration, const char *phase) {
 }
 
 void runManualFeed() {
+  // BEGIN AQ2 COMMAND RELIABILITY
+  lastFeedSucceeded = false;
+  // END AQ2 COMMAND RELIABILITY
   if (!FEEDER_TEST_ENABLED || !armed || localStop) {
     Serial.println("Feed rejected: feeder not enabled or controls not ready.");
     return;
@@ -212,6 +219,9 @@ void runManualFeed() {
   stopFeederPwm();
   lastFeedEnd = millis();
   feedCompleted = true;
+  // BEGIN AQ2 COMMAND RELIABILITY
+  lastFeedSucceeded = pwmOk;
+  // END AQ2 COMMAND RELIABILITY
   Serial.println(pwmOk ? "Continuous-servo PWM ended/detached; angle, physical stop and return NOT verified."
                        : "Feed aborted: PWM error, local stop, or Wi-Fi loss. Movement NOT verified.");
 }
@@ -533,6 +543,35 @@ int database(const char *child, esp_http_client_method_t method,
   return status;
 }
 
+// BEGIN AQ2 COMMAND RELIABILITY
+// An ACK reports software actuation/rejection, NOT physical lamp/pump feedback.
+// Retrying the ACK NEVER retries the equipment action.
+void queueCommandAck(const String &commandId, bool ok, const char *error = "") {
+  JsonDocument ack;
+  ack["commandId"] = commandId;
+  ack["status"] = ok ? "done" : "failed";
+  ack["executedAt"][".sv"] = "timestamp";
+  if (!ok) ack["error"] = error;
+  pendingAckId = commandId;
+  pendingAckPayload = "";
+  serializeJson(ack, pendingAckPayload);
+}
+void flushCommandAck(const String &currentCommandId) {
+  if (pendingAckId.isEmpty()) return;
+  if (pendingAckId != currentCommandId) {
+    pendingAckId = "";
+    pendingAckPayload = "";
+    return; // latest-only rules prohibit ACKing an overwritten command
+  }
+  String response;
+  const int status = database("commandAck/latest", HTTP_METHOD_PUT, pendingAckPayload, response);
+  if (status == 200) {
+    pendingAckId = "";
+    pendingAckPayload = "";
+    Serial.println("Command acknowledgement saved; physical equipment operation NOT verified.");
+  } else Serial.printf("Command acknowledgement pending (HTTP %d); action will NOT be replayed.\n", status);
+}
+// END AQ2 COMMAND RELIABILITY
 bool cloudConfigurationValid() {
   const String aquarium = AQUARIUM_ID;
   if (!strlen(WIFI_SSID) || !strlen(FIREBASE_API_KEY) || !strlen(DEVICE_EMAIL) ||
@@ -676,28 +715,47 @@ bool cloudCycle() {
     const double nowMs = double(time(nullptr)) * 1000.0;
     if (aquarium != AQUARIUM_ID || requester.isEmpty() || !command["requestedAt"].is<double>()) {
       Serial.println("Rejected malformed/mismatched command.");
+      // BEGIN AQ2 COMMAND RELIABILITY
+      queueCommandAck(commandId, false, "Malformed or mismatched command; no action.");
+      // END AQ2 COMMAND RELIABILITY
     } else if (requestedMs <= commandWatermarkMs || requestedMs > nowMs + 5000 ||
                nowMs - requestedMs > 30000) {
       // Supervised-test freshness policy: new since baseline, max age 30 seconds.
       Serial.println("Rejected old/replayed/future command. Send a new command with a correct client clock.");
+      // BEGIN AQ2 COMMAND RELIABILITY
+      queueCommandAck(commandId, false, "Stale/replayed/future command; send a new command.");
+      // END AQ2 COMMAND RELIABILITY
     } else if (type == "set_light_state" && (state == "On" || state == "Off")) {
       commandWatermarkMs = requestedMs;
       setOutput(true, state == "On");
       lightSchedule.manual();
+      // BEGIN AQ2 COMMAND RELIABILITY
+      queueCommandAck(commandId, lightOn == (state == "On") && (state == "Off" || armed), "Light command blocked: controls not armed.");
+      // END AQ2 COMMAND RELIABILITY
     } else if (type == "set_filter_state" && (state == "Active" || state == "Inactive")) {
       commandWatermarkMs = requestedMs;
       setOutput(false, state == "Active");
       filterSchedule.manual();
+      // BEGIN AQ2 COMMAND RELIABILITY
+      queueCommandAck(commandId, filterOn == (state == "Active") && (state == "Inactive" || armed), "Filter command blocked: controls not armed.");
+      // END AQ2 COMMAND RELIABILITY
     } else if (type == "feed_now" && command["durationMs"].is<double>() &&
                command["durationMs"].as<double>() > 0) {
       commandWatermarkMs = requestedMs;
       // Fixed physical dwell applies to both existing web and mobile clients;
       // legacy durationMs must never lengthen this device's configured hold.
       runManualFeed();
+      // BEGIN AQ2 COMMAND RELIABILITY
+      queueCommandAck(commandId, lastFeedSucceeded, "Feed rejected or aborted; check cooldown, arming and PWM settings.");
+      // END AQ2 COMMAND RELIABILITY
       lastAutoFeedMinute = max(lastAutoFeedMinute, localEpochMinute());
       if (scheduleStoreReady) scheduleStore.putLong64("feedMinute", lastAutoFeedMinute);
     } else Serial.println("Command not actuated: unsupported or invalid command.");
   }
+  // BEGIN AQ2 COMMAND RELIABILITY
+  flushCommandAck(commandId);
+  if (idToken.isEmpty()) return false; // authentication failures still disarm
+  // END AQ2 COMMAND RELIABILITY
   if (!establishingBaseline && scheduleValid) applyScheduledFeed(control);
 
   // Connection freshness is independent of sensor health. Never substitute a
@@ -746,6 +804,15 @@ bool cloudCycle() {
   serializeJson(telemetry, payload);
   status = database("telemetry", HTTP_METHOD_PUT, payload, response);
   Serial.printf("Telemetry snapshot HTTP %d\n", status);
+  // BEGIN AQ2 COMMAND RELIABILITY
+  // Control/auth/command GETs already succeeded in THIS poll. A telemetry
+  // timeout/5xx must not undo a just-accepted LIGHT/FILTER command.
+  // No fake heartbeat is written. Authorization failures still fail closed.
+  if (status <= 0 || status == 408 || status == 429 || (status >= 500 && status <= 599)) {
+    Serial.println("Telemetry upload failed; controls retained after successful control poll. Retrying next poll.");
+    return true;
+  }
+  // END AQ2 COMMAND RELIABILITY
   return status == 200;
 }
 

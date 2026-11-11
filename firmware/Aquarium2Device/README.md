@@ -1,5 +1,94 @@
 # Aquarium 2
 
+## Owner-reported upload result (2026-11-11)
+
+The owner reports the updated Aquarium 2 sketch uploaded successfully and its
+commands are now working. This is the owner's physical observation, not an
+independent assistant test of every relay order/automation scenario. No additional
+Aquarium 2 firmware change was made when adding Aquarium 1 acknowledgements.
+
+## Light/filter command reliability update (2026-11-11; not uploaded)
+
+Inspection found two concrete software failure paths, not proof of the cause
+of every physical switching failure:
+
+- Web/mobile previously overwrote the single commands/latest slot as soon as
+  Firebase accepted a write. A second action before the next ESP32 poll could
+  erase the first. Completion of a database write is not device receipt.
+- cloudCycle returned false on ANY telemetry upload error, even after successful
+  control/command reads and actuation. The loop then switched both relays OFF
+  and discarded the retained command when re-establishing its baseline.
+
+The current software also never wrote commandAck/latest. A read-only inspection
+found no ACK and recent command history marked no_response; this does not prove
+the equipment failed to operate. No equipment command was sent during diagnosis.
+
+The updated web/mobile publisher uses the existing scoped nodes and unchanged
+authorization checks. It refuses to replace a recent unresolved command, uses
+a compare-and-set transaction against the previous command ID, and keeps relay
+actions busy until device ACK or a new, fresh matching relay telemetry report.
+It uses Firebase's server clock offset and a random suffix to reduce ID collisions.
+There is no automatic replay, delayed command queue, retry action or rollback
+actuation. Failures/timeouts/replacement are shown as errors. Older clients using
+unconditional set() can still overwrite a slot; update web and mobile together.
+
+Older firmware (including Aquarium 1) can confirm idempotent relay state through
+fresh online telemetry; this is only commanded GPIO state, never contact/flow
+feedback. Feeding is never inferred from telemetry: old unacknowledged feed
+commands hold the slot until the existing 30-second freshness window expires.
+Feed publishing retains existing immediate UI timing; relay publishing waits.
+
+Both Aquarium 2 sketch copies now queue done/failed ACKs for manual relay commands,
+rejected/stale commands and software feeder completion/failure. ACKs use the
+already allowed server timestamp and existing device-only rules. Failed ACK
+writes retry only the ACK, never the action; an overwritten pending ACK is dropped.
+These ACKs do not prove lamps illuminate, water flows, or food was dispensed.
+Servo pulses/timings, pin assignments and sensor calibrations are unchanged.
+
+After successful control reads, telemetry transport failures, HTTP 408/429 and
+5xx no longer undo accepted outputs. No fake telemetry/heartbeat is published.
+Wi-Fi loss, authentication failure, invalid/unreadable control/commands, local
+DISARM, and telemetry authorization/malformed-request failures still fail closed.
+No retained command is replayed at boot/reconnect; send a new explicit action
+once Web controls ready is reported. Scheduled relays remain independently
+evaluated; they also no longer lose their state solely to telemetry timeout.
+
+No new RTDB nodes, rules, Cloud Functions, access permissions or analytics rules
+were introduced. Aquarium 1 firmware and Aquarium 2 compensation remain untouched
+by this command fix. The publisher change applies to both tanks on updated clients.
+Upload the updated Aquarium2Device folder and use the updated website/mobile
+build for testing. These changes were not flashed, pushed or deployed here.
+Physically test both ON orders, independent OFF actions and automation after
+normal startup with the feeder clear. Do not change wiring while powered.
+
+## Current light signal: supervised GPIO15 / IN4 test (2026-11-10)
+
+The owner moved the light channel's COM/NO connections to relay 4 and its
+IN4 signal lead from GPIO16 to GPIO15. Both the repository sketch and
+C:/new/Aquarium2Device/Aquarium2Device.ino now use LIGHT_PIN=15 for this test.
+Filter GPIO17, continuous-servo GPIO23, sensors, identity, cloud commands,
+automation logic and all calibration values are unchanged. Aquarium 1 is not
+modified. Active-low outputs are initialized OFF; no automatic relay test was
+added and stale cloud commands still cannot replay at reconnect.
+
+GPIO15 is an ESP32 boot-strapping pin, so reset/startup behavior must be checked
+on the actual assembly. Disconnect the 12V appliance supply and close Serial
+Monitor for upload to the owner-confirmed Aquarium 2 COM3. Successful compilation
+or flashing does not establish that the lamp receives power. After a successful
+upload and safe reconnection, use Aquarium 2's website Manual Light OFF/ON once
+and observe relay 4 and the lamps. This is an isolation test, not a verified
+repair of the lighting power path. Never connect 12V to IN4, VCC or JD-VCC.
+
+This GPIO15 build was uploaded to the owner-confirmed COM3 on 2026-11-10;
+esptool verified each flashed segment and reset the ESP32. A brief serial check
+observed application startup, both reported outputs OFF, successful device
+sign-in, Wi-Fi/time ready, authenticated=yes, web ready=yes and telemetry HTTP
+200. The optocoupler reported 12V absent during this check. No equipment command
+was sent by the assistant, and lamp illumination remains physically unverified.
+All 267 unit tests, both repository firmware contracts and changed-test lint
+passed. The exact upload folder compiled at 1,151,105 bytes flash / 47,988 bytes
+RAM after private identity and source/header parity checks.
+
 ## Current feeder: confirmed 360-degree continuous SG90 (2026-11-10)
 
 The owner confirmed the purchased servo is the 360-degree version. The old

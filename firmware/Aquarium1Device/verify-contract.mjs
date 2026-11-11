@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const source = fs.readFileSync(new URL('./Aquarium1Device.ino', import.meta.url), 'utf8');
+assert.match(source, /database\("commandAck\/latest", HTTP_METHOD_PUT/);
+assert.match(source, /flushCommandAck\(commandId\)/);
 const config = fs.readFileSync(new URL('./Config.h', import.meta.url), 'utf8');
 const feeder = fs.readFileSync(new URL('./FeederConfig.h', import.meta.url), 'utf8');
 assert.match(feeder, /FEEDER_HOLD_MS = 1500/);
@@ -31,6 +33,7 @@ assert.match(source, /if \(url\.length\(\) > 7680\) return -1/);
 assert.ok(!source.includes('.setInsecure('));
 assert.match(config, /#define AQUARIUM_CLOUD_ENABLED 1/);
 assert.match(config, /PROFILE_LEVEL_ENABLED = false/);
+assert.match(source, /FULL_CM = 22\.4134f/);
 assert.match(source, /armed = !localStop/);
 assert.match(source, /commandWatermarkMs = double\(time\(nullptr\)\) \* 1000.0/);
 assert.match(source, /requestedMs <= commandWatermarkMs/);

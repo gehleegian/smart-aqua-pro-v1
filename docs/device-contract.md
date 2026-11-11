@@ -1,5 +1,29 @@
 # SmartAqua Pro: Device Data Contract
 
+## Command reliability implementation (2026-11-11; rollout pending)
+
+The single commands/latest slot is retained; no queue/node/rules migration was
+added. Updated web/mobile callers now check the previous command's ACK or fresh
+reported relay state, claim the slot with a compare-and-set transaction, and
+wait for relay confirmation. A busy/conflicted slot produces an explicit error
+instead of silently overwriting it. Older unconditional writers remain a rollout
+limitation. Client timestamps use the Firebase server-time offset; commands are
+not automatically replayed or replaced after a timeout.
+
+Prepared Aquarium 2 firmware writes the existing commandAck/latest done/failed
+schema for manual actions/rejections; executedAt remains the server-stamped ACK
+write time, not independent physical feedback. Retrying a failed ACK never
+repeats actuation. Fresh telemetry provides a legacy fallback for relay-state
+requests only, never for feeding. Older unacknowledged feeds hold the slot until
+the existing 30-second freshness window expires. No permission, command schema,
+Firestore logging trigger or analytics rule is changed by this implementation.
+
+Aquarium 1's prepared sketch now implements the same manual command ACK contract.
+It flushes ACKs independently of its 10-second pending-sensor gate and preserves
+its existing compensation, full-mark calibration and safety policies. Last command
+Done/Failed already has client subscription support; no schema/backend change is
+needed for these ACKs. This Aquarium 1 revision still requires upload and testing.
+
 ## Aquarium 1 TDS comparison update (2026-11-08)
 
 The prepared Aquarium 1 firmware now sends `tdsPpm` with `tdsReadingValid=true`
