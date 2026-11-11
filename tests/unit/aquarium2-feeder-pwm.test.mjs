@@ -100,7 +100,7 @@ for (const [name, options] of [
 test('website return test preserves the observed forward turn and reverses after a neutral hold', () => {
   const { state, events } = harness();
   assert.equal(state.runManualFeed(), true);
-  assert.deepEqual(events.filter(e => e[0] === 'write').map(e => e[2]), [5734, 4096, 5734]);
+  assert.deepEqual(events.filter(e => e[0] === 'write').map(e => e[2]), [4915, 5243, 4915, 4588, 4915]);
   assert.deepEqual(events.find(e => e[0] === 'attach'), ['attach', 23, 50, 16]);
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('NOT a verified feeding cycle')));
   assert.ok(events.some(e => e[0] === 'log' && e[1].includes('angle, physical stop and return NOT verified')));

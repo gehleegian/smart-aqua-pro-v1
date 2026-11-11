@@ -1,5 +1,41 @@
 # SmartAqua Pro: Device Data Contract
 
+## Main-branch integration note (2026-11-11)
+
+The command-reliability changes below are integrated with main's command-ID
+validation and scheduled acknowledgements. Manual actions produce one queued
+terminal outcome, retried in RAM without replaying equipment actions. Scheduled
+ACKs remain best effort. Optional source/type/state fields may be omitted on
+manual ACKs as allowed by the existing rules. Web and mobile use a one-shot
+SDK-local `.info` listener for server clock metadata, not a server `get()` of
+`.info/serverTimeOffset`. The mobile shared validator is synchronized with the
+already-merged web/server core; this integration adds no new thresholds or rules.
+No Firebase rules or Functions deployment is required by this fixes branch.
+
+## Command reliability implementation (2026-11-11; rollout pending)
+
+The single commands/latest slot is retained; no queue/node/rules migration was
+added. Updated web/mobile callers now check the previous command's ACK or fresh
+reported relay state, claim the slot with a compare-and-set transaction, and
+wait for relay confirmation. A busy/conflicted slot produces an explicit error
+instead of silently overwriting it. Older unconditional writers remain a rollout
+limitation. Client timestamps use the Firebase server-time offset; commands are
+not automatically replayed or replaced after a timeout.
+
+Prepared Aquarium 2 firmware writes the existing commandAck/latest done/failed
+schema for manual actions/rejections; executedAt remains the server-stamped ACK
+write time, not independent physical feedback. Retrying a failed ACK never
+repeats actuation. Fresh telemetry provides a legacy fallback for relay-state
+requests only, never for feeding. Older unacknowledged feeds hold the slot until
+the existing 30-second freshness window expires. No permission, command schema,
+Firestore logging trigger or analytics rule is changed by this implementation.
+
+Aquarium 1's prepared sketch now implements the same manual command ACK contract.
+It flushes ACKs independently of its 10-second pending-sensor gate and preserves
+its existing compensation, full-mark calibration and safety policies. Last command
+Done/Failed already has client subscription support; no schema/backend change is
+needed for these ACKs. This Aquarium 1 revision still requires upload and testing.
+
 ## Aquarium 1 TDS comparison update (2026-11-08)
 
 The prepared Aquarium 1 firmware now sends `tdsPpm` with `tdsReadingValid=true`
@@ -214,7 +250,7 @@ The Aquarium 1 and Aquarium 2 sketches in this repository write app and schedule
 
 **Command log (Sprint 4).** Cloud Functions copy every `commands/latest` write and every ack into Firestore `command_logs/{aquariumId}_{commandId}`: type, state, requestedBy (uid and name), requestedAt, `status` `pending → done | failed | no_response`, executedAt, error, `source`. The ack trigger also reads the matching current command so a fast ack can create the final log before the independent command trigger runs. A scheduled check marks `no_response` after 30 s; a late ack still turns it into `done` (with `lateAck: true`). Only functions write the log; the tank's members read it.
 
-**Known delivery limitations:** `commands/latest` is last-write-wins, not a queue. A newer command can replace an unseen request, or can make an older post-execution ack fail validation. The firmware makes one ack PUT and does not persist/retry terminal app outcomes, so a network failure or restart after actuation can leave `no_response` even when the action ran. Duplicate IDs are not re-actuated during a session, retained commands are baselined after restart, and scheduled feeding reserves its minute before motion; nevertheless app command IDs/outcomes are not persisted for replay. A restart before an app command is handled can therefore baseline and skip that retained request, while a restart/reconnect during a scheduled feeding minute can conservatively skip the feed to avoid duplication. Schedules are evaluated only during a successful cloud cycle, so they do not run offline and no offline ack queue exists.
+**Known delivery limitations:** `commands/latest` remains a single slot, not a queue. Updated clients protect a recent unresolved command with a compare-and-set transaction; older unconditional writers can still replace it and invalidate a pending acknowledgement. Manual terminal outcomes retry in RAM while their command remains current, without repeating actuation. Scheduled acknowledgements remain one best-effort PUT. No acknowledgement or app-command outcome is persisted across restart, so a lost response or restart can still leave `no_response` even when equipment acted. Duplicate IDs are not re-actuated during a session; retained commands are baselined after restart and scheduled feeding reserves its minute before motion. A restart before handling a command can skip that retained request, while a restart/reconnect during a scheduled feeding minute can conservatively skip the feed to avoid duplication. Schedules require a successful cloud cycle; there is no durable offline action queue.
 
 ---
 

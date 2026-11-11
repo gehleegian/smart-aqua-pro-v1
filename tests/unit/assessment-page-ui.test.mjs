@@ -51,7 +51,7 @@ test('full assessment is removed from Monitoring, but its scoped navigation link
   assert.match(detail, /View assessment/);
   assert.doesNotMatch(detail, /<RecommendationsPanel/);
   assert.match(detail, /<CommandHistory/);
-  assert.match(detail, /<h3[^>]*>Manual Controls<\/h3>/);
+  assert.match(detail, /<h3[^>]*>\s*Manual Controls\s*<\/h3>/);
   const monitoring = read('views/Monitoring.tsx');
   assert.match(monitoring, /requestTankFocus\(monitoring\.selectedAquarium\.id\)/);
   assert.match(monitoring, /onNavigate\('assessment'\)/);

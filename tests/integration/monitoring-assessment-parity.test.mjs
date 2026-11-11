@@ -183,7 +183,7 @@ test('water-level display hides invalid and unavailable values while preserving 
   const result = webFrom(normalizeTelemetry(deviceFrom({ waterLevelPercent: 150 })));
   assert.equal(result.parameters.find((p) => p.parameter === 'waterLevel').severity, 'unavailable');
   assert.equal(result.recommendations.length, 0);
-  assert.equal(result.faults.find((fault) => fault.parameter === 'waterLevelPercent')?.reason, 'water level outside 0-100%');
+  assert.equal(result.faults.find((fault) => fault.parameter === 'waterLevelPercent')?.reason, 'waterLevelReadingValid is false');
 });
 
 mobileTest('bounded server-clock estimate skew preserves readings and assessment parity', () => {

@@ -72,11 +72,10 @@ test('only pending recommendations appear, all inside a bounded keyboard-scrolla
   assert.match(html, /CRITICAL/);
 });
 
-test('approved recommendations show traceable measurements, threshold explanation, timestamp and controls', () => {
 test('dedicated page can expand recommendations without changing the dashboard default', () => {
   const html = renderPanel([recommendation], { defaultOpen: true });
   assert.match(html, /<details open="" class="group">/);
-  assert.match(html, /1 pending/);
+  assert.match(html, /1 active/);
   assert.match(html, /Applied/);
   assert.match(html, /Dismiss/);
 });
