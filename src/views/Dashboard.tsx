@@ -57,6 +57,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
       userActivities={dashboard.userActivities}
       onNavigate={onNavigate}
       onSelectTank={dashboard.actions.selectTank}
+      rules={dashboard.rules}
     />
   );
 }
