@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock, Fish, Settings, Sun, Wind, Zap } from 'lucide-react';
-import { useRuleConfig } from '../hooks/useRuleConfig';
+import { CalendarClock, Fish, Settings, Sun, Wind } from 'lucide-react';
 import { useNow } from '../hooks/useNow';
 import { auth } from '../firebase';
 import { getAquariumsByOwner } from '../services/aquariumService';
@@ -19,8 +18,6 @@ import type { Aquarium } from '../types/aquarium';
  * writes the device's control profile). The device runs the schedule itself.
  */
 export default function Automation({ onNavigate }: { onNavigate?: (page: string) => void }) {
-  const ruleConfig = useRuleConfig();
-  const rules = [...ruleConfig.rules].sort((a, b) => a.parameter.localeCompare(b.parameter) || a.priority - b.priority);
   const now = useNow();
   const [aquariums, setAquariums] = useState<Aquarium[] | null>(null);
   const [error, setError] = useState('');
@@ -80,52 +77,6 @@ export default function Automation({ onNavigate }: { onNavigate?: (page: string)
           );
         })}
       </div>
-
-      <Card>
-        <CardHeader>
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-400" />
-            Rule-Based Automation
-          </h3>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-xs text-slate-400">
-            Live IF-THEN rules from Firestore (read-only here). Thresholds come from the species defaults plus any per-aquarium overrides.
-          </p>
-          {ruleConfig.error ? <p className="mb-3 text-sm text-amber-300">{ruleConfig.error}</p> : null}
-          {!ruleConfig.loaded ? (
-            <p className="text-sm text-slate-400">Loading rules...</p>
-          ) : rules.length === 0 ? (
-            <p className="text-sm text-slate-400">No rules are stored yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {rules.map((rule) => (
-                <div key={rule.ruleId} className="flex items-start justify-between gap-4 rounded-lg bg-slate-700/30 p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-600">
-                      <Settings className="h-4 w-4 text-slate-300" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-teal-200">{rule.title}</p>
-                      <p className="text-xs text-slate-400">
-                        IF {rule.parameter} {rule.condition.op} {rule.condition.ref ?? JSON.stringify(rule.condition.value)}
-                        {rule.condition.marginPct ? ` +${rule.condition.marginPct}%` : ''}
-                        {rule.extraChecks.map((check) => ` AND ${check.field} ${check.op} ${String(check.value)}`).join('')}
-                        {' '}THEN {rule.severity}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-300">→ {rule.action}</p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
-                    <span className={rule.status === 'draft' ? 'text-teal-200' : 'text-emerald-300'}>{rule.status}</span>
-                    <span className="text-slate-500">{rule.enabled ? 'enabled' : 'disabled'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

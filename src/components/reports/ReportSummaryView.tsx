@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ClipboardList, XCircle } from 'lucide-react';
+import { CheckCircle2, ClipboardList, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import type { ConditionTimes, StructuredReportSummary } from '../../types/monitoringReport';
 import { useClientPagination } from '../../hooks/useClientPagination';
@@ -123,12 +123,6 @@ export default function ReportSummaryView({ summary }: { summary: StructuredRepo
     `${summary.aquarium.id}:${summary.period.type}:${summary.period.start}:${summary.period.end}`);
   return (
     <div className="space-y-6">
-      {summary.thresholds.draftNote ? (
-        <div role="note" className="flex gap-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p><strong>Draft configuration.</strong> {summary.thresholds.draftNote}</p>
-        </div>
-      ) : null}
       {summary.period.effectiveEnd < summary.period.end ? (
         <p className="text-sm text-slate-300">This period has not ended: figures cover up to {manilaDateTime(summary.period.effectiveEnd)} (Asia/Manila).</p>
       ) : null}
