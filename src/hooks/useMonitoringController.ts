@@ -316,8 +316,9 @@ export function useMonitoringController() {
         ...aquarium,
         turbidityState: snapshot?.turbidityState,
         turbidityVoltage: snapshot?.turbidityVoltage,
-        temp: snapshot ? snapshot.temperatureC : aquarium.temp,
-        level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
+        // No fresh telemetry: no reading. Stored profile values are never shown as live.
+        temp: snapshot ? snapshot.temperatureC : Number.NaN,
+        level: snapshot ? snapshot.waterLevelPercent : Number.NaN,
         // TDS ppm stands on its own (firmware may send ppm without the legacy purity %).
         tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
         ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
@@ -327,7 +328,7 @@ export function useMonitoringController() {
         powerStatus: snapshot?.hasFreshPowerTelemetry
           ? snapshot.powerStatus ?? aquarium.powerStatus
           : aquarium.powerStatus,
-        quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
+        quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : Number.NaN,
         filter: manualStatus.filter,
         light: manualStatus.light,
         healthStatus: assessment.overallSeverity === 'normal' ? 'healthy' : 'warning',
