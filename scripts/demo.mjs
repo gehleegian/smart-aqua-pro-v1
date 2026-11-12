@@ -5,6 +5,8 @@
 //   node scripts/demo.mjs --port 3100 --project demo-smartaqua-ui   # Playwright
 //   --no-live   do not run the demo devices (tanks then go offline after 60 s)
 //   --mfa-mock  emulator-only TOTP mock (src/utils/mfaMock.ts; code 123456): the Auth emulator cannot run TOTP
+//   --e2e-fixture-approvals  Playwright only: mark the goldfish thresholds and the two
+//               high-temperature rules approved IN THE EMULATOR, labelled as a test fixture
 //
 // Ctrl+C stops everything. See docs/demo.md.
 import { spawn, execFileSync } from 'node:child_process';
@@ -89,7 +91,10 @@ run('firebase', ['emulators:start', '--only', 'auth,firestore,database,functions
 });
 await waitForFunctions();
 execFileSync('node', ['--experimental-strip-types', '--no-warnings', 'scripts/seed-demo.ts'], {
-  cwd: root, stdio: 'inherit', env: { ...process.env, GCLOUD_PROJECT: projectId },
+  cwd: root, stdio: 'inherit', env: {
+    ...process.env, GCLOUD_PROJECT: projectId,
+    ...(args.includes('--e2e-fixture-approvals') ? { SMARTAQUA_E2E_FIXTURE_APPROVALS: 'true' } : {}),
+  },
 });
 
 if (!args.includes('--no-live')) {

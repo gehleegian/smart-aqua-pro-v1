@@ -21,7 +21,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: `node scripts/demo.mjs --port ${PORT} --project ${SMOKE_PROJECT} --no-live --mfa-mock`,
+    command: `node scripts/demo.mjs --port ${PORT} --project ${SMOKE_PROJECT} --no-live --mfa-mock --e2e-fixture-approvals`,
     url: `http://localhost:${PORT}`,
     timeout: 300_000,
     reuseExistingServer: false,
