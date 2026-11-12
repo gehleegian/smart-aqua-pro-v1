@@ -3,6 +3,8 @@ import { RotateCcw } from 'lucide-react';
 import Badge from '../ui/Badge';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { maintenanceLabel, MAINTENANCE_TYPES, subscribeToMaintenance, type MaintenanceEntry } from '../../services/maintenanceService';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import Pagination from '../ui/Pagination';
 
 /** FR20: the tank's maintenance history, newest first, filterable by type. */
 export function MaintenanceHistory({ aquariumId, action }: { aquariumId: string; action?: React.ReactNode }) {
@@ -17,6 +19,7 @@ export function MaintenanceHistory({ aquariumId, action }: { aquariumId: string;
 
   const current = state?.aquariumId === aquariumId ? state : null;
   const entries = (current?.entries ?? []).filter((entry) => filter === 'all' || entry.type === filter);
+  const pagination = useClientPagination(entries, `${aquariumId}:${filter}`);
 
   return (
     <Card>
@@ -36,11 +39,13 @@ export function MaintenanceHistory({ aquariumId, action }: { aquariumId: string;
         {!current ? <p className="text-sm text-slate-400">Loading…</p> : entries.length === 0 ? (
           <p className="text-sm text-slate-400">{filter === 'all' ? 'No maintenance logged yet.' : 'Nothing of this type logged yet.'}</p>
         ) : (
-          <ul className="divide-y divide-slate-700/40">
-            {entries.map((entry) => (
+          <>
+          <ol aria-label="Maintenance records" start={pagination.start} className="divide-y divide-slate-700/40">
+            {pagination.items.map((entry, index) => (
               <li key={entry.id} className="flex flex-wrap items-start justify-between gap-2 py-3">
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-white">
+                    <span className="text-xs tabular-nums text-teal-300" aria-label={`Record ${pagination.startIndex + index + 1}`}>#{pagination.startIndex + index + 1}</span>
                     {maintenanceLabel(entry.type)}{entry.waterChangePercent !== null ? ` · ${entry.waterChangePercent}%` : ''}
                     {entry.resetsCleaningCycle ? <Badge variant="info"><RotateCcw className="mr-1 h-3 w-3" aria-hidden="true" />New cleaning cycle</Badge> : null}
                     {entry.recommendationId ? <Badge variant="success">From recommendation</Badge> : null}
@@ -51,7 +56,9 @@ export function MaintenanceHistory({ aquariumId, action }: { aquariumId: string;
                 <time className="text-xs text-slate-400" dateTime={new Date(entry.performedAt).toISOString()}>{new Date(entry.performedAt).toLocaleString()}</time>
               </li>
             ))}
-          </ul>
+          </ol>
+          <Pagination {...pagination} label="Maintenance history" itemLabel="maintenance records" />
+          </>
         )}
       </CardContent>
     </Card>

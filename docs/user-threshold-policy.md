@@ -36,9 +36,10 @@ even when severity is unchanged. This key is not an authorization mechanism.
 
 No live Firebase data or approval metadata was changed. No new collection,
 permission or firmware change is required. Deploy updated web, ingestion/report
-Functions and rebuild/install mobile together. The earlier TDS form feature also
-requires its pending Firestore-rule deployment. No production deployment was
-performed. Existing draft rules still need authorized admin activation before
+Functions and rebuild/install mobile together. The earlier TDS form feature's
+focused Firestore permission update was deployed and read-back verified on
+2026-11-12; see `tds-ppm-profile-limits.md`. That rollout changed no application
+data and deployed no Functions. Existing draft rules still need authorized admin activation before
 prescriptive recommendations can resume.
 
 Offline configuration/assessment tests and emulator fixtures verify software

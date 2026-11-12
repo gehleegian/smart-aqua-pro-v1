@@ -4,12 +4,15 @@ import { formatHistoryValue, getRowStatus, toFixedValue } from '../../utils/data
 import { useRuleConfig } from '../../hooks/useRuleConfig';
 import Badge from '../ui/Badge';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import Pagination from '../ui/Pagination';
 
 interface HistoricalDataTableProps {
   aquarium: Aquarium | null;
   entries: DeviceTelemetryLogEntry[];
   historyLoading: boolean;
   emptyMessage: string;
+  paginationKey?: string;
 }
 
 export function HistoricalDataTable({
@@ -17,9 +20,11 @@ export function HistoricalDataTable({
   entries,
   historyLoading,
   emptyMessage,
+  paginationKey = '',
 }: HistoricalDataTableProps) {
   // Row status uses the same Firestore thresholds/rules as the live engine.
   const ruleConfig = useRuleConfig();
+  const pagination = useClientPagination(entries, `${aquarium?.id ?? ''}:${paginationKey}`);
   return (
     <Card>
       <CardHeader>
@@ -31,10 +36,13 @@ export function HistoricalDataTable({
         ) : entries.length === 0 || !aquarium ? (
           <p className="text-sm text-slate-400">{emptyMessage}</p>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-left text-sm">
+              <caption className="sr-only">Historical measurements</caption>
               <thead className="text-xs uppercase text-slate-400">
                 <tr>
+                  <th scope="col" className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Recorded</th>
                   <th className="px-3 py-2">Temp</th>
                   <th className="px-3 py-2">Level</th>
@@ -46,11 +54,12 @@ export function HistoricalDataTable({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {entries.map((entry) => {
+                {pagination.items.map((entry, index) => {
                   const status = getRowStatus(entry, aquarium, ruleConfig);
 
                   return (
                     <tr key={`${entry.recordedAtEpoch}-${entry.sampleCount || 1}`} className="text-slate-300">
+                      <th scope="row" className="px-3 py-2 font-normal tabular-nums text-teal-300">{pagination.startIndex + index + 1}</th>
                       <td className="px-3 py-2">{entry.recordedAt}</td>
                       <td className="px-3 py-2">{formatHistoryValue(entry, 'temperature', () => `${toFixedValue(entry.temperatureC)}°C`)}</td>
                       <td className="px-3 py-2">{formatHistoryValue(entry, 'waterLevel', () => `${toFixedValue(entry.waterLevelPercent, 0)}%`)}</td>
@@ -73,6 +82,8 @@ export function HistoricalDataTable({
               </tbody>
             </table>
           </div>
+          <Pagination {...pagination} label="Historical data" itemLabel="historical records" />
+          </>
         )}
       </CardContent>
     </Card>

@@ -40,3 +40,33 @@ mobile for the new controls. No data migration is required.
 Local unit, form, parity, and emulator checks exercise configuration and existing
 assessment paths, not physical sensor accuracy. Production deployment and a
 post-deployment save/telemetry smoke test remain separate steps.
+
+## Focused Firestore rollout — 2026-11-12
+
+The live `practice-smartaqua` Firestore rules were missing the two ppm fields
+in the aquarium-update allowlist. This caused the updated form's entire save
+to be rejected. The deployed source was backed up, extended only with those
+fields and their range validation, tested in the Firestore emulator, and
+released with exact source read-back verification.
+
+- Implementation: `scripts/lib/tdsRulesPatch.mjs` and
+  `scripts/deploy-tds-profile-rules.mjs` (prepare first; apply only the reviewed
+  backup candidate). The broader repository rules were not deployed.
+- Regression command: `firebase emulators:exec --only firestore --project demo-smartaqua-tds-rollout "node --test tests/firestore/tds-profile-rollout.rules.test.mjs"`.
+  Set `TDS_RULES_BACKUP` to the reviewed backup folder to test the exact live
+  candidate; otherwise the test uses repository rules and needs no credentials.
+- Validation: both bounds must be numeric, finite, nonnegative and strictly
+  ordered. Existing profiles without either ppm field remain compatible.
+- Authorization: owner checks, organization checks, security blocks and all
+  other live rule text are unchanged. No aquarium data or approval metadata
+  was modified. Functions, indexes, RTDB and firmware were not deployed.
+- Verification: eight exact-candidate security tests and seven form/profile
+  tests passed. Tests reproduce rejection under the old live rules and
+  acceptance under the candidate. Changed JavaScript files pass lint.
+- Rollback: the previous source, ruleset ID, candidate hashes and deployment
+  receipt are retained in the ignored local backup folder
+  `backups/tds-profile-rules-1794456735847/`. A rollback must first check for
+  any subsequent release; never overwrite newer rules blindly.
+- Remaining: the owner must retry the actual UI save. That account's data was
+  deliberately not edited for testing. Server assessment deployment and
+  hardware accuracy verification are separate from this permissions fix.

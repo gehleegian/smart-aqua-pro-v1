@@ -11,6 +11,8 @@ import {
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import Pagination from '../ui/Pagination';
 
 interface AlertsListProps {
   title: string;
@@ -29,7 +31,8 @@ export function AlertsList({
   onToggleAlert,
   onAcknowledgeAlert,
 }: AlertsListProps) {
-  const renderAlert = (alert: AquariumAlert) => {
+  const pagination = useClientPagination(alerts, title, INITIAL_VISIBLE_ALERTS);
+  const renderAlert = (alert: AquariumAlert, index: number) => {
     const Icon = categoryIconMap[alert.category];
     const badge = getAlertStatusBadge(alert);
     const expanded = selectedAlertId === alert.id;
@@ -43,9 +46,10 @@ export function AlertsList({
           aria-controls={`alert-details-${alert.id}`}
           className="flex w-full items-start justify-between gap-4 text-left"
         >
-          <div className="flex gap-3">
-            <Icon className="mt-0.5 h-5 w-5 text-teal-200" aria-hidden="true" />
-            <div>
+          <div className="flex min-w-0 gap-3">
+            <span className="mt-0.5 shrink-0 text-xs tabular-nums text-teal-300" aria-label={`Record ${pagination.startIndex + index + 1}`}>#{pagination.startIndex + index + 1}</span>
+            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-teal-200" aria-hidden="true" />
+            <div className="min-w-0 break-words">
               <p className="font-medium text-white">{alert.tankName}{alert.title ? ` · ${alert.title}` : ''}</p>
               <p className="mt-1 text-sm text-slate-400">{alert.message}</p>
               {userRole === 'Admin' ? (
@@ -106,19 +110,8 @@ export function AlertsList({
           <p className="text-sm text-slate-400">No alerts match the selected filters.</p>
         ) : (
           <div className="space-y-3">
-            {alerts.slice(0, INITIAL_VISIBLE_ALERTS).map(renderAlert)}
-            {alerts.length > INITIAL_VISIBLE_ALERTS ? (
-              <details className="group">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-slate-600/40 bg-slate-900/30 px-3 py-2 text-sm font-medium text-teal-200 hover:bg-slate-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 [&::-webkit-details-marker]:hidden">
-                  <span className="group-open:hidden">Show {alerts.length - INITIAL_VISIBLE_ALERTS} more {alerts.length - INITIAL_VISIBLE_ALERTS === 1 ? 'alert' : 'alerts'}</span>
-                  <span className="hidden group-open:inline">Show fewer alerts</span>
-                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
-                </summary>
-                <div role="region" aria-label="More alerts" tabIndex={0} className="mt-3 max-h-96 space-y-3 overflow-y-auto overscroll-contain rounded-sm pr-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300">
-                  {alerts.slice(INITIAL_VISIBLE_ALERTS).map(renderAlert)}
-                </div>
-              </details>
-            ) : null}
+            {pagination.items.map(renderAlert)}
+            <Pagination {...pagination} label={title} itemLabel="matching alerts" />
           </div>
         )}
       </CardContent>

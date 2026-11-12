@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import type { ConditionTimes, StructuredReportSummary } from '../../types/monitoringReport';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import Pagination from '../ui/Pagination';
 
 // FR21: the in-app view of a stored report summary. Every status is written
 // out in words (NORMAL / WARNING / CRITICAL), never shown by colour alone.
@@ -116,6 +118,8 @@ export default function ReportSummaryView({ summary }: { summary: StructuredRepo
   const c = summary.completeness;
   const a = summary.alerts;
   const cleaning = summary.maintenance.nextCleaning;
+  const recommendationPages = useClientPagination(rec.items,
+    `${summary.aquarium.id}:${summary.period.type}:${summary.period.start}:${summary.period.end}`);
   return (
     <div className="space-y-6">
       {summary.thresholds.draftNote ? (
@@ -141,16 +145,20 @@ export default function ReportSummaryView({ summary }: { summary: StructuredRepo
           Replaced by a more severe one: {rec.superseded}.
         </p>
         {rec.items.length > 0 ? (
-          <ul className="divide-y divide-slate-700/50">
-            {rec.items.map((item) => (
+          <>
+          <ol aria-label="Report recommendations" start={recommendationPages.start} className="divide-y divide-slate-700/50">
+            {recommendationPages.items.map((item, index) => (
               <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="text-xs tabular-nums text-teal-300" aria-label={`Record ${recommendationPages.startIndex + index + 1}`}>#{recommendationPages.startIndex + index + 1}</span>
                 {STATUS_ICON[item.status] ?? <CheckCircle2 className="h-4 w-4 text-slate-400" aria-hidden="true" />}
                 <span className="font-medium text-slate-100">{item.title}</span>
                 <span className="text-xs text-slate-400">{parameterName(item.parameter)} · {item.severity.toUpperCase()} · {manilaDateTime(item.createdAt)} · rule {item.ruleId ?? '-'}</span>
                 <span className="ml-auto rounded border border-slate-500/50 px-2 py-0.5 text-xs uppercase text-slate-200">{item.status}</span>
               </li>
             ))}
-          </ul>
+          </ol>
+          <Pagination {...recommendationPages} label="Report recommendations" itemLabel="report recommendations" />
+          </>
         ) : <p className="text-slate-400">No recommendations were generated in this period.</p>}
       </Section>
 
