@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -15,8 +15,10 @@ function load(url) {
     jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
   } }).outputText;
   const commonJsModule = { exports: {} };
-  const require = specifier => specifier.startsWith('.')
-    ? load(new URL(specifier + (specifier.includes('/utils/') ? '.ts' : '.tsx'), url))
+  const require = specifier => specifier === 'react'
+    ? { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}] }
+    : specifier.startsWith('.')
+    ? load(new URL(specifier + (existsSync(new URL(specifier + '.ts', url)) ? '.ts' : '.tsx'), url))
     : nodeRequire(specifier);
   new Function('require', 'module', 'exports', compiled)(require, commonJsModule, commonJsModule.exports);
   return commonJsModule.exports;
@@ -44,17 +46,15 @@ function nodes(element) {
   return result;
 }
 
-test('five alerts are initially exposed; all other matching alerts are inside a closed dropdown', () => {
+test('five alerts are initially exposed with indexed pagination over the matching records', () => {
   assert.equal(INITIAL_VISIBLE_ALERTS, 5);
   const html = renderToStaticMarkup(list(Array.from({ length: 8 }, (_, i) => fixture(`item-${i}`))));
-  const beforeDropdown = html.split('<details')[0];
-  assert.equal((beforeDropdown.match(/aria-controls="alert-details-/g) ?? []).length, 5);
-  assert.equal((html.match(/aria-controls="alert-details-/g) ?? []).length, 8);
+  assert.equal((html.match(/aria-controls="alert-details-/g) ?? []).length, 5);
   assert.match(html, /8 matching alerts/);
-  assert.match(html, /Show 3 more alerts/);
-  assert.match(html, /Show fewer alerts/);
-  assert.doesNotMatch(html, /<details[^>]*\bopen(?:=|\s|>)/);
-  assert.match(html, /role="region" aria-label="More alerts" tabindex="0"[^>]*max-h-96/);
+  assert.match(html, /Showing 1–5 of 8 loaded matching alerts/);
+  assert.match(html, /Page 1 of 2/);
+  assert.match(html, /aria-label="Record 1"/);
+  assert.doesNotMatch(html, /More alerts|Show fewer alerts/);
 });
 
 test('no unnecessary dropdown appears for zero through five matching alerts', () => {
@@ -63,7 +63,7 @@ test('no unnecessary dropdown appears for zero through five matching alerts', ()
     assert.doesNotMatch(html, /<details/);
     if (!count) assert.match(html, /No alerts match the selected filters/);
   }
-  assert.match(renderToStaticMarkup(list(Array.from({ length: 6 }, (_, i) => fixture(`item-${i}`)))), /Show 1 more alert</);
+  assert.match(renderToStaticMarkup(list(Array.from({ length: 6 }, (_, i) => fixture(`item-${i}`)))), /Page 1 of 2/);
 });
 
 test('date filtering respects both UTC+8 midnight boundaries, preserves order and does not mutate alerts', () => {
@@ -118,7 +118,7 @@ test('individual alert expansion and acknowledgement still use the original aler
   assert.deepEqual(events, [['toggle', 'active'], ['acknowledge', 'active']]);
 });
 
-test('changing any list filter remounts and collapses the extra-alert dropdown without changing queries', () => {
+test('changing any list filter resets pagination without changing queries', () => {
   const view = readFileSync(new URL('views/Alerts.tsx', root), 'utf8');
   assert.match(view, /filterAlertsByDate\(alerts\.filteredAlerts, selectedDate\)/);
   assert.match(view, /key=\{`\$\{selectedDate\}:\$\{alerts\.selectedSeverity\}:\$\{alerts\.selectedStatus\}`\}/);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -20,11 +20,11 @@ function renderHistory(snapshot, aquariumId = 'tank-a') {
     } }).outputText;
     const commonJsModule = { exports: {} };
     const require = specifier => {
-      if (specifier === 'react') return { ...React, useState: () => [snapshot, () => {}], useEffect: () => {} };
+      if (specifier === 'react') return { ...React, useState: initial => [typeof initial === 'function' ? initial() : snapshot, () => {}], useEffect: () => {} };
       if (specifier === 'firebase/firestore') return {};
       if (specifier === '../firebase') return { db: null };
       if (specifier.startsWith('.')) {
-        const suffix = specifier.includes('commandLogService') ? '.ts' : '.tsx';
+        const suffix = existsSync(new URL(specifier + '.ts', url)) ? '.ts' : '.tsx';
         return load(new URL(specifier + suffix, url));
       }
       return nodeRequire(specifier);
@@ -54,13 +54,15 @@ test('history is a native, initially collapsed disclosure with an aquarium-speci
   assert.match(readFileSync(componentUrl, 'utf8'), /<details key=\{aquariumId\}/);
 });
 
-test('all fetched commands remain available inside a bounded keyboard-scrollable list', () => {
+test('loaded commands are paginated and indexed without changing their count or status', () => {
   const entries = Array.from({ length: 30 }, (_, i) => ({ ...entry, id: `command-${i}`, requestedByName: `Caretaker ${i}` }));
   const html = renderHistory(snapshot(entries));
   assert.match(html, /30 recent commands/);
-  assert.equal((html.match(/<li /g) ?? []).length, 30);
-  assert.match(html, /<ul aria-label="Recent commands" tabindex="0"[^>]*max-h-80 overflow-y-auto/);
-  assert.match(html, /Caretaker 29/);
+  assert.equal((html.match(/<li /g) ?? []).length, 5);
+  assert.match(html, /<ol aria-label="Recent commands" start="1"/);
+  assert.match(html, /Showing 1–5 of 30 loaded commands/);
+  assert.match(html, /Page 1 of 6/);
+  assert.doesNotMatch(html, /Caretaker 29/);
   assert.match(html, /Light on/);
   assert.match(html, /No response/);
   assert.match(html, /does not mean the command failed/);

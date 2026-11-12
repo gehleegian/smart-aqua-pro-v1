@@ -209,7 +209,7 @@ export default function Reports() {
           <h3 id="report-summary-heading" className="text-lg font-semibold text-white">
             {selected.structuredSummary.aquarium.name} · {selected.periodLabel}
           </h3>
-          <ReportSummaryView summary={selected.structuredSummary} />
+          <ReportSummaryView key={selected.id} summary={selected.structuredSummary} />
         </section>
       ) : selected ? (
         <StatusMessage variant="warning">This report was created before structured summaries existed: {selected.summary || 'no summary stored.'}</StatusMessage>

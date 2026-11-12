@@ -3,6 +3,8 @@ import { CalendarClock, ChevronDown, History, Info } from 'lucide-react';
 import Badge from '../ui/Badge';
 import { Card, CardContent } from '../ui/Card';
 import { commandLabel, NO_RESPONSE_EXPLANATION, subscribeToCommandLog, type CommandLogEntry, type CommandLogStatus } from '../../services/commandLogService';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import Pagination from '../ui/Pagination';
 
 export function CommandStatusBadge({ status }: { status: CommandLogStatus | 'none' }) {
   if (status === 'none') return null;
@@ -28,6 +30,7 @@ export function CommandHistory({ aquariumId }: { aquariumId: string }) {
     (error) => setState({ aquariumId, entries: [], error: `Command history is unavailable (${error.message}).` })
   ), [aquariumId]);
   const current = state?.aquariumId === aquariumId ? state : null;
+  const pagination = useClientPagination(current?.entries ?? [], aquariumId, 5);
 
   return (
     <Card className="self-start">
@@ -52,11 +55,13 @@ export function CommandHistory({ aquariumId }: { aquariumId: string }) {
           {current?.error ? <p className="text-sm text-amber-300" role="status">{current.error}</p> : !current ? <p className="text-sm text-slate-400" role="status">Loading…</p> : current.entries.length === 0 ? (
             <p className="text-sm text-slate-400">No commands sent yet.</p>
           ) : (
-            <ul aria-label="Recent commands" tabIndex={0} className="max-h-80 overflow-y-auto overscroll-contain divide-y divide-slate-700/40 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300">
-              {current.entries.map((entry) => (
+            <>
+            <ol aria-label="Recent commands" start={pagination.start} className="divide-y divide-slate-700/40">
+              {pagination.items.map((entry, index) => (
                 <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 pr-2">
                   <div className="min-w-0 max-w-full">
                     <p className="flex items-center gap-2 break-words text-sm font-medium text-white">
+                      <span className="shrink-0 text-xs tabular-nums text-teal-300" aria-label={`Record ${pagination.startIndex + index + 1}`}>#{pagination.startIndex + index + 1}</span>
                       {entry.source === 'schedule' ? <CalendarClock className="h-3.5 w-3.5 shrink-0 text-teal-300" aria-label="Scheduled" /> : null}
                       {commandLabel(entry.type, entry.state)}
                     </p>
@@ -69,7 +74,9 @@ export function CommandHistory({ aquariumId }: { aquariumId: string }) {
                   <CommandStatusBadge status={entry.status} />
                 </li>
               ))}
-            </ul>
+            </ol>
+            <Pagination {...pagination} label="Command history" itemLabel="commands" />
+            </>
           )}
         </CardContent>
       </details>

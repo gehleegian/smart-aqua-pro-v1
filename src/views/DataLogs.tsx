@@ -122,6 +122,7 @@ export default function DataLogs() {
         entries={dataLogs.tableEntries}
         historyLoading={dataLogs.historyLoading}
         emptyMessage={dataLogs.historicalTableEmptyMessage}
+        paginationKey={`${dataLogs.timePeriod}:${dataLogs.selectedDate}`}
       />
     </div>
   );
