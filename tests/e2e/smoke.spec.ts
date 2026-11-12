@@ -115,6 +115,11 @@ test('a recommendation marked Applied → maintenance logged', async ({ page }) 
   const demo = summary();
   await login(page, demo.accounts.ownerA.email, demo.password);
   await page.getByLabel('Select aquarium').selectOption({ label: 'Display Tank B' });
+  // The Recommendations panel is a collapsed <details>; open it first.
+  const recPanel = page.locator('details').filter({ hasText: 'Recommendations' }).first();
+  if (!(await recPanel.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await recPanel.locator('summary').click();
+  }
   const rec = page.locator('li').filter({ hasText: 'Water temperature far above range' }).filter({ has: page.getByRole('button', { name: 'Applied' }) }).first();
   await expect(rec).toBeVisible();
   await rec.getByRole('button', { name: 'Applied' }).click();
@@ -139,7 +144,13 @@ test('a recommendation marked Applied → maintenance logged', async ({ page }) 
 
   // Feed now → the command log records it (no device here: it waits, then "No response").
   await page.getByRole('button', { name: 'Feed Now' }).click();
-  const command = page.locator('li').filter({ hasText: 'Feed now' }).first();
+  // Command history is a collapsed <details>; open it first.
+  const historyPanel = page.locator('details').filter({ hasText: 'Command history' }).first();
+  await expect(historyPanel).toContainText('1 recent command');
+  if (!(await historyPanel.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await historyPanel.locator('summary').click();
+  }
+  const command =page.locator('li').filter({ hasText: 'Feed now' }).first();
   await expect(command).toBeVisible();
   await expect(command.getByText('Waiting for device')).toBeVisible();
   await shot(page, 'monitoring-tank-history');
@@ -176,7 +187,7 @@ test('Sprint 4 screens: schedules, team co-owners, audit log, notifications, adm
   await admin.getByLabel('Source (citation; required to approve)').fill('Adviser memo 2026-11-07, Table 3');
   await admin.getByRole('button', { name: 'Save draft' }).click();
   await expect(admin.getByText('Saved as draft. The engine uses it within 5 minutes.')).toBeVisible();
-  await admin.getByRole('button', { name: 'Approve' }).click();
+  await admin.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(admin.getByText('Approved. The engine uses it within 5 minutes.')).toBeVisible();
   await expect(admin.getByText(/Approved by Platform Admin/)).toBeVisible();
   await shot(admin, 'rules-editor');
@@ -211,7 +222,7 @@ test('Sprint 5: generate a report, read the summary, open the PDF and CSV; a car
   await page.getByRole('button', { name: 'Generate report' }).click();
   await expect(page.getByText('Report ready.')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('heading', { name: 'Recommendations and what was done' })).toBeVisible();
-  await expect(page.getByRole('note').getByText('Draft thresholds.')).toBeVisible();
+  await expect(page.getByRole('note').getByText('Draft configuration.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Readings (valid readings only)' })).toBeVisible();
   await shot(page, 'reports');
 

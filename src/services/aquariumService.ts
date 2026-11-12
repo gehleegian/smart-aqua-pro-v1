@@ -226,9 +226,10 @@ function mapAquarium(docId: string, data: Record<string, unknown>): Aquarium {
         : undefined,
     // Legacy stored readings; claimed (Sprint 3+) tanks have none, live values come from RTDB.
     hasStoredReadings: typeof data.temp === 'number' && typeof data.level === 'number',
-    temp: Number(data.temp ?? 0),
-    level: Number(data.level ?? 0),
-    quality: readNumber(data.quality, 100),
+    // Missing stays NaN (shown as "--"), never an invented 0 or 100.
+    temp: readNumber(data.temp, Number.NaN),
+    level: readNumber(data.level, Number.NaN),
+    quality: readNumber(data.quality, Number.NaN),
     feeder: readString(data.feeder, 'Inactive'),
     light: readString(data.light, 'Off'),
     filter: readString(data.filter, 'Inactive'),

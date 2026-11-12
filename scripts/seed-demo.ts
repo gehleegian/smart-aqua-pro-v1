@@ -106,8 +106,18 @@ async function main() {
   const batch = firestore.batch();
   for (const [id, data] of Object.entries(seed.species)) batch.set(firestore.doc(`species/${id}`), data);
   for (const [id, data] of Object.entries(seed.rules)) batch.set(firestore.doc(`rules/${id}`), data);
+  // Playwright only (demo.mjs --e2e-fixture-approvals): draft rules never fire,
+  // so the recommendation flow needs one approved rule. This is an emulator test
+  // fixture, labelled as such; it is not an adviser approval and never reaches
+  // the live project (PROJECT_ID must be demo-*).
+  const fixtureApprovals = process.env.SMARTAQUA_E2E_FIXTURE_APPROVALS === 'true';
+  if (fixtureApprovals) {
+    const approval = { status: 'approved', source: 'E2E TEST FIXTURE - not an adviser approval', approvedBy: 'e2e-fixture', approvedAt: Date.now() };
+    batch.set(firestore.doc('species/goldfish'), approval, { merge: true });
+    for (const id of ['temp_high_critical', 'temp_high_warning']) batch.set(firestore.doc(`rules/${id}`), approval, { merge: true });
+  }
   await batch.commit();
-  console.log(`Seeded ${Object.keys(seed.species).length} species and ${Object.keys(seed.rules).length} rules (DRAFT).`);
+  console.log(`Seeded ${Object.keys(seed.species).length} species and ${Object.keys(seed.rules).length} rules (DRAFT${fixtureApprovals ? '; e2e fixture approvals applied' : ''}).`);
 
   // 2. Devices: 3 to claim below plus 2 spare, unclaimed ones for "Add device".
   mkdirSync(OUT_DIR, { recursive: true });

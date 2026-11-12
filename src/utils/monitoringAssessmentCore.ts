@@ -746,7 +746,25 @@ function describeIssue(rule: RuleConfig, parameter: RuleParameter, value: unknow
   const above = rule.condition.op === 'gt' || rule.condition.op === 'gte';
   const bound = rule.condition.ref === 'max' ? 'maximum' : 'minimum';
   const margin = rule.condition.marginPct ? `more than ${formatNumber(rule.condition.marginPct)}% ` : rule.condition.margin ? `more than ${formatWithUnit(rule.condition.margin, unit)} ` : '';
-  return `${label} ${formatWithUnit(value, unit)} is ${margin}${above ? 'above' : 'below'} the ${formatWithUnit(base, unit)} ${bound}.`;
+  const summary = `${label} ${formatWithUnit(value, unit)} is ${margin}${above ? 'above' : 'below'} the ${formatWithUnit(base, unit)} ${bound}.`;
+  return [summary, ...issueDetails(rule, value, threshold, unit, above)].join(' ');
+}
+
+/** Extra context built only from the reading, the configured threshold and the rule's own severity. */
+function issueDetails(rule: RuleConfig, value: unknown, threshold: RangeThreshold | undefined, unit: string | undefined, above: boolean) {
+  const details: string[] = [];
+  const { min, max } = threshold ?? {};
+  if (finite(min) && finite(max)) details.push(`The configured range is ${formatWithUnit(min, unit)} to ${formatWithUnit(max, unit)}.`);
+  const limit = above ? max : min;
+  if (finite(value) && finite(limit)) {
+    const gap = Math.abs(value - limit);
+    const pct = limit !== 0 ? ` (${formatNumber((gap / Math.abs(limit)) * 100)}%)` : '';
+    details.push(`The reading is ${formatWithUnit(gap, unit)}${pct} ${above ? 'over the maximum' : 'under the minimum'}.`);
+  }
+  details.push(rule.severity === 'critical'
+    ? 'Severity CRITICAL: the reading is far outside the configured range and needs attention as soon as possible.'
+    : 'Severity WARNING: the reading is outside the configured range but has not reached the critical level.');
+  return details;
 }
 
 function toMatchedRule(rule: RuleConfig, parameter: RuleParameter, issueDetected: string): MatchedRule {

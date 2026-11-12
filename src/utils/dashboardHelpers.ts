@@ -90,8 +90,9 @@ export function mergeDashboardAquariums(
 
     const nextAquarium: Aquarium = {
       ...aquarium,
-      temp: snapshot ? snapshot.temperatureC : aquarium.temp,
-      level: snapshot ? snapshot.waterLevelPercent : aquarium.level,
+      // No fresh telemetry: no reading. Stored profile values are never shown as live.
+      temp: snapshot ? snapshot.temperatureC : Number.NaN,
+      level: snapshot ? snapshot.waterLevelPercent : Number.NaN,
       // TDS ppm stands on its own: firmware may send tdsPpm without the legacy purity %.
       tdsPpm: snapshot && typeof snapshot.tdsPpm === 'number' ? snapshot.tdsPpm : aquarium.tdsPpm,
       ph: snapshot?.hasFreshPhTelemetry ? snapshot.ph ?? aquarium.ph : aquarium.ph,
@@ -101,7 +102,7 @@ export function mergeDashboardAquariums(
       powerStatus: snapshot?.hasFreshPowerTelemetry
         ? snapshot.powerStatus ?? aquarium.powerStatus
         : aquarium.powerStatus,
-      quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : aquarium.quality,
+      quality: snapshot?.hasFreshPurityTelemetry ? snapshot.tdsPercent! : Number.NaN,
       filter: snapshot?.filterState ?? aquarium.filter,
       manualStatus: snapshot?.filterState && aquarium.manualStatus
         ? { ...aquarium.manualStatus, filter: snapshot.filterState }
@@ -274,7 +275,8 @@ export function getStatsForTank(tank: DashboardAquarium): DashboardTankStat[] {
     ? { value: '--', status: tank.waterLevelMessage || 'No valid water-level reading', isError: true }
     : getSensorDisplay(tank.sensorValidity, 'waterLevel', live, () => formatWaterLevel(tank.level));
   const tds = getSensorDisplay(tank.sensorValidity, 'tds', live, () =>
-    typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm` : `${tank.quality}%`);
+    typeof tank.tdsPpm === 'number' ? `${Math.round(tank.tdsPpm)} ppm`
+      : tank.hasFreshPurityTelemetry && Number.isFinite(tank.quality) ? `${tank.quality}%` : '--');
   const ph = getSensorDisplay(tank.sensorValidity, 'ph', live, () =>
     typeof tank.ph === 'number' ? tank.ph.toFixed(1) : '--');
   const turbidity = getTurbidityDisplay(tank.sensorValidity, live, tank.turbidityState);
