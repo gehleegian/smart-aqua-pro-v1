@@ -34,7 +34,7 @@ function renderPanel(recommendations, options = {}) {
     return commonJsModule.exports;
   }
   const { RecommendationsPanel } = load(componentUrl);
-  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A', defaultOpen: options.defaultOpen }));
+  return renderToStaticMarkup(React.createElement(RecommendationsPanel, { aquariumId: 'tank-a', aquariumName: 'Tank A', defaultOpen: options.defaultOpen, ...options.props }));
 }
 
 const recommendation = {
@@ -115,4 +115,64 @@ test('empty and error states remain understandable while collapsed', () => {
 test('maintenance modal remains outside the collapsible section', () => {
   const html = renderPanel([recommendation], { applying: recommendation });
   assert.ok(html.indexOf('data-testid="maintenance-modal"') > html.indexOf('</details>'));
+});
+
+// Presentation fixtures for the insight list (no telemetry generation).
+const liveAssessment = {
+  overallSeverity: 'normal', source: 'live', assessedAt: 1, ruleVersion: 'rules:draft', origin: 'client', draft: true,
+  recommendations: [], matchedRules: [], faults: [], ruleNotes: [],
+  parameters: [
+    { parameter: 'ph', label: 'pH', severity: 'normal', status: 'normal', notMonitored: false, value: 10, message: 'pH is within the configured range.' },
+    { parameter: 'temperature', label: 'Temperature', severity: 'warning', status: 'warning', notMonitored: false, value: 26, unit: '°C', message: 'Temperature is warning.' },
+    { parameter: 'waterLevel', label: 'Water level', severity: 'unavailable', status: 'unavailable', notMonitored: false, value: null, message: 'Unavailable: sensor fault: waterLevelReadingValid is false.' },
+    { parameter: 'equipment', label: 'Equipment', severity: 'unavailable', status: 'not_monitored', notMonitored: true, value: 'Unknown', message: 'Not monitored.' },
+  ],
+};
+const thresholds = { values: { ph: { min: 6.5, max: 10.5 }, temperatureC: { min: 20, max: 24 } }, speciesId: 'goldfish', status: 'approved', overridden: ['ph'], missing: [] };
+
+test('insights are always shown from the live assessment, even with no active recommendations', () => {
+  const html = renderPanel([], { props: { assessment: liveAssessment, thresholds } });
+  assert.match(html, /0 active · 4 insights/);
+  assert.match(html, /Current insights/);
+  assert.match(html, /pH 10.0: 0.5 below the 10.5 maximum, 3.5 above the 6.5 minimum\. Judged against this aquarium’s custom limit\. No approved rule guidance/);
+  assert.match(html, /No approved recommendation rule covers this condition yet/);
+  assert.match(html, /Treated as a sensor or data problem, not a water condition/);
+  assert.match(html, /Custom limits/);
+  assert.doesNotMatch(html, /Not monitored\./);
+});
+
+test('insights explain missing live data instead of inventing readings', () => {
+  const html = renderPanel([], { props: { assessment: { ...liveAssessment, source: 'unavailable' }, thresholds } });
+  assert.match(html, /No live data/);
+  assert.doesNotMatch(html, /within range/);
+});
+
+test('panel without an assessment renders no insight section', () => {
+  assert.doesNotMatch(renderPanel([recommendation]), /Current insights/);
+});
+
+const rule = (ruleId, side, op, extra = {}) => ({
+  ruleId, parameter: 'ph', severity: 'warning', condition: { op, ref: side, ...extra.condition }, extraChecks: [],
+  priority: 20, title: ruleId, action: `Action for ${ruleId}.`, basis: '', preCheck: '', enabled: true,
+  status: extra.status ?? 'approved', source: 'cited', approvedBy: null, approvedAt: null,
+});
+
+test('normal readings quote the approved rule that applies on each side, never draft rules', () => {
+  const rules = [
+    rule('ph_high_critical', 'max', 'gt', { condition: { marginPct: 10 } }),
+    rule('ph_high_warning', 'max', 'gt'),
+    rule('ph_low_warning', 'min', 'lt', { status: 'draft' }),
+  ];
+  const html = renderPanel([], { props: { assessment: liveAssessment, thresholds, rules } });
+  assert.match(html, /If it goes above 10.5:<\/span> Action for ph_high_warning\./);
+  assert.match(html, /\(rule <!-- -->ph_high_warning<!-- -->\)|\(rule ph_high_warning\)/);
+  assert.doesNotMatch(html, /ph_high_critical/);
+  assert.doesNotMatch(html, /ph_low_warning/);
+});
+
+test('the stored cleaning schedule appears as an insight with its reason', () => {
+  const cleaning = { status: 'scheduled', nextCleaningDue: 1, reason: 'tds_rise', lastCleanedAt: 0, lastCleanedSource: 'maintenance_actions', intervalDays: 14, bioloadLevel: 'light', evaluatedAt: 0 };
+  const html = renderPanel([], { props: { assessment: liveAssessment, thresholds, cleaning } });
+  assert.match(html, /Cleaning due/);
+  assert.match(html, /Brought forward because TDS rose since the last cleaning\. Schedule: every 14 days \(light bioload\)\./);
 });

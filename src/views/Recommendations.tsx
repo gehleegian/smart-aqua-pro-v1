@@ -36,7 +36,7 @@ export default function Recommendations({ onNavigate }: { onNavigate: (page: str
       {tank.telemetrySource === 'simulated' ? (
         <StatusMessage variant="warning">Recommendations are not available for simulated telemetry.</StatusMessage>
       ) : (
-        <RecommendationsPanel key={tank.id} aquariumId={tank.id} aquariumName={tank.name} defaultOpen />
+        <RecommendationsPanel key={tank.id} aquariumId={tank.id} aquariumName={tank.name} assessment={tank.assessment} thresholds={tank.thresholds} rules={dashboard.rules} cleaning={tank.engineState?.cleaning ?? null} defaultOpen />
       )}
     </div>
   );
