@@ -584,6 +584,39 @@ truthfully carry this categorical result. Adding a proper categorical field and
 estimated-TDS presentation needs coordinated web/mobile/rules changes. Neither
 change is silently replaced by made-up numeric readings in this sketch.
 
+## Water-level-only correction — 2026-11-12
+
+The experimental load-state distance subtraction is no longer applied to water
+level. It could turn a valid raw echo into `NaN`: the filter-only subtraction
+was 1.0574 cm, while the both-on subtraction was 0.9792 cm. A valid current
+distance near 21 cm could therefore disappear in only the filter-only state.
+
+Water level now uses the median of the current valid ultrasonic echoes directly.
+The existing majority requirement (at least three of five valid echoes),
+20–800 cm validity range, fixed 27.0 cm empty / 22.4134 cm full calibration,
+mixed-state sample rejection and invalid-reading omission are unchanged.
+The historical distance helper remains for comparison tests only; neither
+active sketch calls it. pH/TDS compensation and all other sensors, equipment
+commands, authorization and cloud behavior are unchanged.
+
+The same targeted correction is present in the separate owner upload sketch
+at `C:/new/Aquarium1Device/Aquarium1Device.ino`; unrelated formatting and owner
+changes in that sketch are preserved. Serial now identifies the new path with
+`Water-level distance: current echo median; load correction disabled.`
+
+Software regressions cover the old filter-only failure, state-independent raw
+distance, and rejection of missing/blind-zone/over-range echoes. No readings
+are fabricated or uploaded by tests. The firmware must be uploaded and checked
+with actual hardware in each light/filter state; a finite reading alone does
+not establish sensor accuracy. Removing the old offset may change the displayed
+percentage; it does not mean water was added or removed.
+
+Verification for this correction: 51 Aquarium 1/water-level software tests,
+both firmware contract checks, changed-test/script lint and diff checks passed.
+Real-settings builds for `esp32:esp32:esp32` passed: repository sketch
+1,162,837 bytes flash / 48,260 bytes global RAM; owner sketch 1,162,829 bytes
+flash / 48,236 bytes global RAM. Neither firmware was uploaded by this change.
+
 ## Implementation and verification boundaries
 
 New files: this sketch, private placeholder configuration, README, .gitignore and

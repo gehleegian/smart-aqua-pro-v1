@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import type { ConditionTimes, StructuredReportSummary } from '../../types/monitoringReport';
 import { useClientPagination } from '../../hooks/useClientPagination';
 import Pagination from '../ui/Pagination';
+import { describeWaterTrend } from '../../utils/waterTrends';
 
 // FR21: the in-app view of a stored report summary. Every status is written
 // out in words (NORMAL / WARNING / CRITICAL), never shown by colour alone.
@@ -171,6 +172,25 @@ export default function ReportSummaryView({ summary }: { summary: StructuredRepo
           ])}
         />
         <p className="text-xs text-slate-400">Invalid readings are sensor problems, not water conditions, and are left out of the figures.</p>
+      </Section>
+
+      <Section title="Water trends (sampled history)">
+        <p className="text-xs text-slate-400">Descriptive changes only, not a forecast or a cleaning recommendation. Equal endpoints do not prove stable water or sustained recovery. Missing readings are not filled.</p>
+        <ul className="space-y-4">
+          {Object.entries(summary.readings.perParameter).map(([key, stats]) => (
+            <li key={key} className="rounded-lg border border-slate-600/40 p-3">
+              <h4 className="font-medium text-white">{stats.label}</h4>
+              <p>{describeWaterTrend(stats.trend, stats.unit)}</p>
+              {stats.trend ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  {stats.trend.samples} distinct valid samples; {stats.trend.excluded} excluded or duplicate rows.
+                  {stats.trend.first && stats.trend.last ? ` Observed ${manilaDateTime(stats.trend.first.at)} to ${manilaDateTime(stats.trend.last.at)} (Asia/Manila).` : ''}
+                  {stats.trend.maxGapMs !== null ? ` Largest gap between valid samples: ${formatDuration(stats.trend.maxGapMs)}.` : ''}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       </Section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

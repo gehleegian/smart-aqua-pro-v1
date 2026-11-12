@@ -41,6 +41,8 @@ export type ConditionTimes = {
 };
 
 export type ReportParameterStats = {
+  /** Optional for reports generated before descriptive trends were added. */
+  trend?: import('../utils/waterTrends').WaterTrend;
   label: string;
   unit: string | null;
   valid: number;

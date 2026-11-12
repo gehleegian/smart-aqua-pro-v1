@@ -33,6 +33,8 @@ inline float tdsShift(bool light, bool filter) {
 }
 
 inline float distanceShift(bool light, bool filter) {
+  // Historical comparison only. Active water-level acquisition does not call
+  // this helper: screenshot-derived offsets are not distance calibration.
   // Infer distance shift using the historical observation span, not today's FULL_CM.
   // It is not a measured distance or a dimension/operational-volume calculation.
   return ENABLED ? (LEVEL_REFERENCE_PERCENT[0] - LEVEL_REFERENCE_PERCENT[stateIndex(light, filter)]) * OBSERVATION_SPAN_CM / 100.0f : 0.0f;
