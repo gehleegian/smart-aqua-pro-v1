@@ -381,8 +381,8 @@ void sampleSensors() {
   distanceCm = us ? us * 0.0343f / 2.0f : NAN;
   // BEGIN AQ1 LOAD COMPENSATION
   rawDistanceCm = distanceCm;
-  distanceCm = LoadCompensation::distance(rawDistanceCm, PROFILE_LEVEL_ENABLED ? 0.0f :
-    LoadCompensation::distanceShift(compensateLight, compensateFilter));
+  // Water level uses the current echo median without an inferred load offset.
+  // Subtracting a screenshot-derived offset could reject a valid raw echo.
   // END AQ1 LOAD COMPENSATION
   // AJ-SR04M assumption: below 20 cm is blind zone, not a valid full reading.
   levelValid = isfinite(distanceCm) && distanceCm >= 20.0f && distanceCm <= 800.0f;
@@ -405,6 +405,7 @@ void sampleSensors() {
   Serial.printf("Raw -> adjusted: pH %.3f -> %.3f | TDS %.3f -> %.3f ppm | distance %.3f -> %.3f cm | sample L=%d F=%d | state %s\n",
                 rawPhValue, phValue, rawTdsPpm, tdsPpm, rawDistanceCm, distanceCm, sampleLight, sampleFilter,
                 sampleRelayRevision == relayRevision ? "unchanged" : "changed; batch not published");
+  Serial.println("Water-level distance: current echo median; load correction disabled.");
   // END AQ1 LOAD COMPENSATION
   Serial.println("\n--- AQUARIUM 1 REAL SENSOR SAMPLE ---");
   Serial.printf("Temp GPIO18: %.2f C | GPIO19: %.2f C | mean: %.2f C\n",

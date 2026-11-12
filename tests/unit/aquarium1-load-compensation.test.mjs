@@ -91,7 +91,7 @@ test('raw clipping and invalid adjusted inputs cannot be disguised as valid meas
   near(context.distance(21, 1), 20);
 });
 
-test('full calibration changes the scale, not historical load corrections or real water loss', () => {
+test('historical distance model remains reproducible but is not active water-level calibration', () => {
   const full = Number(source.match(/FULL_CM = ([\d.]+)f/)?.[1]);
   near(full, 27 - 67.45 / 100 * (27 - 20.2));
   near(context.OBSERVATION_SPAN_CM, 6.8);
@@ -145,12 +145,13 @@ for (const [name, folder] of [['repository', root], ['owner sketch', new URL('..
     assert.match(sketch, /rawPhValue = phValue;\s*rawTdsPpm = tdsPpm;/);
     assert.match(sketch, /phValue = LoadCompensation::ph\(rawPhValue, compensateLight, compensateFilter\)/);
     assert.match(sketch, /tdsPpm = LoadCompensation::tds\(rawTdsPpm, compensateLight, compensateFilter\)/);
-    assert.match(sketch, /rawDistanceCm = distanceCm;[\s\S]*?distanceCm = LoadCompensation::distance/);
+    assert.match(sketch, /rawDistanceCm = distanceCm;/);
+    assert.doesNotMatch(sketch, /LoadCompensation::distance(?:Shift)?\s*\(/);
     assert.match(sketch, /tdsPpm = analogRead\(TDS_PIN\) >= 4095 \? NAN : meterReferencedTds\(tdsV\)/);
     assert.match(sketch, /phValue = fitPH\(phV\)/);
     assert.match(sketch, /SENSOR_READ_INTERVAL_MS = 10000/);
     assert.match(sketch, /EXPERIMENTAL 5V\/2A adapter profile; accuracy not verified; disable for laptop USB/);
-    assert.match(sketch, /PROFILE_LEVEL_ENABLED \? 0\.0f :\s*LoadCompensation::distanceShift\(compensateLight, compensateFilter\)/);
+    assert.match(sketch, /Water-level distance: current echo median; load correction disabled/);
     assert.match(sketch, /Raw -> adjusted:/);
     const guard = sketch.lastIndexOf('if (sampleRelayRevision != relayRevision)');
     assert.ok(guard > sketch.indexOf('bool cloudCycle()'));
@@ -158,6 +159,45 @@ for (const [name, folder] of [['repository', root], ['owner sketch', new URL('..
     assert.doesNotMatch(sketch, /lastOffReadings|waterReadingState|baselinePpm/);
   });
 }
+
+test('current water-level processing preserves valid raw echoes in every load state', () => {
+  const begin = source.indexOf('  const uint32_t us = medianEcho(echoes);');
+  const end = source.indexOf('  sampleAt = millis();', begin);
+  assert.ok(begin > 0 && end > begin);
+  const processing = clean(source.slice(begin, end))
+    .replace(/const uint32_t/g, 'const').replace(/WaterLevel::/g, 'WaterLevel.');
+  // Isolated numerical regression input; never uploaded as telemetry.
+  const pulseUs = 1226;
+  const raw = pulseUs * 0.0343 / 2;
+  assert.ok(Number.isNaN(context.distance(raw, context.distanceShift(false, true))),
+    'old filter-only subtraction rejected this valid raw distance');
+  assert.ok(Number.isFinite(context.distance(raw, context.distanceShift(true, true))),
+    'old both-on subtraction happened to leave this distance valid');
+  for (const light of [false, true]) for (const filter of [false, true]) {
+    const run = vm.createContext({ echoes: [], medianEcho: () => pulseUs,
+      isfinite: Number.isFinite, NAN: NaN, PROFILE_LEVEL_ENABLED: false,
+      EMPTY_CM: 27, FULL_CM: 22.4134, compensateLight: light, compensateFilter: filter,
+      constrain: (value, min, max) => Math.min(max, Math.max(min, value)),
+      rawDistanceCm: NaN, distanceCm: NaN, levelPct: NaN, levelValid: false,
+    });
+    vm.runInContext(processing, run);
+    near(run.distanceCm, raw);
+    near(run.rawDistanceCm, raw);
+    assert.equal(run.levelValid, true);
+    near(run.levelPct, Math.min(100, (27 - raw) * 100 / (27 - 22.4134)));
+  }
+  for (const pulse of [0, 1160, 47000]) {
+    const run = vm.createContext({ echoes: [], medianEcho: () => pulse,
+      isfinite: Number.isFinite, NAN: NaN, PROFILE_LEVEL_ENABLED: false,
+      EMPTY_CM: 27, FULL_CM: 22.4134,
+      constrain: (value, min, max) => Math.min(max, Math.max(min, value)),
+      rawDistanceCm: NaN, distanceCm: NaN, levelPct: NaN, levelValid: true,
+    });
+    vm.runInContext(processing, run);
+    assert.equal(run.levelValid, false, 'no echo, blind-zone and over-range inputs stay invalid');
+    assert.ok(Number.isNaN(run.levelPct));
+  }
+});
 
 test('relay revisions reject mixed-state batches, including ON -> OFF transitions', () => {
   const body = source.match(/bool setOutput\(bool light, bool on\) \{([\s\S]*?)\r?\n\}/)?.[1];

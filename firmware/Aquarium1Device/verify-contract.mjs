@@ -35,6 +35,9 @@ assert.ok(!source.includes('.setInsecure('));
 assert.match(config, /#define AQUARIUM_CLOUD_ENABLED 1/);
 assert.match(config, /PROFILE_LEVEL_ENABLED = false/);
 assert.match(source, /FULL_CM = 22\.4134f/);
+assert.doesNotMatch(source, /LoadCompensation::distance(?:Shift)?\s*\(/,
+  'Water level must use the measured echo distance, never a load-state offset');
+assert.match(source, /Water-level distance: current echo median; load correction disabled/);
 assert.match(source, /armed = !localStop/);
 assert.match(source, /commandWatermarkMs = double\(time\(nullptr\)\) \* 1000.0/);
 assert.match(source, /requestedMs <= commandWatermarkMs/);

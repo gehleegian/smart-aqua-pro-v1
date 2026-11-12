@@ -42,10 +42,9 @@ export default function Automation({ onNavigate }: { onNavigate?: (page: string)
 
   return (
     <div className="space-y-6">
-      <StatusMessage variant="warning">
-        Times are {SCHEDULE_TIME_ZONE} (UTC+8). The device runs these schedules on its own clock and keeps them running if Wi-Fi drops;
-        that behaviour needs the firmware update and hardware testing (docs/firmware-changes.md §11).
-      </StatusMessage>
+      <p className="text-sm text-slate-400">
+        All schedule times use {SCHEDULE_TIME_ZONE} (UTC+8).
+      </p>
       {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {aquariums === null && !error ? <p className="text-sm text-slate-400">Loading schedules…</p> : null}

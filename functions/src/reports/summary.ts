@@ -18,6 +18,7 @@ import {
   type RuleConfig,
   type WaterParameter,
 } from '../shared/monitoringAssessmentCore.js';
+import { summarizeWaterTrend, type WaterTrend } from '../shared/waterTrends.js';
 
 export const REPORT_TIME_ZONE = 'Asia/Manila';
 /** The Philippines has no daylight saving time: Asia/Manila is always UTC+8. */
@@ -264,6 +265,7 @@ export function normalizeCommand(id: string, data: Record<string, unknown>): Com
 // The structured summary (stored on monitoring_reports.structured_summary)
 // ---------------------------------------------------------------------------
 export type ParameterStats = {
+  trend?: WaterTrend;
   label: string;
   unit: string | null;
   valid: number;
@@ -408,6 +410,11 @@ export function computeReadingStats(rows: ReadingRow[]): StructuredSummary['read
       }
     }
     stats.avg = stats.valid > 0 ? round(sum / stats.valid) : null;
+    stats.trend = summarizeWaterTrend(rows.map(row => ({
+      at: row.at,
+      value: row.values[parameter],
+      valid: row.validity?.[parameter] === 'valid',
+    })));
     perParameter[parameter] = stats;
   }
   return { rows: rows.length, perParameter };
@@ -597,7 +604,7 @@ export function computeThresholdSummary(thresholds: EffectiveThresholds, rules: 
 export function buildStructuredSummary(input: SummaryInputs): StructuredSummary {
   const { period, now } = input;
   const effectiveEnd = Math.max(period.start, Math.min(period.end, now));
-  const rows = input.readings.filter((row) => row.at >= period.start && row.at < period.end).sort((a, b) => a.at - b.at);
+  const rows = input.readings.filter((row) => row.at >= period.start && row.at < effectiveEnd).sort((a, b) => a.at - b.at);
   const times = computeTimeInCondition(rows, input.priorReading, period.start, effectiveEnd);
   const maintenance = input.maintenance
     .filter((item) => item.performedAt >= period.start && item.performedAt < period.end)
