@@ -14,6 +14,7 @@ import { DraftThresholdsBadge, OverallConditionBadge } from '../condition/Condit
 import { NextCleaningCard } from '../condition/NextCleaningCard';
 import { RecommendationsPanel } from '../condition/RecommendationsPanel';
 import { requestTankFocus } from '../../services/tankFocus';
+import type { RuleConfig } from '../../utils/monitoringAssessmentCore';
 
 interface UserDashboardViewProps {
   liveDataWarning: ReactNode;
@@ -26,6 +27,7 @@ interface UserDashboardViewProps {
   userActivities: string[];
   onNavigate: (page: string) => void;
   onSelectTank: (tankId: string) => void;
+  rules?: RuleConfig[];
 }
 
 const SYSTEM_STATUS_TITLE = 'System Status';
@@ -208,6 +210,7 @@ export function UserDashboardView({
   userActivities,
   onNavigate,
   onSelectTank,
+  rules = [],
 }: UserDashboardViewProps) {
   const equipmentIcons = { Filter, Light: Lightbulb, Feeder: Utensils, 'Equipment diagnostic': Info };
   const equipment = getEquipmentFeedback(selectedTank).map((item) => ({
@@ -257,7 +260,7 @@ export function UserDashboardView({
       <ConditionPanel assessment={selectedTank.assessment} />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <RecommendationsPanel aquariumId={selectedTank.id} aquariumName={selectedTank.name} />
+        <RecommendationsPanel aquariumId={selectedTank.id} aquariumName={selectedTank.name} assessment={selectedTank.assessment} thresholds={selectedTank.thresholds} rules={rules} />
         <NextCleaningCard key={selectedTank.id} aquariumId={selectedTank.id} aquariumName={selectedTank.name}
           cleaning={selectedTank.engineState?.cleaning ?? null} now={telemetryNow}
           onOpenMaintenance={() => { requestTankFocus(selectedTank.id); onNavigate('maintenance'); }}

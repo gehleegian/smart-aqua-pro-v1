@@ -37,7 +37,7 @@ export default function Assessment({ onNavigate }: { onNavigate: (page: string) 
       {dashboard.liveDataError ? <StatusMessage variant="warning">{dashboard.liveDataError}</StatusMessage> : null}
       {dashboard.ruleConfigError ? <StatusMessage variant="warning">{dashboard.ruleConfigError}</StatusMessage> : null}
       <AssessmentDetails assessment={tank.assessment} />
-      <RecommendationsPanel aquariumId={tank.id} aquariumName={tank.name} />
+      <RecommendationsPanel aquariumId={tank.id} aquariumName={tank.name} assessment={tank.assessment} thresholds={tank.thresholds} rules={dashboard.rules} cleaning={tank.engineState?.cleaning ?? null} />
     </div>
   );
 }

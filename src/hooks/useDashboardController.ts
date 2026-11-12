@@ -209,6 +209,7 @@ export function useDashboardController() {
       selectedTankName: selectedTank?.name || 'None',
     }),
     ruleConfigError: ruleConfig.error,
+    rules: ruleConfig.rules,
     actions: {
       selectTank: setSelectedTankId,
     },
