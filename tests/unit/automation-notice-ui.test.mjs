@@ -10,7 +10,7 @@ function renderAutomation({ error = '', enabled = false } = {}) {
       filtrationStartTime: '08:00', filtrationRuntimeHours: 8,
     },
   }], error], mocks: {
-    '../hooks/useRuleConfig': { useRuleConfig: () => ({ rules: [], loaded: true, error: '' }) },
+    '../hooks/useRuleConfig': { useRuleConfig: () => { throw new Error('Automation must not subscribe to the removed rule list'); } },
     '../hooks/useNow': { useNow: () => 0 },
     '../firebase': { auth: { currentUser: null } },
     '../services/aquariumService': { getAquariumsByOwner: () => { throw new Error('Unexpected backend call'); } },
@@ -44,4 +44,14 @@ test('real schedule errors and existing enabled state/edit navigation remain unc
   assert.ok(edit);
   edit.props.onClick();
   assert.deepEqual(view.events, [['focus', 'tank-a'], ['navigate', 'monitoring']]);
+});
+
+test('Automation shows saved equipment schedules without the read-only rules section', () => {
+  const view = renderAutomation();
+  assert.doesNotMatch(view.html, /Rule-Based Automation|Live IF-THEN rules|Loading rules|No rules are stored/);
+  assert.match(view.html, /Aquarium A/);
+  assert.match(view.html, /Feeding/);
+  assert.match(view.html, /Light/);
+  assert.match(view.html, /Filter/);
+  assert.match(view.html, /Edit schedule/);
 });

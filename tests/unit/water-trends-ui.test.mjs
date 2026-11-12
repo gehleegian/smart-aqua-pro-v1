@@ -69,3 +69,22 @@ test('old report UI asks for regeneration instead of fabricating a trend', () =>
 test('empty report UI does not claim a stable or normal trend', () => {
   assert.match(render(summary([])), /Not enough distinct valid samples/);
 });
+
+test('report draft banner is removed for both old and new saved reports without rewriting approval metadata', () => {
+  for (const note of [
+    'Draft thresholds: some thresholds or rules in force are still DRAFT and have not been approved by the adviser.',
+    summary().thresholds.draftNote,
+    null,
+  ]) {
+    const report = summary();
+    report.thresholds.draftNote = note;
+    const before = structuredClone(report);
+    const html = render(report);
+    assert.doesNotMatch(html, /Draft configuration\.|have not been approved by the adviser|Draft thresholds\/rules metadata/);
+    assert.match(html, /Thresholds and rules in force/);
+    assert.match(html, /DRAFT/);
+    assert.match(html, /Recommendations and what was done/);
+    assert.match(html, /This period has not ended/);
+    assert.deepEqual(report, before);
+  }
+});
