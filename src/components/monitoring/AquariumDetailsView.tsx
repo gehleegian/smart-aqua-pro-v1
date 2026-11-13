@@ -50,6 +50,9 @@ const deviceUpdateFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: "medium",
 });
 
+// Temporarily hidden from Monitoring; retain calculations for later use.
+const SHOW_WATER_VOLUME_SUMMARY = false;
+
 interface AquariumDetailsViewProps {
   aquarium: MonitoringAquarium;
   automationEnabled: boolean;
@@ -309,7 +312,9 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
-      <WaterVolumeSummary aquarium={aquarium} now={now} />
+      {SHOW_WATER_VOLUME_SUMMARY && (
+        <WaterVolumeSummary aquarium={aquarium} now={now} />
+      )}
 
       <Card>
         <CardHeader>
