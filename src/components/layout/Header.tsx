@@ -32,6 +32,7 @@ const pageNames: Record<string, string> = {
   setup: 'Aquarium Setup',
   team: 'Team',
   organizations: 'Organizations',
+  'device-inventory': 'Device Inventory',
   audit: 'Audit Log',
   'admin-audit': 'Audit Log',
   rules: 'Rules & Species Editor',

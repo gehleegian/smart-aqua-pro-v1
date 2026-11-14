@@ -13,6 +13,8 @@ export function paginationUiHarness({ seeds = [], mocks = {} } = {}) {
   const react = {
     ...React,
     useEffect() {},
+    // Memoization is a render optimization, not part of isolated UI behavior.
+    useMemo(factory) { return factory(); },
     useState(initial) {
       const slot = cursor++;
       if (!(slot in cells)) cells[slot] = typeof initial === 'function' ? initial() : initial;

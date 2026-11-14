@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
+import { usePageSelection } from './usePageSelection';
 import { getDataLogsPageData } from '../services/dataLogsService';
 import { getDeviceTelemetryHistory } from '../services/deviceService';
 import type { Aquarium } from '../types/aquarium';
@@ -25,7 +26,7 @@ import {
 
 export function useDataLogsController() {
   const [aquariums, setAquariums] = useState<Aquarium[]>([]);
-  const [selectedAquariumId, setSelectedAquariumId] = useState('');
+  const [selectedAquariumId, setSelectedAquariumId] = usePageSelection('datalogs', 'aquarium');
   const [selectedDate, setSelectedDate] = useState(() => formatDateKey(new Date()));
   const [timePeriod, setTimePeriod] = useState<PeriodKey>('7d');
   const [historyEntries, setHistoryEntries] = useState<DeviceTelemetryLogEntry[]>([]);
@@ -69,7 +70,7 @@ export function useDataLogsController() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setSelectedAquariumId]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {

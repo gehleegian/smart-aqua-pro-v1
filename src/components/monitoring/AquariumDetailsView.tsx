@@ -8,6 +8,9 @@ import {
   Wrench,
 } from "lucide-react";
 import { CommandHistory, CommandStatusBadge } from "./CommandHistory";
+import { monitoringAttention, MonitoringAttentionBanner, MonitoringProblemSummary } from './MonitoringAttention';
+import { ParameterStatusBadge } from '../condition/ConditionBadges';
+import type { EffectiveThresholds } from '../../utils/monitoringAssessmentCore';
 import { LogMaintenanceModal } from "../maintenance/LogMaintenanceModal";
 import { MaintenanceHistory } from "../maintenance/MaintenanceHistory";
 import { nextScheduledText } from "../../utils/schedule";
@@ -22,6 +25,7 @@ import type {
   AssessmentSeverity,
   ManualActionDisplay,
   MonitoringAquarium,
+  ParameterAssessment,
   SystemField,
   SystemMode,
 } from "../../types/monitoring";
@@ -75,6 +79,7 @@ interface AquariumDetailsViewProps {
   /** Sprint 3: false for a caretaker (commands only; schedules are owner-only). */
   canManage?: boolean;
   onRefresh: () => void;
+  thresholds?: EffectiveThresholds | null;
 }
 
 export function AquariumDetailsView({
@@ -98,9 +103,12 @@ export function AquariumDetailsView({
   onOpenAutomationEditor,
   canManage = true,
   onRefresh,
+  thresholds,
 }: AquariumDetailsViewProps) {
   const [logging, setLogging] = useState(false);
   const now = useNow();
+  const attention = monitoringAttention(aquarium);
+  const displaySeverity = attention.live ? aquarium.assessment.overallSeverity : 'unavailable';
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -137,6 +145,8 @@ export function AquariumDetailsView({
         </div>
       ) : null}
 
+      <MonitoringAttentionBanner aquarium={aquarium} attention={attention} onRecommendations={onOpenRecommendations} onAssessment={onOpenAssessment} />
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -149,9 +159,9 @@ export function AquariumDetailsView({
               </p>
             </div>
             <Badge
-              variant={getSeverityVariant(aquarium.assessment.overallSeverity)}
+              variant={getSeverityVariant(displaySeverity)}
             >
-              {aquarium.telemetrySource} · {aquarium.assessment.overallSeverity}
+              {aquarium.telemetrySource} · {displaySeverity}
             </Badge>
           </div>
           <p className="mt-3 text-xs text-slate-400">
@@ -172,6 +182,7 @@ export function AquariumDetailsView({
               const readings = [
                 {
                   label: "Temperature",
+                  parameter: 'temperature' as const,
                   display: getSensorDisplay(
                     aquarium.sensorValidity,
                     "temperature",
@@ -181,6 +192,7 @@ export function AquariumDetailsView({
                 },
                 {
                   label: "Water Level",
+                  parameter: 'waterLevel' as const,
                   display:
                     live && aquarium.hasFreshWaterLevelTelemetry === false
                       ? {
@@ -205,6 +217,7 @@ export function AquariumDetailsView({
                 },
                 {
                   label: "TDS",
+                  parameter: 'tds' as const,
                   display: getSensorDisplay(
                     aquarium.sensorValidity,
                     "tds",
@@ -217,6 +230,7 @@ export function AquariumDetailsView({
                 },
                 {
                   label: "pH Level",
+                  parameter: 'ph' as const,
                   display: getSensorDisplay(
                     aquarium.sensorValidity,
                     "ph",
@@ -229,6 +243,7 @@ export function AquariumDetailsView({
                 },
                 {
                   label: "Turbidity",
+                  parameter: 'turbidity' as const,
                   display: getTurbidityDisplay(
                     aquarium.sensorValidity,
                     live,
@@ -236,17 +251,20 @@ export function AquariumDetailsView({
                   ),
                 },
               ];
-              return readings.map(({ label, display }) => (
+              return readings.map(({ label, parameter, display }) => (
                 <Reading
                   key={label}
                   label={label}
                   value={display.value}
                   status={display.status}
+                  attention={attention.findings.find(item => item.parameter === parameter)}
+                  sensorFault={attention.faults.some(item => item.parameter === parameter)}
                 />
               ));
             })()}
             <Reading
               label="Power Status"
+              attention={attention.findings.find(item => item.parameter === 'power')}
               value={
                 aquarium.hasFreshPowerTelemetry
                   ? aquarium.powerStatus || "--"
@@ -262,6 +280,7 @@ export function AquariumDetailsView({
             />
             <Reading
               label="Filtration Output"
+              attention={attention.findings.find(item => item.parameter === 'filtration')}
               value={
                 aquarium.telemetryState === "live"
                   ? (aquarium.reportedFilterState ?? "--")
@@ -288,6 +307,7 @@ export function AquariumDetailsView({
             />
             <Reading
               label="Equipment Diagnostic"
+              attention={attention.findings.find(item => item.parameter === 'equipment')}
               value={
                 aquarium.telemetryState === "live"
                   ? (aquarium.reportedEquipmentStatus ?? "--")
@@ -311,6 +331,8 @@ export function AquariumDetailsView({
           </div>
         </CardContent>
       </Card>
+
+      <MonitoringProblemSummary attention={attention} thresholds={thresholds} />
 
       {SHOW_WATER_VOLUME_SUMMARY && (
         <WaterVolumeSummary aquarium={aquarium} now={now} />
@@ -728,14 +750,20 @@ function Reading({
   label,
   value,
   status,
+  attention,
+  sensorFault = false,
 }: {
   label: string;
   value: string;
   status: string;
+  attention?: ParameterAssessment;
+  sensorFault?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-slate-600/20 bg-slate-900/30 p-4">
-      <p className="text-sm text-slate-400">{label}</p>
+    <div className={`rounded-lg border p-4 ${attention?.severity === 'critical' ? 'border-rose-400/50 bg-rose-500/10' : attention?.severity === 'warning' || sensorFault ? 'border-amber-400/40 bg-amber-400/10' : 'border-slate-600/20 bg-slate-900/30'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-300">{label}</p>
+        {attention ? <ParameterStatusBadge item={attention} /> : sensorFault ? <Badge variant="warning">Sensor check needed</Badge> : null}
+      </div>
       <p className="mt-1 text-xl font-semibold text-white">{value}</p>
       <p className="mt-2 text-xs text-slate-500">{status}</p>
     </div>

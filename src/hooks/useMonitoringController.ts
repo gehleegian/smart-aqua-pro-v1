@@ -1,4 +1,5 @@
 import { consumeTankFocus } from '../services/tankFocus';
+import { usePageSelection } from './usePageSelection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '../firebase';
 import {
@@ -49,7 +50,7 @@ import {
   prepareAutomationSettings,
   systemStatusConfig,
 } from '../utils/monitoringHelpers';
-import { assessAquarium } from '../utils/conditionAssessment';
+import { assessAquarium, getEffectiveThresholds } from '../utils/conditionAssessment';
 import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -68,7 +69,7 @@ export function useMonitoringController() {
   >({});
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] = useState('');
-  const [selectedAquariumId, setSelectedAquariumId] = useState(() => consumeTankFocus());
+  const [selectedAquariumId, setSelectedAquariumId] = usePageSelection('monitoring', 'aquarium', '', consumeTankFocus);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [systemError, setSystemError] = useState('');
@@ -106,7 +107,7 @@ export function useMonitoringController() {
     setUsers([]);
     setSelectedOwnerId('');
     setSelectedAquariumId('');
-  }, []);
+  }, [setSelectedAquariumId]);
 
   const loadMonitoringData = useCallback(async () => {
     try {
@@ -163,7 +164,7 @@ export function useMonitoringController() {
     } finally {
       setLoading(false);
     }
-  }, [resetMonitoringData]);
+  }, [resetMonitoringData, setSelectedAquariumId]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -938,6 +939,7 @@ export function useMonitoringController() {
     savingMode,
     savingSystemKey,
     selectedAquarium,
+    selectedThresholds: selectedAquarium ? getEffectiveThresholds(selectedAquarium as unknown as Record<string, unknown>, ruleConfig) : null,
     selectedOwner,
     showAutomationModal,
     systemError,

@@ -23,6 +23,7 @@ import AddDevice from '../../views/AddDevice';
 import SetupWizard from '../../views/SetupWizard';
 import Team from '../../views/Team';
 import Organizations from '../../views/Organizations';
+import DeviceInventory from '../../views/DeviceInventory';
 import AcceptInvite from '../../views/AcceptInvite';
 import AuditLog, { AdminAuditLog } from '../../views/AuditLog';
 import RulesEditor from '../../views/RulesEditor';
@@ -65,6 +66,7 @@ const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = 
   setup: SetupWizard,
   team: Team,
   organizations: Organizations,
+  'device-inventory': DeviceInventory,
   invite: AcceptInvite,
   audit: AuditLog,
   'admin-audit': AdminAuditLog,
@@ -89,7 +91,7 @@ const getInitialTheme = (): ThemeMode => {
 // Sprint 3: pages follow the access role (docs/access-model.md). The rules
 // enforce the same boundaries; this only decides what is shown.
 const rolePermissions: Record<NavRole, string[]> = {
-  Admin: ['dashboard', 'organizations', 'users', 'rules', 'admin-audit', 'settings', 'support'],
+  Admin: ['dashboard', 'organizations', 'device-inventory', 'users', 'rules', 'admin-audit', 'settings', 'support'],
   owner: ['dashboard', 'monitoring', 'assessment', 'recommendations', 'maintenance', 'automation', 'alerts', 'datalogs', 'reports', 'aquariums', 'add-device', 'setup', 'team', 'audit', 'settings', 'support', 'invite'],
   caretaker: ['dashboard', 'monitoring', 'assessment', 'recommendations', 'maintenance', 'alerts', 'datalogs', 'reports', 'add-device', 'setup', 'settings', 'support', 'invite'],
   none: ['dashboard', 'add-device', 'setup', 'settings', 'support', 'invite'],
@@ -134,7 +136,8 @@ export default function Layout() {
   useEffect(() => {
     const uid = user?.id;
     if (!user || !uid) {
-      clearOrgContext();
+      // Initial auth hydration is not logout: preserve the saved organization.
+      if (!loadingAuth) clearOrgContext();
       return;
     }
     if (user.role === 'Admin') {
@@ -159,11 +162,12 @@ export default function Layout() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, loadingAuth]);
 
   useEffect(() => {
-    localStorage.setItem('currentPage', currentPage);
-  }, [currentPage]);
+    // Do not overwrite the saved page with the initial unauthenticated render.
+    if (user && !loadingAuth) localStorage.setItem('currentPage', currentPage);
+  }, [currentPage, user, loadingAuth]);
 
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -372,7 +376,10 @@ export default function Layout() {
     ) : navRole === 'none' && pageId === 'dashboard' ? (
       <NoOrgState onNavigate={handleNavigate} />
     ) : (
-      <PageComponent onNavigate={handleNavigate} />
+      <PageComponent
+        key={pageId === 'invite' ? `${user.id}:invite` : `${user.id}:${org.active?.orgId ?? ''}:${navRole}`}
+        onNavigate={handleNavigate}
+      />
     );
 
   return (

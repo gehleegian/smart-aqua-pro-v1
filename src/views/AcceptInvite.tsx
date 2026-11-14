@@ -6,12 +6,14 @@ import StatusMessage from '../components/ui/StatusMessage';
 import { Card, CardContent } from '../components/ui/Card';
 import { acceptInvite, refreshOrgContext } from '../services/orgService';
 import { clearPendingInvite, readPendingInvite, setActiveOrg } from '../services/orgContext';
+import { requestTankFocus } from '../services/tankFocus';
 
 /** Shown after sign-in when an /invite/<token> link was opened. */
 export default function AcceptInvite({ onNavigate }: { onNavigate: (page: string) => void }) {
   const [token] = useState(() => readPendingInvite());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState<Awaited<ReturnType<typeof acceptInvite>> | null>(null);
   const email = auth.currentUser?.email ?? '';
 
   const accept = async () => {
@@ -19,11 +21,16 @@ export default function AcceptInvite({ onNavigate }: { onNavigate: (page: string
     setBusy(true);
     setError('');
     try {
-      const result = await acceptInvite(token);
-      clearPendingInvite();
+      // If refreshing membership fails, retry that step, not the single-use invite.
+      const result = accepted ?? await acceptInvite(token);
+      setAccepted(result);
       const uid = auth.currentUser?.uid;
-      if (uid) await refreshOrgContext(uid);
+      if (!uid) throw new Error('Sign in again to finish opening your invited aquariums.');
+      await refreshOrgContext(uid);
       setActiveOrg(result.orgId);
+      // Replace any old notification focus, including when all invited tanks were removed.
+      requestTankFocus(result.aquariumIds[0] ?? '');
+      clearPendingInvite();
       onNavigate('dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The invite could not be accepted.');
