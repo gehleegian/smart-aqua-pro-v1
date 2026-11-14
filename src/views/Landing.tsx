@@ -19,6 +19,7 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
+import UnderwaterBackground from '../components/ui/UnderwaterBackground';
 
 type FeedPellet = {
   id: string;
@@ -489,6 +490,7 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-black">
+      <UnderwaterBackground descendOnScroll />
 
       <nav aria-label="Main" className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between rounded-xl border border-slate-700 bg-slate-900/90 px-3 md:px-4">
