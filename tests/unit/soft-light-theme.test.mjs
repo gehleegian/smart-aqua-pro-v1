@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../../src/app/globals.css', import.meta.url), 'utf8');
 const light = css.match(/\.smart-aqua-app\[data-theme='light'\] \{([\s\S]*?)\n\}/)[1];
@@ -48,7 +48,9 @@ test('formal inputs, focus rings and status text adapt to light mode', () => {
 
 test('web and mobile use the same light palette for page, cards, text and accent', () => {
   const mobile = readFileSync(new URL('../../../smart-aqua-mobile/src/constants/theme.ts', import.meta.url), 'utf8');
-  const lightBlock = mobile.slice(mobile.indexOf('light: {'), mobile.indexOf('dark: {'));
+  // Mobile keeps its light colours in light-palette.ts when that file exists.
+  const paletteUrl = new URL('../../../smart-aqua-mobile/src/constants/light-palette.ts', import.meta.url);
+  const lightBlock = existsSync(paletteUrl) ? readFileSync(paletteUrl, 'utf8') : mobile.slice(mobile.indexOf('light: {'), mobile.indexOf('dark: {'));
   for (const [key, value] of [['text', token('slate-100')], ['background', token('slate-950')], ['panel', token('slate-900')], ['backgroundElement', token('slate-800')], ['accentStrong', token('teal-600')]]) {
     assert.ok(lightBlock.includes(`${key}: '${value}'`), `mobile light ${key} should be ${value}`);
   }
