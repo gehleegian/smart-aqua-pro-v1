@@ -10,7 +10,7 @@ import { requestTankFocus } from '../services/tankFocus';
 
 export default function Assessment({ onNavigate }: { onNavigate: (page: string) => void }) {
   // Reuse the existing member-scoped, read-only data and assessment pipeline.
-  const dashboard = useDashboardController();
+  const dashboard = useDashboardController('assessment');
   if (dashboard.loading) return <LoadingState label="Loading assessment..." />;
   if (dashboard.error) return <StatusMessage variant="error">{dashboard.error}</StatusMessage>;
 

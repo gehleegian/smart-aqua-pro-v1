@@ -10,7 +10,7 @@ import { requestTankFocus } from '../services/tankFocus';
 
 export default function Maintenance({ onNavigate }: { onNavigate: (page: string) => void }) {
   // Reuse member-scoped aquariums and live server cleaning summaries.
-  const dashboard = useDashboardController();
+  const dashboard = useDashboardController('maintenance');
   if (dashboard.loading) return <LoadingState label="Loading maintenance..." />;
   if (dashboard.error) return <StatusMessage variant="error">{dashboard.error}</StatusMessage>;
 

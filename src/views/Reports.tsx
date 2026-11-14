@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Download, FileBarChart, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { auth } from '../firebase';
+import { usePageSelection } from '../hooks/usePageSelection';
 import { getAquariumsByOwner } from '../services/aquariumService';
 import { generateReport, listReports, reportFileUrl } from '../services/reportsService';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
@@ -28,18 +29,8 @@ const todayManila = () => new Date(Date.now() + 8 * 3_600_000).toISOString().sli
 const selectClass = 'w-full rounded-lg border border-slate-600/50 bg-slate-900/35 px-4 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400/70';
 
 export default function Reports() {
-  const tankId = useId();
-  const typeId = useId();
   const [aquariums, setAquariums] = useState<Aquarium[] | null>(null);
-  const [aquariumId, setAquariumId] = useState('');
-  const [reportType, setReportType] = useState<ReportType>('weekly');
-  const [startDate, setStartDate] = useState(todayManila);
-  const [endDate, setEndDate] = useState(todayManila);
-  const [reports, setReports] = useState<GeneratedReport[] | null>(null);
-  const [selectedId, setSelectedId] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const [aquariumId, setAquariumId] = usePageSelection('reports', 'aquarium');
   const [listError, setListError] = useState('');
 
   useEffect(() => {
@@ -49,7 +40,7 @@ export default function Reports() {
       .then((items) => {
         if (cancelled) return;
         setAquariums(items);
-        setAquariumId((current) => current || items[0]?.id || '');
+        setAquariumId((current) => items.some((item) => item.id === current) ? current : items[0]?.id || '');
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -57,57 +48,7 @@ export default function Reports() {
         setListError(err instanceof Error ? err.message : 'Aquariums could not be loaded.');
       });
     return () => { cancelled = true; };
-  }, []);
-
-  const refresh = useCallback(async (id: string) => {
-    if (!id) return;
-    setReports(null);
-    setListError('');
-    try {
-      const items = await listReports(id);
-      setReports(items);
-      setSelectedId((current) => (items.some((item) => item.id === current) ? current : items[0]?.id ?? ''));
-    } catch (err) {
-      console.error(err);
-      setReports([]);
-      setListError('Past reports could not be loaded. Check your connection and try again.');
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!aquariumId) return;
-    const timer = window.setTimeout(() => { void refresh(aquariumId); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [aquariumId, refresh]);
-
-  const onGenerate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const result = await generateReport({ aquariumId, reportType, startDate, ...(reportType === 'custom' ? { endDate } : {}) });
-      setNotice('Report ready.');
-      setSelectedId(result.reportId);
-      await refresh(aquariumId);
-      setSelectedId(result.reportId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The report could not be generated.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const open = async (path: string | null) => {
-    if (!path) return;
-    setError('');
-    try {
-      const url = await reportFileUrl(path);
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The file could not be opened.');
-    }
-  };
+  }, [setAquariumId]);
 
   if (aquariums === null) return <LoadingState label="Loading reports..." />;
   if (aquariums.length === 0) {
@@ -118,6 +59,96 @@ export default function Reports() {
       </Card>
     );
   }
+  // A restored ID is only a hint. Do not mount a report scope until authorized.
+  if (!aquariumId || !aquariums.some((item) => item.id === aquariumId)) return <LoadingState label="Loading reports..." />;
+  return <AquariumReports key={aquariumId} aquariums={aquariums} aquariumId={aquariumId} onAquariumChange={setAquariumId} />;
+}
+
+function AquariumReports({ aquariums, aquariumId, onAquariumChange }: {
+  aquariums: Aquarium[];
+  aquariumId: string;
+  onAquariumChange: (id: string) => void;
+}) {
+  const tankId = useId();
+  const typeId = useId();
+  const [reportType, setReportType] = useState<ReportType>('weekly');
+  const [startDate, setStartDate] = useState(todayManila);
+  const [endDate, setEndDate] = useState(todayManila);
+  const [reports, setReports] = useState<GeneratedReport[] | null>(null);
+  const [selectedId, setSelectedId] = usePageSelection('reports', 'report');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [listError, setListError] = useState('');
+  const listRequest = useRef(0);
+  const lifetime = useRef(0);
+
+  const refresh = useCallback(async (preferredId?: string) => {
+    const request = ++listRequest.current;
+    setReports(null);
+    setListError('');
+    try {
+      const items = await listReports(aquariumId);
+      if (request !== listRequest.current) return false;
+      setReports(items);
+      setSelectedId((current) => {
+        const wanted = preferredId ?? current;
+        return items.some((item) => item.id === wanted) ? wanted : items[0]?.id ?? '';
+      });
+      return true;
+    } catch (err) {
+      if (request !== listRequest.current) return false;
+      console.error(err);
+      setReports([]);
+      setListError('Past reports could not be loaded. Check your connection and try again.');
+      return false;
+    }
+  }, [aquariumId, setSelectedId]);
+
+  useEffect(() => {
+    const requests = listRequest;
+    const scope = lifetime;
+    const timer = window.setTimeout(() => { void refresh(); }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      // Ignore completions after a tank switch, unmount or Strict Mode replay.
+      requests.current++;
+      scope.current++;
+    };
+  }, [refresh]);
+
+  const onGenerate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const startedIn = lifetime.current;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await generateReport({ aquariumId, reportType, startDate, ...(reportType === 'custom' ? { endDate } : {}) });
+      if (startedIn !== lifetime.current) return;
+      const applied = await refresh(result.reportId);
+      if (applied && startedIn === lifetime.current) setNotice('Report ready.');
+    } catch (err) {
+      if (startedIn !== lifetime.current) return;
+      setError(err instanceof Error ? err.message : 'The report could not be generated.');
+    } finally {
+      if (startedIn === lifetime.current) setBusy(false);
+    }
+  };
+
+  const open = async (path: string | null) => {
+    if (!path) return;
+    const startedIn = lifetime.current;
+    setError('');
+    try {
+      const url = await reportFileUrl(path);
+      if (startedIn !== lifetime.current) return;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      if (startedIn !== lifetime.current) return;
+      setError(err instanceof Error ? err.message : 'The file could not be opened.');
+    }
+  };
 
   const selected = reports?.find((item) => item.id === selectedId) ?? null;
 
@@ -132,7 +163,7 @@ export default function Reports() {
           <form onSubmit={onGenerate} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5 xl:items-end">
             <div className="space-y-1">
               <label htmlFor={tankId} className="block text-sm font-medium text-slate-200">Aquarium</label>
-              <select id={tankId} className={selectClass} value={aquariumId} onChange={(event) => setAquariumId(event.target.value)}>
+              <select id={tankId} className={selectClass} value={aquariumId} onChange={(event) => onAquariumChange(event.target.value)}>
                 {aquariums.map((aquarium) => <option key={aquarium.id} value={aquarium.id}>{aquarium.name}</option>)}
               </select>
             </div>
@@ -168,7 +199,7 @@ export default function Reports() {
       <Card>
         <CardHeader className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-white">Past reports</h3>
-          <Button variant="ghost" size="sm" onClick={() => void refresh(aquariumId)} aria-label="Refresh the list of reports">
+          <Button variant="ghost" size="sm" onClick={() => void refresh()} aria-label="Refresh the list of reports">
             <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
           </Button>
         </CardHeader>

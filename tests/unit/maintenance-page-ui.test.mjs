@@ -123,6 +123,6 @@ test('offline or not-yet-evaluated aquariums can log maintenance, but simulated 
 
 test('page adds no independent backend calls or cleaning-rule calculations', () => {
   const source = read('views/Maintenance.tsx');
-  assert.match(source, /useDashboardController\(\)/);
+  assert.match(source, /useDashboardController\('maintenance'\)/);
   assert.doesNotMatch(source, /firebase|logMaintenance\(|updateDoc|setDoc|computeCleaningSchedule|refreshCleaningSchedule|CYCLE_RESET_WATER_CHANGE_PCT/);
 });

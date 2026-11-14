@@ -62,6 +62,7 @@ export async function listAllAudit(): Promise<AuditEntry[]> {
 
 const ACTION_LABELS: Record<string, string> = {
   'device.claim': 'Claimed a device',
+  'device.hardware.confirm': 'Confirmed installed device hardware',
   'invite.create': 'Created an invite',
   'invite.accept': 'Accepted an invite',
   'invite.revoke': 'Revoked an invite',

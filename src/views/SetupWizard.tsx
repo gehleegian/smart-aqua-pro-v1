@@ -7,6 +7,9 @@ import LoadingState from '../components/ui/LoadingState';
 import StatusMessage from '../components/ui/StatusMessage';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import ThresholdReview from '../components/condition/ThresholdReview';
+import HardwareChecklist from '../components/setup/HardwareChecklist';
+import { readHardwareSetup, confirmHardwareSetup } from '../services/hardwareSetupService';
+import { needsHardwareConfirmation, parseHardwareInventory, type HardwareInventory } from '../utils/hardwareInventory';
 import { useOrg } from '../hooks/useOrg';
 import { useRuleConfig } from '../hooks/useRuleConfig';
 import { getAquariumById, updateAquarium } from '../services/aquariumService';
@@ -14,7 +17,7 @@ import { getSetupTarget, setSetupTarget } from '../services/orgContext';
 import { computeBioload, selectSpeciesConfig } from '../utils/monitoringAssessmentCore';
 import { parseFishWeights, resizeFishWeights } from '../utils/aquariumProfileCalculations';
 
-const STEPS = ['Tank', 'Filter', 'Fish', 'Thresholds'] as const;
+const STEPS = ['Tank', 'Hardware', 'Filter', 'Fish', 'Thresholds'] as const;
 type StepName = typeof STEPS[number];
 const BIOLOAD_LABEL: Record<string, string> = { light: 'Light', moderate: 'Moderate', heavy: 'Heavy' };
 /** The working volume is flagged when it differs this much from L×W×H. */
@@ -51,16 +54,20 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
   const [fishWeights, setFishWeights] = useState<string[]>(['']);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [hardware, setHardware] = useState<HardwareInventory>({ sensors: [], equipment: [] });
+  const [hardwareRequired, setHardwareRequired] = useState(false);
+  const [hardwareAcknowledged, setHardwareAcknowledged] = useState(false);
+  const [hardwareFilterLocked, setHardwareFilterLocked] = useState(false);
+  const steps: readonly StepName[] = hardwareRequired ? STEPS : STEPS.filter(item => item !== 'Hardware');
 
   useEffect(() => {
     if (!aquariumId) return;
     getAquariumById(aquariumId)
-      .then((data) => {
+      .then(async (data) => {
         if (!data) {
           setLoadError('Aquarium not found.');
           return;
         }
-        setAquarium(data);
         setName(typeof data.name === 'string' ? data.name : '');
         const read = (key: string) => (typeof data[key] === 'number' ? String(data[key]) : '');
         setLength(read('tankLengthCm'));
@@ -77,6 +84,14 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
           setFishCount(String(data.fishCount));
           setFishWeights(data.fishWeightsG.map(String));
         }
+        if (needsHardwareConfirmation(data.deviceId, data.status)) {
+          const state = await readHardwareSetup(aquariumId);
+          setHardware(state.inventory || { sensors: [], equipment: [] });
+          setHardwareRequired(!state.confirmed);
+          setHardwareFilterLocked(true);
+          if (state.inventory) setHasFilter(state.inventory.equipment.includes('filter'));
+        }
+        setAquarium(data);
       })
       .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : 'Aquarium could not be loaded.'));
   }, [aquariumId]);
@@ -113,7 +128,7 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
   if (loadError) return <StatusMessage variant="error">{loadError}</StatusMessage>;
   if (!aquarium) return <LoadingState label="Loading aquarium..." />;
 
-  const stepIndex = STEPS.indexOf(step);
+  const stepIndex = steps.indexOf(step);
   const validate = (target: StepName): string => {
     if (target === 'Tank') {
       if (!name.trim()) return 'Give the aquarium a name.';
@@ -121,6 +136,11 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
       if (!effectiveVolume) return 'Enter the working water volume in litres.';
     }
     if (target === 'Filter' && hasFilter && !filterType.trim()) return 'Enter the filter type, or choose "No filter".';
+    if (target === 'Hardware') {
+      try { parseHardwareInventory(hardware); }
+      catch (err) { return err instanceof Error ? err.message : 'Check the hardware inventory.'; }
+      if (!hardwareAcknowledged) return 'Confirm the installed hardware checklist before continuing.';
+    }
     if (target === 'Fish') {
       if (!Number.isInteger(count) || count < 1 || count > 100) return 'Fish count must be a whole number from 1 to 100.';
       if (!weights) return 'Enter a weight in grams for every fish.';
@@ -130,11 +150,11 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
   const next = () => {
     const problem = validate(step);
     setError(problem);
-    if (!problem) setStep(STEPS[stepIndex + 1]);
+    if (!problem) setStep(steps[stepIndex + 1]);
   };
 
   const finish = async () => {
-    const problem = STEPS.map(validate).find(Boolean);
+    const problem = steps.map(validate).find(Boolean);
     if (problem || !effectiveVolume || !weights || !calculatedVolume) {
       setError(problem || 'Some details are missing.');
       return;
@@ -142,6 +162,10 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
     setSaving(true);
     setError('');
     try {
+      if (hardwareRequired) {
+        await confirmHardwareSetup(aquariumId, parseHardwareInventory(hardware));
+        setHardwareRequired(false); // Keep confirmed hardware locked if profile saving needs a retry.
+      }
       await updateAquarium(aquariumId, {
         name: name.trim(),
         species: ['Goldfish'],
@@ -175,7 +199,7 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
         <Badge variant="warning">Setup</Badge>
       </div>
       <ol className="flex flex-wrap gap-2 text-xs" aria-label="Setup steps">
-        {STEPS.map((item, index) => (
+        {steps.map((item, index) => (
           <li key={item} aria-current={item === step ? 'step' : undefined}
             className={`rounded-full border px-3 py-1 ${item === step ? 'border-teal-300/50 bg-teal-500/15 text-teal-100' : index < stepIndex ? 'border-emerald-400/30 text-emerald-300' : 'border-slate-600/40 text-slate-400'}`}>
             {index + 1}. {item}
@@ -187,6 +211,10 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
       <Card>
         <CardHeader><h4 className="font-semibold text-white">{step}</h4></CardHeader>
         <CardContent className="space-y-4">
+          {step === 'Hardware' && <HardwareChecklist value={hardware} acknowledged={hardwareAcknowledged}
+            onAcknowledge={setHardwareAcknowledged} onChange={value => {
+              setHardware(value); setHardwareAcknowledged(false); setHasFilter(value.equipment.includes('filter'));
+            }} />}
           {step === 'Tank' && (
             <>
               <Input label="Aquarium name" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} />
@@ -215,10 +243,10 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
 
           {step === 'Filter' && (
             <>
-              <div className="flex gap-3" role="radiogroup" aria-label="Filtration">
+              {hardwareFilterLocked ? <p className="text-sm text-slate-300">{hasFilter ? 'Filtration is installed' : 'No filtration installed'} according to the hardware inventory.</p> : <div className="flex gap-3" role="radiogroup" aria-label="Filtration">
                 <Button variant={hasFilter ? 'primary' : 'secondary'} onClick={() => setHasFilter(true)} aria-pressed={hasFilter}>Has a filter</Button>
                 <Button variant={!hasFilter ? 'primary' : 'secondary'} onClick={() => setHasFilter(false)} aria-pressed={!hasFilter}>No filter</Button>
-              </div>
+              </div>}
               {hasFilter && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input label="Filter type" placeholder="e.g. Hang-on-back" maxLength={80} value={filterType} onChange={(event) => setFilterType(event.target.value)} />
@@ -271,7 +299,7 @@ export default function SetupWizard({ onNavigate }: { onNavigate: (page: string)
           )}
 
           <div className="flex flex-wrap gap-3 border-t border-slate-600/30 pt-4">
-            {stepIndex > 0 && <Button variant="ghost" onClick={() => { setError(''); setStep(STEPS[stepIndex - 1]); }} disabled={saving}>Back</Button>}
+            {stepIndex > 0 && <Button variant="ghost" onClick={() => { setError(''); setStep(steps[stepIndex - 1]); }} disabled={saving}>Back</Button>}
             {step !== 'Thresholds' ? (
               <Button onClick={next}>Next</Button>
             ) : (

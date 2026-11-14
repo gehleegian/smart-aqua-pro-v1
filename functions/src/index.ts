@@ -44,6 +44,7 @@ import {
 } from './orgAccess.js';
 import { checkDeviceHeartbeats, refreshCleaningSchedule, runDailyCleaningCheck } from './scheduledChecks.js';
 import { logMaintenance as logMaintenanceCore } from './maintenance.js';
+import { deviceHardwareSetup as deviceHardwareSetupCore } from './hardwareSetup.js';
 import { approveRuleConfig as approveRuleConfigCore, saveRuleConfig as saveRuleConfigCore } from './ruleAdmin.js';
 import { markUnansweredCommands, recordAck, recordCommand } from './commandLog.js';
 import {
@@ -618,6 +619,16 @@ export const onMaintenanceActionLogged = onDocumentCreated(
 // FR20: owners and assigned caretakers log maintenance; a linked
 // recommendation becomes 'applied'; a cleaning starts a new cleaning cycle
 // through onMaintenanceActionLogged above.
+export const deviceHardwareSetup = onCall<CallableData>(callableOptions, async (request) => {
+  const actor = requireOrgActor(request);
+  const data = request.data ?? {};
+  try {
+    return await deviceHardwareSetupCore({ firestore: dependencies.firestore }, actor, {
+      aquariumId: data.aquariumId, mode: data.mode, inventory: data.inventory, confirmed: data.confirmed,
+    });
+  } catch (error) { return callableFailure(error); }
+});
+
 export const logMaintenance = onCall<CallableData>(callableOptions, async (request) => {
   const actor = requireOrgActor(request);
   try {

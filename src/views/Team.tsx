@@ -64,6 +64,7 @@ export default function Team() {
   const [email, setEmail] = useState('');
   const [inviteTanks, setInviteTanks] = useState<string[]>([]);
   const [createdLink, setCreatedLink] = useState('');
+  const [createdFor, setCreatedFor] = useState('');
   const [busy, setBusy] = useState('');
   const [editing, setEditing] = useState<TeamMember | null>(null);
   const [editTanks, setEditTanks] = useState<string[]>([]);
@@ -113,7 +114,9 @@ export default function Team() {
 
   const handleInvite = () =>
     run('invite', async () => {
+      setCreatedLink('');
       const result = await createInvite({ orgId, email: email.trim(), aquariumIds: inviteTanks });
+      setCreatedFor(`${email.trim()} — ${inviteTanks.map(tankName).join(', ')}`);
       setCreatedLink(inviteLink(result.path));
       setEmail('');
       setInviteTanks([]);
@@ -148,6 +151,7 @@ export default function Team() {
           </Button>
           {createdLink && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-teal-300/30 bg-teal-500/10 p-3">
+              <p className="w-full text-sm text-teal-100">Created for: {createdFor}</p>
               <code className="min-w-0 flex-1 break-all text-xs text-teal-100">{createdLink}</code>
               <Button size="sm" variant="secondary" onClick={() => void copyLink()}><Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy link</Button>
             </div>

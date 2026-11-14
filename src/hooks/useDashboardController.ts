@@ -1,4 +1,5 @@
 import { consumeTankFocus } from '../services/tankFocus';
+import { usePageSelection } from './usePageSelection';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import {
@@ -21,14 +22,14 @@ import {
 } from '../utils/dashboardHelpers';
 import { useAquariumEngineStates, useRuleConfig } from './useRuleConfig';
 
-export function useDashboardController() {
+export function useDashboardController(page = 'dashboard') {
   const [dashboardAquariums, setDashboardAquariums] = useState<DashboardAquarium[]>([]);
   const [deviceShadows, setDeviceShadows] = useState<Record<string, DeviceShadow>>({});
   const [deviceSubscriptionErrors, setDeviceSubscriptionErrors] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<UserRole>('User');
   const [adminUsers, setAdminUsers] = useState<UserData[]>([]);
   const [aquariumDirectory, setAquariumDirectory] = useState<AquariumDirectoryEntry[]>([]);
-  const [selectedTankId, setSelectedTankId] = useState(() => consumeTankFocus());
+  const [selectedTankId, setSelectedTankId] = usePageSelection(page, 'aquarium', '', consumeTankFocus);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [telemetryNow, setTelemetryNow] = useState(() => Date.now());
@@ -83,7 +84,7 @@ export function useDashboardController() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setSelectedTankId]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {

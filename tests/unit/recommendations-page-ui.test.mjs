@@ -90,7 +90,7 @@ test('page reuses the existing recommendation panel, expanded for the selected a
   assert.equal(panel.props.aquariumName, 'Aquarium A');
   assert.equal(panel.props.defaultOpen, true);
   const source = read('views/Recommendations.tsx');
-  assert.match(source, /useDashboardController\(\)/);
+  assert.match(source, /useDashboardController\('recommendations'\)/);
   assert.doesNotMatch(source, /publishDeviceCommand|syncDeviceControlProfile|updateAquarium|setDoc|setStatus/);
 });
 

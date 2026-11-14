@@ -54,7 +54,7 @@ export function AdminDashboardView({
       <div>
         <h2 className="text-xl font-semibold text-white">System Membership Overview</h2>
         <p className="mt-1 text-sm text-slate-300">
-          Registration and aquarium ownership records only. Live readings and device controls are not available to administrators.
+          Registration and aquarium ownership records. Device connectivity is available in Device Inventory; equipment controls remain restricted to authorized owners and caretakers.
         </p>
       </div>
 

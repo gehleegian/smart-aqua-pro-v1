@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 interface UserAquariumListProps {
   aquariums: MonitoringAquarium[];
   userName: string;
+  organizationName?: string;
+  membershipRole?: 'owner' | 'caretaker' | null;
   onRefresh: () => void;
   onSelectAquarium: (aquarium: MonitoringAquarium) => void;
 }
@@ -18,6 +20,8 @@ interface UserAquariumListProps {
 export function UserAquariumList({
   aquariums,
   userName,
+  organizationName,
+  membershipRole,
   onRefresh,
   onSelectAquarium,
 }: UserAquariumListProps) {
@@ -28,7 +32,8 @@ export function UserAquariumList({
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-white">Monitoring</h3>
-            <p className="mt-1 text-sm text-slate-400">{userName}</p>
+            <p className="mt-1 text-sm text-slate-300">Organization: {organizationName || 'No organization selected'}</p>
+            <p className="mt-1 text-xs text-slate-400">Signed in as {userName}{membershipRole ? ` · ${membershipRole === 'owner' ? 'Owner' : 'Caretaker'}` : ''}</p>
           </div>
           <Button variant="secondary" onClick={onRefresh}>
             <RefreshCw className="h-4 w-4" />

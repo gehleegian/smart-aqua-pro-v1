@@ -74,34 +74,61 @@ body {
 
 .smart-aqua-app[data-theme='light'] {
   color-scheme: light;
-  --color-slate-50: #082f49;
-  --color-slate-100: #0f172a;
-  --color-slate-200: #1e293b;
-  --color-slate-300: #334155;
-  --color-slate-400: #475569;
-  --color-slate-500: #64748b;
-  --color-slate-600: #9fb3bf;
-  --color-slate-700: #d9e7ec;
-  --color-slate-800: #eef6f8;
-  --color-slate-900: #ffffff;
-  --color-slate-950: #f6fafb;
-  background:
-    radial-gradient(circle at 18% 8%, rgba(14, 165, 164, 0.13), transparent 26rem),
-    linear-gradient(180deg, #f8fcfd 0%, #edf7f8 48%, #e7f1f5 100%);
+  /* Muted, low-glare surfaces; keep foregrounds dark rather than fading text. */
+  --color-slate-50: #1d3437;
+  --color-slate-100: #243b3e;
+  --color-slate-200: #2d4749;
+  --color-slate-300: #3e595a;
+  --color-slate-400: #4c6364;
+  --color-slate-500: #4c6364;
+  --color-slate-600: #6b837d;
+  --color-slate-700: #bfd3ce;
+  --color-slate-800: #d3dfdc;
+  --color-slate-900: #e7eeeb;
+  --color-slate-950: #dce5e3;
+  --color-teal-600: #17685f;
+  --color-teal-500: #12574f;
+  --color-rose-600: #a3344a;
+  --color-rose-500: #8e293e;
+  --color-red-600: #a3344a;
+  --color-red-500: #8e293e;
+  background: #dce5e3;
+  color: #243b3e;
 }
 
 .smart-aqua-app[data-theme='light'] * {
-  scrollbar-color: #9fb3bf #e7f1f5;
+  scrollbar-color: #6b837d #dce5e3;
 }
 
 .smart-aqua-app[data-theme='light'] input,
 .smart-aqua-app[data-theme='light'] select,
 .smart-aqua-app[data-theme='light'] textarea {
   color-scheme: light;
+  caret-color: #243b3e;
+}
+
+.smart-aqua-app[data-theme='light'] .formal-input {
+  background: #e7eeeb;
+  color: #243b3e;
+  border-color: #6b837d;
+}
+
+.smart-aqua-app[data-theme='light'] .formal-input::placeholder {
+  color: #4c6364;
+}
+
+.smart-aqua-app[data-theme='light'] .formal-input:focus {
+  background: #e7eeeb;
+  border-color: #17685f;
+  box-shadow: 0 0 0 3px rgb(23 104 95 / 18%);
+}
+
+.smart-aqua-app[data-theme='light'] :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: #17685f;
 }
 
 .smart-aqua-app[data-theme='light'] .text-white {
-  color: #0f172a;
+  color: #243b3e;
 }
 
 .smart-aqua-app[data-theme='light'] .bg-teal-600.text-white,
@@ -129,21 +156,24 @@ body {
   transition: background-color 9999s ease-out;
 }
 
-.smart-aqua-app[data-theme='light'] :is(.text-teal-100, .text-teal-200, .text-teal-300) {
-  color: #0f766e;
+.smart-aqua-app[data-theme='light'] :is(.text-teal-50, .text-teal-100, .text-teal-200, .text-teal-300, .text-teal-400) {
+  color: #17685f;
 }
 
-.smart-aqua-app[data-theme='light'] :is(.text-rose-200, .text-rose-300, .text-red-300, .text-red-400) {
-  color: #be123c;
+.smart-aqua-app[data-theme='light'] :is(.text-rose-50, .text-rose-100, .text-rose-200, .text-rose-300, .text-rose-400, .text-red-100, .text-red-200, .text-red-300, .text-red-400) {
+  color: #a3344a;
 }
 
-.smart-aqua-app[data-theme='light'] :is(.text-amber-200, .text-amber-300, .text-amber-400) {
-  color: #92400e;
+.smart-aqua-app[data-theme='light'] :is(.text-amber-50, .text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-yellow-200, .text-yellow-300, .text-yellow-400) {
+  color: #80520c;
 }
 
-.smart-aqua-app[data-theme='light'] :is(.text-emerald-300, .text-emerald-400) {
-  color: #047857;
+.smart-aqua-app[data-theme='light'] :is(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400) {
+  color: #236747;
 }
+
+.smart-aqua-app[data-theme='light'] :is(.text-green-300, .text-green-400) { color: #236747; }
+.smart-aqua-app[data-theme='light'] :is(.text-sky-300, .text-cyan-300) { color: #17685f; }
 
 @keyframes swim {
   0%, 100% { transform: translateX(0) scaleX(1); }

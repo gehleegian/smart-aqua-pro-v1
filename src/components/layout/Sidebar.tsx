@@ -68,6 +68,7 @@ const menuGroups: { label: string; items: MenuItem[] }[] = [
       { id: 'datalogs', label: 'Data Logs', icon: BarChart3, roles: ['owner', 'caretaker'] },
       { id: 'reports', label: 'Reports', icon: FileBarChart, roles: ['owner', 'caretaker'] },
       { id: 'organizations', label: 'Organizations', icon: Building2, roles: ['Admin'] },
+      { id: 'device-inventory', label: 'Device Inventory', icon: Cpu, roles: ['Admin'] },
       { id: 'users', label: 'User Directory', icon: Users, roles: ['Admin'] },
       { id: 'rules', label: 'Rules Editor', icon: SlidersHorizontal, roles: ['Admin'] },
       { id: 'admin-audit', label: 'Audit Log', icon: ScrollText, roles: ['Admin'] },

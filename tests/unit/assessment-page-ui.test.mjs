@@ -83,7 +83,7 @@ test('assessment page reuses existing read-only data and explains missing valid 
   assert.match(html, /for="assessment-aquarium"/);
   assert.match(html, /Aquarium A/);
   assert.match(html, /Aquarium B/);
-  assert.match(read('views/Assessment.tsx'), /useDashboardController\(\)/);
+  assert.match(read('views/Assessment.tsx'), /useDashboardController\('assessment'\)/);
   assert.match(read('views/Assessment.tsx'), /<RecommendationsPanel/);
   assert.doesNotMatch(read('views/Assessment.tsx'), /publishDeviceCommand|syncDeviceControlProfile|updateAquarium|setDoc|setStatus/);
 });

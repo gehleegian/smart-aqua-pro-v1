@@ -9,7 +9,7 @@ import { requestTankFocus } from '../services/tankFocus';
 
 export default function Recommendations({ onNavigate }: { onNavigate: (page: string) => void }) {
   // Use the same member-scoped aquarium selection as Assessment and Dashboard.
-  const dashboard = useDashboardController();
+  const dashboard = useDashboardController('recommendations');
   if (dashboard.loading) return <LoadingState label="Loading recommendations..." />;
   if (dashboard.error) return <StatusMessage variant="error">{dashboard.error}</StatusMessage>;
 
