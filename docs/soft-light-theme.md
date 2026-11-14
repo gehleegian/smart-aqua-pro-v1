@@ -24,6 +24,9 @@ an icon-only log out.
 `tests/unit/soft-light-theme.test.mjs` checks WCAG contrast (at least 4.5:1)
 for text on page, card and secondary surfaces in both themes and for navy
 text on the sky-blue fills. It does not audit every transparent overlay or
-chart colour. The mobile app has its own palette (`smart-aqua-mobile`) and was
-not restyled in this change; the web/mobile palette comparison test fails
-until the mobile palette file exists and matches.
+chart colour.
+
+The mobile app (`smart-aqua-mobile/src/constants/theme.ts`) uses the same
+values and follows the phone's system light/dark setting
+(`userInterfaceStyle: "automatic"`). The web test compares the two palettes,
+and the mobile `__tests__/theme-contrast.test.ts` checks contrast there.

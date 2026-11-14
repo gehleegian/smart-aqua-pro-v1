@@ -1,7 +1,6 @@
 import { RefreshCw } from 'lucide-react';
-import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
 import type { MonitoringAquarium } from '../../types/monitoring';
-import { getAutomationSettings } from '../../utils/monitoringHelpers';
+import { getAutomationSettings, getMonitoringSummaryLine } from '../../utils/monitoringHelpers';
 import { nextScheduledText } from '../../utils/schedule';
 import { useNow } from '../../hooks/useNow';
 import Button from '../ui/Button';
@@ -55,9 +54,7 @@ export function UserAquariumList({
                 <AquariumConditionBadge aquarium={aquarium} />
               </div>
               <p className="mt-2 text-sm text-slate-400">
-                {aquarium.hasFreshTelemetry
-                  ? `${aquarium.temp.toFixed(1)} °C · ${formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry !== false)} level · ${typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm TDS` : 'TDS --'}`
-                  : 'Waiting for valid telemetry'}
+{getMonitoringSummaryLine(aquarium)}
               </p>
               {aquarium.automationSettings?.enabled && nextScheduledText(getAutomationSettings(aquarium), now) ? (
                 // Only a schedule the owner saved, never the built-in defaults.

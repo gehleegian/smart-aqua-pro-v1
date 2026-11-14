@@ -1,7 +1,7 @@
 import { RefreshCw, Users } from 'lucide-react';
 import type { MonitoringOwner } from '../../types/monitoring';
-import { formatWaterLevel } from '../../utils/monitoringAssessmentCore';
 import Button from '../ui/Button';
+import { getMonitoringSummaryLine } from '../../utils/monitoringHelpers';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
 interface AdminMonitoringViewProps {
@@ -45,9 +45,7 @@ export function AdminMonitoringView({
                 <div key={aquarium.id} className="rounded-lg border border-slate-600/30 bg-slate-900/35 p-4">
                   <p className="font-medium text-white">{aquarium.name}</p>
                   <p className="mt-1 text-sm text-slate-400">
-                    {aquarium.hasFreshTelemetry
-                      ? `${Number.isFinite(aquarium.temp) ? `${aquarium.temp.toFixed(1)}°C` : '--'} · ${formatWaterLevel(aquarium.level, aquarium.hasFreshWaterLevelTelemetry !== false)} level · ${typeof aquarium.tdsPpm === 'number' ? `${Math.round(aquarium.tdsPpm)} ppm TDS` : 'TDS --'}`
-                      : 'Waiting for valid telemetry'}
+{getMonitoringSummaryLine(aquarium)}
                   </p>
                 </div>
               ))}

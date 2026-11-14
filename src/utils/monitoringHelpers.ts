@@ -5,6 +5,8 @@ import type {
   ManualSystemStatus,
 } from '../types/aquarium';
 import { getDeviceTelemetryStatusText } from '../types/device';
+import { getSensorDisplay } from './sensorDisplay';
+import { formatWaterLevel } from './monitoringAssessmentCore';
 import type {
   ManualActionDisplay,
   ManualActionLock,
@@ -377,4 +379,21 @@ export function prepareAutomationSettings(draft: AutomationSettings):
     },
     error: '',
   };
+}
+
+/**
+ * One-line reading summary for aquarium lists. Every value passes the same
+ * per-sensor validity gate as the detail page, so a missing or faulty sensor
+ * shows "--" or "Sensor error" and a stored profile value is never shown as live.
+ */
+export function getMonitoringSummaryLine(aquarium: MonitoringAquarium): string {
+  if (!aquarium.hasFreshTelemetry) return `${getDeviceTelemetryStatusText(aquarium.telemetryState)}. No current readings.`;
+  const temperature = getSensorDisplay(aquarium.sensorValidity, 'temperature', true,
+    () => (Number.isFinite(aquarium.temp) ? `${aquarium.temp.toFixed(1)} °C` : '--'));
+  const level = aquarium.hasFreshWaterLevelTelemetry === false
+    ? '--'
+    : getSensorDisplay(aquarium.sensorValidity, 'waterLevel', true, () => formatWaterLevel(aquarium.level)).value;
+  const tds = getSensorDisplay(aquarium.sensorValidity, 'tds', true,
+    () => (typeof aquarium.tdsPpm === 'number' && Number.isFinite(aquarium.tdsPpm) ? `${Math.round(aquarium.tdsPpm)} ppm` : '--'));
+  return `Temp ${temperature.value} · Level ${level} · TDS ${tds.value}`;
 }

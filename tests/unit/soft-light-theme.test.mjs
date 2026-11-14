@@ -46,7 +46,13 @@ test('formal inputs, focus rings and status text adapt to light mode', () => {
   assert.match(css, /\[data-theme='light'\][^{}]*\.text-amber-100[^{}]*\{\s*color: #92400e;/);
 });
 
-test('web and mobile agree on primary soft-light surfaces and text', () => {
-  const mobile = readFileSync(new URL('../../../smart-aqua-mobile/src/constants/light-palette.ts', import.meta.url), 'utf8');
-  for (const [key, value] of [['text', token('slate-100')], ['background', token('slate-950')], ['panel', token('slate-900')], ['backgroundElement', token('slate-800')], ['accentStrong', token('teal-600')]]) assert.ok(mobile.includes(`${key}: '${value}'`));
+test('web and mobile use the same light palette for page, cards, text and accent', () => {
+  const mobile = readFileSync(new URL('../../../smart-aqua-mobile/src/constants/theme.ts', import.meta.url), 'utf8');
+  const lightBlock = mobile.slice(mobile.indexOf('light: {'), mobile.indexOf('dark: {'));
+  for (const [key, value] of [['text', token('slate-100')], ['background', token('slate-950')], ['panel', token('slate-900')], ['backgroundElement', token('slate-800')], ['accentStrong', token('teal-600')]]) {
+    assert.ok(lightBlock.includes(`${key}: '${value}'`), `mobile light ${key} should be ${value}`);
+  }
+  const darkBlock = mobile.slice(mobile.indexOf('dark: {'));
+  assert.ok(darkBlock.includes(`background: '${darkToken('slate-950')}'`), 'mobile dark background matches web');
+  assert.ok(darkBlock.includes(`accentStrong: '${darkToken('teal-600')}'`), 'mobile dark accent matches web');
 });
