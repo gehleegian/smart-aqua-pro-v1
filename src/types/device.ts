@@ -149,6 +149,22 @@ export type DeviceTelemetryState = 'live' | 'offline' | 'unavailable';
 export const DEVICE_TELEMETRY_STALE_MS = TELEMETRY_STALE_MS;
 const DEVICE_TELEMETRY_EPOCH_FLOOR = TELEMETRY_EPOCH_FLOOR;
 let deviceTelemetryClockOffsetMs = 0;
+// This browser's own Realtime Database connection (.info/connected). When it
+// drops after having been connected, a quiet device cannot be told apart from
+// the viewer's lost connection, so device state becomes 'unavailable' instead
+// of a misleading 'offline'. null = not tracked (no live subscription).
+let viewerRealtimeConnected: boolean | null = null;
+let viewerRealtimeEverConnected = false;
+
+export function setViewerRealtimeConnected(connected: boolean | null) {
+  if (connected === null) viewerRealtimeEverConnected = false;
+  if (connected === true) viewerRealtimeEverConnected = true;
+  viewerRealtimeConnected = connected;
+}
+
+export function isViewerRealtimeConnectionLost() {
+  return viewerRealtimeEverConnected && viewerRealtimeConnected === false;
+}
 
 export function setDeviceTelemetryClockOffsetMs(offsetMs: number) {
   if (!Number.isFinite(offsetMs)) {
@@ -226,6 +242,7 @@ export function getDeviceTelemetryState(
   telemetry: DeviceTelemetry | null | undefined,
   now = Date.now()
 ): DeviceTelemetryState {
+  if (isViewerRealtimeConnectionLost()) return 'unavailable';
   return getTelemetryFreshness(telemetry, now + deviceTelemetryClockOffsetMs, { allowClockSkew: true });
 }
 
@@ -251,7 +268,10 @@ export function getReportedManualStatus(
   };
 }
 
+export const VIEWER_CONNECTION_LOST_TEXT = 'Connection lost: device status cannot be confirmed';
+
 export function getDeviceTelemetryStatusText(state: DeviceTelemetryState) {
+  if (state === 'unavailable' && isViewerRealtimeConnectionLost()) return VIEWER_CONNECTION_LOST_TEXT;
   return state === 'offline' ? 'Device offline' : state === 'unavailable' ? 'No live data' : 'Live data';
 }
 

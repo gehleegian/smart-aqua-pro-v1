@@ -19,7 +19,6 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
-import UnderwaterBackground from '../components/ui/UnderwaterBackground';
 
 type FeedPellet = {
   id: string;
@@ -222,14 +221,14 @@ const focusRing =
 const navLinkClassName = `rounded text-sm text-slate-200 transition-colors hover:text-white ${focusRing}`;
 const glassCardClassName =
   'rounded-2xl border border-teal-100/10 bg-slate-950/55 shadow-lg shadow-slate-950/20 transition-colors hover:border-teal-200/30';
-const primaryButtonClassName = `inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 font-semibold text-white shadow-lg shadow-teal-950/30 transition-colors hover:bg-teal-500 ${focusRing}`;
+const primaryButtonClassName = `inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 font-semibold text-white transition-colors hover:bg-teal-500 ${focusRing}`;
 const fieldClassName =
   'w-full rounded-lg border border-slate-600/50 bg-slate-950/45 px-4 py-2.5 text-sm text-slate-50 placeholder-slate-400 focus:border-teal-300 focus:outline-2 focus:outline-offset-1 focus:outline-teal-300/60';
 
 function BrandMark() {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/15 ring-1 ring-teal-300/30">
-      <Waves className="h-5 w-5 text-teal-200" aria-hidden="true" />
+    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600">
+      <Waves className="h-5 w-5 text-teal-950" aria-hidden="true" />
     </div>
   );
 }
@@ -489,11 +488,10 @@ export default function Landing({ onGetStarted }: { onGetStarted: () => void }) 
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-slate-950">
-      <UnderwaterBackground descendOnScroll />
+    <div className="relative min-h-screen overflow-x-clip bg-black">
 
       <nav aria-label="Main" className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between rounded-xl border border-teal-100/15 bg-slate-950/65 px-3 shadow-lg shadow-slate-950/25 backdrop-blur-md md:px-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between rounded-xl border border-slate-700 bg-slate-900/90 px-3 md:px-4">
           <a href="#home" className={`flex items-center gap-3 rounded-lg ${focusRing}`}>
             <BrandMark />
             <span className="text-base font-bold text-white">

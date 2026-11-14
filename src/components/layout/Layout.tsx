@@ -1,34 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Dashboard from '../../views/Dashboard';
-import Monitoring from '../../views/Monitoring';
-import Assessment from '../../views/Assessment';
-import Recommendations from '../../views/Recommendations';
-import Maintenance from '../../views/Maintenance';
-import Automation from '../../views/Automation';
-import Alerts from '../../views/Alerts';
-import DataLogs from '../../views/DataLogs';
-import Aquariums from '../../views/Aquariums';
-import Users from '../../views/Users';
-import Settings from '../../views/Settings';
 import Login from '../../views/Login';
 import Landing from '../../views/Landing';
 import Signup from '../../views/Signup';
-import Support from '../../views/Support';
-import AddDevice from '../../views/AddDevice';
-import SetupWizard from '../../views/SetupWizard';
-import Team from '../../views/Team';
-import Organizations from '../../views/Organizations';
-import DeviceInventory from '../../views/DeviceInventory';
-import AcceptInvite from '../../views/AcceptInvite';
-import AuditLog, { AdminAuditLog } from '../../views/AuditLog';
-import RulesEditor from '../../views/RulesEditor';
-import Reports from '../../views/Reports';
 import ConfirmModal from '../ui/ConfirmModal';
+import LoadingState from '../ui/LoadingState';
+import PageLoadBoundary from './PageLoadBoundary';
 import NoOrgState, { SuspendedOrgState } from '../org/NoOrgState';
 import type { NavRole } from './Sidebar';
 import { useOrg } from '../../hooks/useOrg';
@@ -49,7 +31,32 @@ import {
 import type { UserData, UserRole } from '../../types/user';
 import { normalizeRole } from '../../utils/roleHelpers';
 
-const pages: Record<string, React.FC<{ onNavigate: (page: string) => void }>> = {
+// Only the first screen (Dashboard) and the signed-out screens load up front.
+// Every other page is split into its own chunk and fetched when opened, which
+// keeps the initial download small on phones.
+const Monitoring = lazy(() => import('../../views/Monitoring'));
+const Assessment = lazy(() => import('../../views/Assessment'));
+const Recommendations = lazy(() => import('../../views/Recommendations'));
+const Maintenance = lazy(() => import('../../views/Maintenance'));
+const Automation = lazy(() => import('../../views/Automation'));
+const Alerts = lazy(() => import('../../views/Alerts'));
+const DataLogs = lazy(() => import('../../views/DataLogs'));
+const Aquariums = lazy(() => import('../../views/Aquariums'));
+const Users = lazy(() => import('../../views/Users'));
+const Settings = lazy(() => import('../../views/Settings'));
+const Support = lazy(() => import('../../views/Support'));
+const AddDevice = lazy(() => import('../../views/AddDevice'));
+const SetupWizard = lazy(() => import('../../views/SetupWizard'));
+const Team = lazy(() => import('../../views/Team'));
+const Organizations = lazy(() => import('../../views/Organizations'));
+const DeviceInventory = lazy(() => import('../../views/DeviceInventory'));
+const AcceptInvite = lazy(() => import('../../views/AcceptInvite'));
+const RulesEditor = lazy(() => import('../../views/RulesEditor'));
+const Reports = lazy(() => import('../../views/Reports'));
+const AuditLog = lazy(() => import('../../views/AuditLog'));
+const AdminAuditLog = lazy(() => import('../../views/AuditLog').then((module) => ({ default: module.AdminAuditLog })));
+
+const pages: Record<string, React.ComponentType<{ onNavigate: (page: string) => void }>> = {
   dashboard: Dashboard,
   monitoring: Monitoring,
   assessment: Assessment,
@@ -376,10 +383,14 @@ export default function Layout() {
     ) : navRole === 'none' && pageId === 'dashboard' ? (
       <NoOrgState onNavigate={handleNavigate} />
     ) : (
-      <PageComponent
-        key={pageId === 'invite' ? `${user.id}:invite` : `${user.id}:${org.active?.orgId ?? ''}:${navRole}`}
-        onNavigate={handleNavigate}
-      />
+      <PageLoadBoundary key={pageId}>
+        <Suspense fallback={<LoadingState label="Loading page..." />}>
+          <PageComponent
+            key={pageId === 'invite' ? `${user.id}:invite` : `${user.id}:${org.active?.orgId ?? ''}:${navRole}`}
+            onNavigate={handleNavigate}
+          />
+        </Suspense>
+      </PageLoadBoundary>
     );
 
   return (

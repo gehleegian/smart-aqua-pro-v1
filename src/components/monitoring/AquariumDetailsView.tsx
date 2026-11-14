@@ -8,7 +8,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { CommandHistory, CommandStatusBadge } from "./CommandHistory";
-import { monitoringAttention, MonitoringAttentionBanner, MonitoringProblemSummary } from './MonitoringAttention';
+import { AquariumConditionBadge, monitoringAttention, MonitoringAttentionBanner, MonitoringProblemSummary } from './MonitoringAttention';
 import { ParameterStatusBadge } from '../condition/ConditionBadges';
 import type { EffectiveThresholds } from '../../utils/monitoringAssessmentCore';
 import { LogMaintenanceModal } from "../maintenance/LogMaintenanceModal";
@@ -22,7 +22,6 @@ import {
 } from "../../utils/sensorDisplay";
 import type { AutomationSettings } from "../../types/aquarium";
 import type {
-  AssessmentSeverity,
   ManualActionDisplay,
   MonitoringAquarium,
   ParameterAssessment,
@@ -73,6 +72,7 @@ interface AquariumDetailsViewProps {
   onBack: () => void;
   onOpenAssessment: () => void;
   onOpenRecommendations: () => void;
+  onOpenAlerts?: () => void;
   onManualAction: (field: SystemField) => void;
   onModeChange: (mode: SystemMode) => void;
   onOpenAutomationEditor: () => void;
@@ -98,6 +98,7 @@ export function AquariumDetailsView({
   onBack,
   onOpenAssessment,
   onOpenRecommendations,
+  onOpenAlerts,
   onManualAction,
   onModeChange,
   onOpenAutomationEditor,
@@ -108,7 +109,6 @@ export function AquariumDetailsView({
   const [logging, setLogging] = useState(false);
   const now = useNow();
   const attention = monitoringAttention(aquarium);
-  const displaySeverity = attention.live ? aquarium.assessment.overallSeverity : 'unavailable';
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -145,7 +145,7 @@ export function AquariumDetailsView({
         </div>
       ) : null}
 
-      <MonitoringAttentionBanner aquarium={aquarium} attention={attention} onRecommendations={onOpenRecommendations} onAssessment={onOpenAssessment} />
+      <MonitoringAttentionBanner aquarium={aquarium} attention={attention} onRecommendations={onOpenRecommendations} onAssessment={onOpenAssessment} onAlerts={onOpenAlerts} />
 
       <Card>
         <CardHeader>
@@ -158,11 +158,7 @@ export function AquariumDetailsView({
                 {aquarium.species.join(", ")}
               </p>
             </div>
-            <Badge
-              variant={getSeverityVariant(displaySeverity)}
-            >
-              {aquarium.telemetrySource} · {displaySeverity}
-            </Badge>
+            <AquariumConditionBadge aquarium={aquarium} />
           </div>
           <p className="mt-3 text-xs text-slate-400">
             Last device update:{" "}
@@ -332,7 +328,7 @@ export function AquariumDetailsView({
         </CardContent>
       </Card>
 
-      <MonitoringProblemSummary attention={attention} thresholds={thresholds} />
+      <MonitoringProblemSummary attention={attention} thresholds={thresholds} aquarium={aquarium} />
 
       {SHOW_WATER_VOLUME_SUMMARY && (
         <WaterVolumeSummary aquarium={aquarium} now={now} />
@@ -591,13 +587,6 @@ export function AquariumDetailsView({
       ) : null}
     </div>
   );
-}
-
-function getSeverityVariant(severity: AssessmentSeverity) {
-  if (severity === "normal") return "success" as const;
-  if (severity === "critical") return "danger" as const;
-  if (severity === "warning") return "warning" as const;
-  return "default" as const;
 }
 
 function WaterVolumeSummary({

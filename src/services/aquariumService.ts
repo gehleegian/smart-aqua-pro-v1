@@ -1,5 +1,5 @@
 import { getActiveMembership } from './orgContext';
-import { collection, doc, getDoc, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { AquariumUpdatePayload } from '../types/aquariumManagement';
 import { normalizeDeviceId, validateDeviceId } from './deviceClaimContracts';
@@ -489,6 +489,37 @@ export async function getAquariumsByOwner(ownerId: string): Promise<Aquarium[]> 
   }
 
   return snapshot.docs.map((docSnap) => mapAquarium(docSnap.id, docSnap.data()));
+}
+
+/**
+ * Live list of the aquariums the signed-in member may see in the active org:
+ * every org tank for an owner, only assigned tanks (caretakerIds) for a
+ * caretaker. Same query shape as getAquariumsByOwner (and the Firestore list
+ * rule), but read-only: it never runs the owner directory backfill.
+ */
+export function subscribeToVisibleAquariums(
+  uid: string,
+  onChange: (aquariums: Aquarium[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const membership = getActiveMembership();
+  if (!uid || !membership || membership.org.status !== 'active') {
+    onChange([]);
+    return () => undefined;
+  }
+  const aquariumsQuery =
+    membership.role === 'owner'
+      ? query(collection(db, 'aquariums'), where('orgId', '==', membership.orgId))
+      : query(
+          collection(db, 'aquariums'),
+          where('orgId', '==', membership.orgId),
+          where('caretakerIds', 'array-contains', uid)
+        );
+  return onSnapshot(
+    aquariumsQuery,
+    (snapshot) => onChange(snapshot.docs.map((docSnap) => mapAquarium(docSnap.id, docSnap.data()))),
+    (error) => onError?.(error)
+  );
 }
 
 export async function getAquariumById(aquariumId: string) {

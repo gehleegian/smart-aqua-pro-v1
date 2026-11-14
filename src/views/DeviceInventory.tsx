@@ -8,7 +8,7 @@ import StatusMessage from '../components/ui/StatusMessage';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useNow } from '../hooks/useNow';
 import { subscribeToDeviceInventory, type DeviceInventorySnapshot } from '../services/deviceInventoryService';
-import { inventorySensorStatuses, inventoryStatus } from '../utils/deviceInventory';
+import { inventoryCounts, inventorySensorStatuses, inventoryStatus } from '../utils/deviceInventory';
 
 const statusOptions = ['All statuses', 'Online', 'Offline', 'Not reporting', 'Unavailable', 'Unassigned'];
 
@@ -23,13 +23,14 @@ export function DeviceInventoryTable({ data, now }: { data: DeviceInventorySnaps
   const query = search.trim().toLowerCase();
   const filtered = rows.filter(row => (statusFilter === 'All statuses' || row.liveStatus === statusFilter) &&
     (sensorFilter === 'All sensors' || row.sensorStatuses.some(sensor => sensor.status === (sensorFilter === 'Sensor faults' ? 'Fault' : 'Unknown'))) &&
-    [row.id, row.ownerName, row.ownerEmail, row.aquariumName, row.aquariumId].some(value => value.toLowerCase().includes(query)));
+    [row.id, row.ownerName, row.ownerEmail, row.aquariumName, row.aquariumId, row.orgName].some(value => value.toLowerCase().includes(query)));
   const page = useClientPagination(filtered, JSON.stringify([query, statusFilter, sensorFilter]));
+  const counts = inventoryCounts(data.rows, data.telemetry, data.connected, now + data.clockOffset, data.errors);
   return <div className="space-y-6">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {[
-        ['Registered devices', rows.length], ['Assigned devices', rows.filter(row => row.registration === 'claimed').length],
-        ['Online', rows.filter(row => row.liveStatus === 'Online').length], ['Offline', rows.filter(row => row.liveStatus === 'Offline').length],
+        ['Registered devices', counts.registered], ['Assigned devices', counts.assigned],
+        ['Online', counts.online], ['Offline', counts.offline],
       ].map(([label, count]) => <Card key={label}><CardContent><p className="text-sm text-slate-300">{label}</p>
         <p className="mt-2 text-2xl font-semibold text-white">{count}</p></CardContent></Card>)}
     </div>

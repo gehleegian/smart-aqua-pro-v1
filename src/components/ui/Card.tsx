@@ -6,7 +6,7 @@ interface CardProps {
 
 export function Card({ children, className = '', onClick }: CardProps) {
   return (
-    <div onClick={onClick} className={`rounded-xl border border-slate-600/35 bg-slate-800/45 shadow-sm shadow-slate-950/10 backdrop-blur-sm ${onClick ? 'cursor-pointer transition hover:border-teal-300/45 hover:bg-slate-800/60' : ''} ${className}`}>
+    <div onClick={onClick} className={`rounded-2xl border border-slate-700 bg-slate-900 shadow-sm ${onClick ? 'cursor-pointer transition-colors hover:border-teal-400/60' : ''} ${className}`}>
       {children}
     </div>
   );
@@ -14,7 +14,7 @@ export function Card({ children, className = '', onClick }: CardProps) {
 
 export function CardHeader({ children, className = '' }: CardProps) {
   return (
-    <div className={`border-b border-slate-600/30 px-6 py-4 ${className}`}>
+    <div className={`border-b border-slate-700 px-5 py-4 sm:px-6 ${className}`}>
       {children}
     </div>
   );
@@ -22,7 +22,7 @@ export function CardHeader({ children, className = '' }: CardProps) {
 
 export function CardContent({ children, className = '', onClick }: CardProps) {
   return (
-    <div onClick={onClick} className={`px-6 py-4 ${onClick ? 'cursor-pointer' : ''} ${className}`}>
+    <div onClick={onClick} className={`px-5 py-4 sm:px-6 ${onClick ? 'cursor-pointer' : ''} ${className}`}>
       {children}
     </div>
   );
@@ -30,7 +30,7 @@ export function CardContent({ children, className = '', onClick }: CardProps) {
 
 export function CardFooter({ children, className = '' }: CardProps) {
   return (
-    <div className={`border-t border-slate-600/30 px-6 py-4 ${className}`}>
+    <div className={`border-t border-slate-700 px-5 py-4 sm:px-6 ${className}`}>
       {children}
     </div>
   );

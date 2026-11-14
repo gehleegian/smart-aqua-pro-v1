@@ -21,9 +21,44 @@ export type RuleConfigSnapshot = {
 
 export const emptyRuleConfig: RuleConfigSnapshot = { speciesById: {}, rules: [], loaded: false, error: '' };
 
+// One shared pair of Firestore listeners for every component that needs the
+// rule configuration (Monitoring, Alerts, Data Logs, forms...). Late
+// subscribers get the latest snapshot immediately instead of opening and
+// re-normalizing their own copy. Closed when the last subscriber leaves.
+type SharedRuleConfig = {
+  latest: RuleConfigSnapshot | null;
+  listeners: Set<(snapshot: RuleConfigSnapshot) => void>;
+  close: () => void;
+};
+let sharedRuleConfig: SharedRuleConfig | null = null;
+
 // Thresholds and rules are data (Firestore `species` and `rules`, written by
 // scripts/seed-rules.ts or an admin). The app never hard-codes them.
 export function subscribeToRuleConfig(onChange: (snapshot: RuleConfigSnapshot) => void) {
+  if (!sharedRuleConfig) {
+    const created: SharedRuleConfig = { latest: null, listeners: new Set(), close: () => undefined };
+    sharedRuleConfig = created;
+    created.close = openRuleConfigListeners((snapshot) => {
+      created.latest = snapshot;
+      created.listeners.forEach((listener) => listener(snapshot));
+    });
+  }
+  const shared: SharedRuleConfig = sharedRuleConfig;
+  shared.listeners.add(onChange);
+  if (shared.latest) onChange(shared.latest);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    shared.listeners.delete(onChange);
+    if (shared.listeners.size === 0 && sharedRuleConfig === shared) {
+      shared.close();
+      sharedRuleConfig = null;
+    }
+  };
+}
+
+function openRuleConfigListeners(onChange: (snapshot: RuleConfigSnapshot) => void) {
   let speciesById: Record<string, SpeciesConfig> | null = null;
   let rules: RuleConfig[] | null = null;
   let error = '';

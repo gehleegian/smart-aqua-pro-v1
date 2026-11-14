@@ -61,14 +61,14 @@ export default function Modal({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 px-4 py-6">
       <div aria-hidden="true" className="absolute inset-0" onClick={onClose} />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={`relative max-h-full w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl shadow-slate-950/50 ${className}`}
+        className={`relative max-h-full w-full overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-xl ${className}`}
       >
         {children}
       </div>

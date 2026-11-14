@@ -9,7 +9,7 @@ const variants = {
   warning: 'bg-amber-400/15 text-amber-300 border-amber-300/25',
   danger: 'bg-rose-400/15 text-rose-300 border-rose-300/25',
   info: 'bg-teal-400/15 text-teal-200 border-teal-300/25',
-  default: 'bg-slate-300/10 text-slate-300 border-slate-300/20',
+  default: 'bg-slate-800 text-slate-300 border-slate-700',
 };
 
 export default function Badge({ children, variant = 'default', className = '' }: BadgeProps) {

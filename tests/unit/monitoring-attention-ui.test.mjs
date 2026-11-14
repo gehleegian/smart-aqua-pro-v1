@@ -146,3 +146,41 @@ test('recommendation navigation retains the selected aquarium using the existing
   child.props.onOpenRecommendations();
   assert.deepEqual(events, ['tank-a', 'recommendations']);
 });
+
+test('problem summary shows the rule action, reason, aquarium and last update', () => {
+  const { h, AquariumDetailsView: Details, props, events } = setup();
+  const withAction = aquarium({ lastUpdatedAt: Date.UTC(2026, 10, 15, 2),
+    assessment: { ...aquarium().assessment, parameters: [
+      { ...parameter('ph', 'critical', 9.1, 'pH'), recommendation: 'Do a partial water change, then recheck pH.' },
+      parameter('tds', 'warning', 800, 'TDS'),
+    ] } });
+  const view = h.render(Details, { ...props, aquarium: withAction, onOpenAlerts: () => events.push('alerts') });
+  const summary = view.html.slice(view.html.indexOf('Readings needing attention'), view.html.indexOf('Aquarium Profile'));
+  assert.match(summary, /Readings needing attention: Aquarium A/);
+  assert.match(summary, /Reason: <\/span>pH: existing assessment explanation/);
+  assert.match(summary, /Recommended action: <\/span>Do a partial water change, then recheck pH\./);
+  // No rule action -> say so instead of inventing one.
+  assert.match(summary, /No rule-based action is attached to this reading/);
+  assert.match(summary, /Last updated: .*2026.*UTC\+8/);
+  view.nodes.find(node => node.type === 'button' && node.props.children === 'View Alerts').props.onClick();
+  assert.deepEqual(events, ['alerts']);
+});
+
+test('upper-right indicator counts warning and critical aquariums from live findings only', () => {
+  const { h, components } = setup();
+  const warningOnly = aquarium({ id: 'tank-b', assessment: { ...aquarium().assessment, overallSeverity: 'warning',
+    parameters: [parameter('tds', 'warning', 800, 'TDS')] } });
+  const offline = aquarium({ id: 'tank-c', telemetryState: 'offline', hasFreshTelemetry: false, telemetrySource: 'unavailable' });
+  assert.deepEqual(components.monitoringIndicatorCounts([aquarium(), warningOnly, offline]), { critical: 1, warning: 1, sensorChecks: 0 });
+  const events = [];
+  const view = h.render(components.MonitoringNotificationIndicator, { aquariums: [aquarium(), warningOnly, offline],
+    onAlerts: () => events.push('alerts'), onRecommendations: () => events.push('recommendations') });
+  assert.match(view.html, /1 Critical/);
+  assert.match(view.html, /1 Warning/);
+  view.nodes.find(node => node.type === 'button' && node.props.children === 'View Alerts').props.onClick();
+  view.nodes.find(node => node.type === 'button' && node.props.children === 'View Recommendations').props.onClick();
+  assert.deepEqual(events, ['alerts', 'recommendations']);
+  const clear = h.render(components.MonitoringNotificationIndicator, { aquariums: [offline], onAlerts() {}, onRecommendations() {} });
+  assert.match(clear.html, /No active warnings/);
+  assert.doesNotMatch(clear.html, /Critical|View Alerts/);
+});

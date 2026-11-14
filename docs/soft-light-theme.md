@@ -1,27 +1,29 @@
-# Soft light appearance (web and mobile)
+# Web appearance: sky blue on white (light) and black (dark)
 
-Web light-mode slate tokens now use muted gray-green surfaces rather than white
-or near-white cards/backgrounds. Primary text remains dark; secondary text,
-status text, filled actions, input surfaces/placeholders and focus indicators
-use contrast-tested colors. Dark-mode tokens remain unchanged. White is retained
-where appropriate for text on filled actions, QR-code backgrounds and switches.
+The web app has two themes, switched with the sun/moon button in the header.
 
-Mobile uses matching primary palette values and now supports a real Soft light /
-Dark preference in Settings > Appearance. The previous mobile light tokens were
-copies of dark mode and useTheme always returned dark. The new preference is
-saved only in device AsyncStorage, defaults to the existing dark appearance,
-updates subscribers immediately and cannot be overwritten by a late initial
-storage read. Root navigation, native tabs, status bar, loading screens, profile
-sections, schedule inputs, links and shared components honor the chosen palette.
+- **Light:** white cards on a very light page (`#eef7fd`), dark slate text,
+  sky-tinted borders and secondary surfaces.
+- **Dark (default):** true black page (`#000000`), near-black panels
+  (`#121215`), neutral grey text.
+- **Accent (both themes):** sky blue `#54b6f2`. Filled sky-blue surfaces
+  (primary buttons, the active menu item, avatar) use dark navy text
+  (`#082f49`, 6:1 contrast) because white text on this blue is only about
+  2.3:1. Sky-blue text on white uses the deeper `#0369a1` (5.9:1).
 
-Files: web globals.css; mobile light-palette/theme constants, appearance store,
-use-theme, root/tabs/settings, and affected shared form components. No Firebase,
-database, access-control, thresholds or equipment behavior changes. No new native
-dependencies. Standalone APKs must be rebuilt to include the JavaScript changes.
+All colours are defined once in `src/app/globals.css`. Components keep using
+the existing `slate-*` and `teal-*` utilities; the tokens map them to the
+neutral and sky-blue palettes above, so no page needs its own colours.
 
-Tests calculate WCAG contrast for primary/secondary/status text and filled
-buttons (at least 4.5:1 on tested opaque palette surfaces), and focus/control
-colors (at least 3:1 on tested pairs). These checks do not assert that every
-possible transparent background, image or chart combination has been audited.
-Unit tests also cover saved preferences and reactive switching. Visual comfort
-is subjective; a signed-in browser and physical-phone review remains required.
+The layout is intentionally flat: no blur, glow, gradient washes or animated
+underwater background on app and sign-in screens. Cards have one thin border
+and a light shadow. The header holds only the page title, organization,
+theme, notifications, the account avatar (name and role on wide screens) and
+an icon-only log out.
+
+`tests/unit/soft-light-theme.test.mjs` checks WCAG contrast (at least 4.5:1)
+for text on page, card and secondary surfaces in both themes and for navy
+text on the sky-blue fills. It does not audit every transparent overlay or
+chart colour. The mobile app has its own palette (`smart-aqua-mobile`) and was
+not restyled in this change; the web/mobile palette comparison test fails
+until the mobile palette file exists and matches.

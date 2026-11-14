@@ -37,6 +37,7 @@ import {
 import {
   normalizeDevicePowerStatus,
   setDeviceTelemetryClockOffsetMs,
+  setViewerRealtimeConnected,
 } from "../types/device";
 import type {
   DeviceCommand,
@@ -55,6 +56,7 @@ const emptyDeviceShadow: DeviceShadow = {
 };
 
 let serverTimeOffsetUnsubscribe: (() => void) | null = null;
+let viewerConnectionUnsubscribe: (() => void) | null = null;
 let serverTimeOffsetSubscriberCount = 0;
 
 type DeviceShadowSubscriptionOptions = {
@@ -147,6 +149,15 @@ function subscribeToServerTimeOffset() {
     );
   }
 
+  if (!viewerConnectionUnsubscribe) {
+    // Same SDK-local metadata the admin inventory uses; no server reads.
+    viewerConnectionUnsubscribe = onValue(
+      ref(rtdb, ".info/connected"),
+      (snapshot) => setViewerRealtimeConnected(snapshot.val() === true),
+      () => setViewerRealtimeConnected(null),
+    );
+  }
+
   let released = false;
 
   return () => {
@@ -164,6 +175,12 @@ function subscribeToServerTimeOffset() {
       serverTimeOffsetUnsubscribe();
       serverTimeOffsetUnsubscribe = null;
       setDeviceTelemetryClockOffsetMs(0);
+    }
+
+    if (serverTimeOffsetSubscriberCount === 0 && viewerConnectionUnsubscribe) {
+      viewerConnectionUnsubscribe();
+      viewerConnectionUnsubscribe = null;
+      setViewerRealtimeConnected(null);
     }
   };
 }

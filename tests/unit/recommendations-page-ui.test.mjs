@@ -62,7 +62,10 @@ test('Monitoring links to recommendations instead of embedding the panel', () =>
   assert.match(detail, /<CommandHistory/);
   assert.match(detail, /<h3[^>]*>\s*Manual Controls\s*<\/h3>/);
   const monitoring = read('views/Monitoring.tsx');
-  assert.match(monitoring, /onOpenRecommendations=\{\(\) => \{\s*if \(monitoring\.selectedAquarium\) \{\s*requestTankFocus\(monitoring\.selectedAquarium\.id\);\s*onNavigate\('recommendations'\)/);
+  // One handler (detail page and the upper-right indicator) keeps the selected tank focused.
+  assert.match(monitoring, /const openRecommendations = \(\) => \{\s*if \(monitoring\.selectedAquarium\) requestTankFocus\(monitoring\.selectedAquarium\.id\);\s*onNavigate\('recommendations'\);/);
+  assert.match(monitoring, /onOpenRecommendations=\{openRecommendations\}/);
+  assert.match(monitoring, /onOpenAlerts=\{openAlerts\}/);
 });
 
 test('page navigation follows existing member and organization boundaries', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inventoryDevice, inventoryTelemetry, inventoryStatus, inventorySensorStatuses, joinInventory } from '../../src/utils/deviceInventory.ts';
+import { inventoryCounts, inventoryDevice, inventoryTelemetry, inventoryStatus, inventorySensorStatuses, joinInventory } from '../../src/utils/deviceInventory.ts';
 import { paginationUiHarness } from '../helpers/paginationUiHarness.mjs';
 
 const now = Date.UTC(2026, 10, 14, 4);
@@ -9,7 +9,7 @@ const heartbeat = inventoryTelemetry({ online: true, updatedAt: now, phReadingVa
 
 test('inventory supports both registry schemas and drops private fields', () => {
   assert.deepEqual(inventoryDevice('one', { state: 'claimed', ownerUid: 'owner', aquariumId: 'tank', claimCodeHash: 'private', password: 'private' }),
-    { id: 'one', registration: 'claimed', ownerId: 'owner', aquariumId: 'tank', sensors: null, sensorSource: null, equipment: null });
+    { id: 'one', registration: 'claimed', ownerId: 'owner', orgId: '', aquariumId: 'tank', sensors: null, sensorSource: null, equipment: null });
   assert.equal(inventoryDevice('one', {}).registration, 'unknown');
 });
 
@@ -28,13 +28,18 @@ test('only the two owner-confirmed devices have six installed sensors, with equi
   assert.equal(inventoryDevice('SAQ-FUTU-RE01', {}).sensors, null);
 });
 
-test('confirmed quantities match current firmware enclosure IDs', async () => {
+test('confirmed quantities match current firmware enclosure IDs', async (t) => {
   const { readFile } = await import('node:fs/promises');
-  for (const [file, id] of [
-    ['../../firmware/Aquarium1Device/Config.h', 'SAQ-7K3M-9R2X'],
-    ['../../firmware/Aquarium2Device/DeviceIdentity.h', 'SAQ-HGCA-SJRS'],
+  const { existsSync } = await import('node:fs');
+  for (const [file, id, local] of [
+    ['../../firmware/Aquarium1Device/Config.h', 'SAQ-7K3M-9R2X', false],
+    // Aquarium 2's identity header holds device credentials and is gitignored;
+    // it only exists on a provisioned workstation, so check it when present.
+    ['../../firmware/Aquarium2Device/DeviceIdentity.h', 'SAQ-HGCA-SJRS', true],
   ]) {
-    assert.ok((await readFile(new URL(file, import.meta.url), 'utf8')).includes(`ENCLOSURE_ID[] = "${id}"`));
+    const url = new URL(file, import.meta.url);
+    if (local && !existsSync(url)) { t.diagnostic(`skipped ${file}: local-only file not present`); continue; }
+    assert.ok((await readFile(url, 'utf8')).includes(`ENCLOSURE_ID[] = "${id}"`));
   }
 });
 
@@ -61,6 +66,33 @@ test('heartbeat status respects freshness without treating sensor errors as offl
   assert.equal(inventoryStatus(device, heartbeat, false, now), 'Unavailable');
   assert.equal(inventoryStatus(device, heartbeat, true, now, 'permission denied'), 'Unavailable');
   assert.equal(inventoryStatus({ ...device, registration: 'unclaimed' }, heartbeat, true, now), 'Unassigned');
+});
+
+test('organization comes from the registry binding and is never guessed', () => {
+  const claimed = inventoryDevice('one', { status: 'claimed', aquariumId: 'tank1', orgId: 'org1', claimedBy: 'owner' });
+  const tanks = [{ id: 'tank1', name: 'Tank', ownerId: 'owner', ownerName: 'Owner' }];
+  assert.equal(joinInventory([claimed], tanks, [], [{ id: 'org1', name: 'Davao Pet Shop' }])[0].orgName, 'Davao Pet Shop');
+  assert.equal(joinInventory([claimed], tanks, [], [])[0].orgName, 'Organization record unavailable');
+  const stock = inventoryDevice('two', { status: 'unclaimed', orgId: 'org1' });
+  const row = joinInventory([stock], [], [], [{ id: 'org1', name: 'Davao Pet Shop' }])[0];
+  assert.equal(row.orgName, 'Unassigned');
+  assert.equal(row.orgId, '');
+});
+
+test('fleet totals count only fresh heartbeats as online and are shared by both admin pages', () => {
+  const rows = [
+    inventoryDevice('a', { status: 'claimed', aquariumId: 't1' }),
+    inventoryDevice('b', { status: 'claimed', aquariumId: 't2' }),
+    inventoryDevice('c', { status: 'claimed', aquariumId: 't3' }),
+    inventoryDevice('d', { status: 'unclaimed' }),
+  ];
+  const telemetry = {
+    t1: inventoryTelemetry({ online: true, updatedAt: now - 5_000 }),
+    t2: inventoryTelemetry({ online: true, updatedAt: now - 120_000 }),
+    t3: null,
+  };
+  assert.deepEqual(inventoryCounts(rows, telemetry, true, now), { registered: 4, assigned: 3, online: 1, offline: 1, notReporting: 1 });
+  assert.deepEqual(inventoryCounts(rows, telemetry, false, now), { registered: 4, assigned: 3, online: 0, offline: 0, notReporting: 3 });
 });
 
 test('current aquarium ownership wins over historical claimant; no guessing unclaimed owners', () => {

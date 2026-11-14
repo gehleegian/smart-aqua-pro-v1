@@ -4,6 +4,7 @@ import { AdminMonitoringView } from '../components/monitoring/AdminMonitoringVie
 import { AquariumDetailsView } from '../components/monitoring/AquariumDetailsView';
 import { AutomationSettingsModal } from '../components/monitoring/AutomationSettingsModal';
 import { UserAquariumList } from '../components/monitoring/UserAquariumList';
+import { MonitoringNotificationIndicator } from '../components/monitoring/MonitoringAttention';
 import { useMonitoringController } from '../hooks/useMonitoringController';
 import { useOrg } from '../hooks/useOrg';
 import { requestTankFocus } from '../services/tankFocus';
@@ -12,6 +13,22 @@ export default function Monitoring({ onNavigate }: { onNavigate: (page: string) 
   const monitoring = useMonitoringController();
   const { active, role, isOwner } = useOrg();
   const { actions } = monitoring;
+  const openAlerts = () => onNavigate('alerts');
+  const openRecommendations = () => {
+    if (monitoring.selectedAquarium) requestTankFocus(monitoring.selectedAquarium.id);
+    onNavigate('recommendations');
+  };
+  // Upper-right indicator for the aquariums this member can see (owner: all in
+  // the org; caretaker: assigned only). Recomputed on every live update/tick.
+  const indicator = (
+    <div className="mb-4 flex justify-end">
+      <MonitoringNotificationIndicator
+        aquariums={monitoring.aquariums}
+        onAlerts={openAlerts}
+        onRecommendations={openRecommendations}
+      />
+    </div>
+  );
   const liveDataWarning = monitoring.liveDataError ? (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
       {monitoring.liveDataError}
@@ -58,6 +75,7 @@ export default function Monitoring({ onNavigate }: { onNavigate: (page: string) 
   if (!monitoring.selectedAquarium) {
     return (
       <div className="space-y-6">
+        {indicator}
         {liveDataWarning}
         <UserAquariumList
           aquariums={monitoring.aquariums}
@@ -78,6 +96,7 @@ export default function Monitoring({ onNavigate }: { onNavigate: (page: string) 
 
   return (
     <>
+      {indicator}
       {liveDataWarning}
       <div className="mb-4 space-y-2">
         {active && <p className="text-sm text-slate-300">Organization: {active.org.name}</p>}
@@ -119,12 +138,8 @@ export default function Monitoring({ onNavigate }: { onNavigate: (page: string) 
             onNavigate('assessment');
           }
         }}
-        onOpenRecommendations={() => {
-          if (monitoring.selectedAquarium) {
-            requestTankFocus(monitoring.selectedAquarium.id);
-            onNavigate('recommendations');
-          }
-        }}
+        onOpenRecommendations={openRecommendations}
+        onOpenAlerts={openAlerts}
         onManualAction={(field) => void actions.handleManualAction(field)}
         onModeChange={(mode) => void actions.handleSystemModeChange(mode)}
         onOpenAutomationEditor={actions.openAutomationEditor}

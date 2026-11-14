@@ -4,6 +4,7 @@ import type { DashboardSummaryCard } from '../../types/dashboard';
 import type { UserData } from '../../types/user';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { SummaryGrid } from './SummaryGrid';
+import { AdminDeviceStatusSummary } from '../admin/AdminDeviceStatusSummary';
 
 interface AdminDashboardViewProps {
   summaryCards: DashboardSummaryCard[];
@@ -54,11 +55,13 @@ export function AdminDashboardView({
       <div>
         <h2 className="text-xl font-semibold text-white">System Membership Overview</h2>
         <p className="mt-1 text-sm text-slate-300">
-          Registration and aquarium ownership records. Device connectivity is available in Device Inventory; equipment controls remain restricted to authorized owners and caretakers.
+          Registration, aquarium ownership and live device connectivity. Equipment controls remain restricted to authorized owners and caretakers.
         </p>
       </div>
 
       <SummaryGrid cards={summaryCards} />
+
+      <AdminDeviceStatusSummary onOpenInventory={() => onNavigate('device-inventory')} />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>

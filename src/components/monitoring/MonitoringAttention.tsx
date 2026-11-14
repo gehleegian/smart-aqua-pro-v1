@@ -1,4 +1,6 @@
-import { CircleHelp, TriangleAlert } from 'lucide-react';
+import { Bell, CircleAlert, CircleHelp, TriangleAlert } from 'lucide-react';
+import { getDeviceTelemetryStatusText, isViewerRealtimeConnectionLost } from '../../types/device';
+import Badge from '../ui/Badge';
 import type { MonitoringAquarium, MonitoringParameter, ParameterAssessment } from '../../types/monitoring';
 import type { EffectiveThresholds, WaterParameter } from '../../utils/monitoringAssessmentCore';
 import { ParameterStatusBadge } from '../condition/ConditionBadges';
@@ -27,11 +29,71 @@ export function monitoringAttention(aquarium: MonitoringAquarium) {
 }
 export type MonitoringAttentionState = ReturnType<typeof monitoringAttention>;
 
-export function MonitoringAttentionBanner({ aquarium, attention, onRecommendations, onAssessment }: {
+/** Readable condition label shared by the aquarium list and detail header. No live data never shows a water condition. */
+export function AquariumConditionBadge({ aquarium }: { aquarium: MonitoringAquarium }) {
+  const attention = monitoringAttention(aquarium);
+  if (!attention.live) return <Badge variant="default">{getDeviceTelemetryStatusText(aquarium.telemetryState)}</Badge>;
+  if (attention.findings.length) {
+    return attention.severity === 'critical'
+      ? <Badge variant="danger">Critical</Badge>
+      : <Badge variant="warning">Warning</Badge>;
+  }
+  if (attention.faults.length) return <Badge variant="warning">Sensor check</Badge>;
+  return aquarium.assessment.overallSeverity === 'normal'
+    ? <Badge variant="success">Normal</Badge>
+    : <Badge variant="default">Assessment unavailable</Badge>;
+}
+
+/**
+ * Upper-right Monitoring indicator: how many visible aquariums currently have
+ * WARNING or CRITICAL findings. Counts come only from monitoringAttention(), so
+ * stale/offline tanks and invalid sensor samples never raise it.
+ */
+export function monitoringIndicatorCounts(aquariums: MonitoringAquarium[]) {
+  let critical = 0;
+  let warning = 0;
+  let sensorChecks = 0;
+  for (const aquarium of aquariums) {
+    const attention = monitoringAttention(aquarium);
+    if (attention.findings.length) {
+      if (attention.severity === 'critical') critical += 1; else warning += 1;
+    } else if (attention.faults.length) sensorChecks += 1;
+  }
+  return { critical, warning, sensorChecks };
+}
+
+export function MonitoringNotificationIndicator({ aquariums, onAlerts, onRecommendations }: {
+  aquariums: MonitoringAquarium[]; onAlerts: () => void; onRecommendations: () => void;
+}) {
+  const { critical, warning, sensorChecks } = monitoringIndicatorCounts(aquariums);
+  const issues = critical + warning;
+  const chip = 'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold';
+  return <div role="status" aria-live="polite" aria-label="Monitoring notifications" className="flex flex-wrap items-center justify-end gap-2">
+    {critical > 0 && <span className={`${chip} border-rose-400/50 bg-rose-500/15 text-rose-100`}>
+      <CircleAlert className="h-4 w-4" aria-hidden="true" />{critical} Critical
+    </span>}
+    {warning > 0 && <span className={`${chip} border-amber-400/50 bg-amber-400/15 text-amber-100`}>
+      <TriangleAlert className="h-4 w-4" aria-hidden="true" />{warning} Warning
+    </span>}
+    {issues === 0 && sensorChecks > 0 && <span className={`${chip} border-amber-400/30 text-amber-200`}>
+      <CircleHelp className="h-4 w-4" aria-hidden="true" />{sensorChecks} sensor check{sensorChecks > 1 ? 's' : ''}
+    </span>}
+    {issues === 0 && sensorChecks === 0 && <span className={`${chip} border-slate-600/40 text-slate-300`}>
+      <Bell className="h-4 w-4" aria-hidden="true" />No active warnings
+    </span>}
+    {issues > 0 && <>
+      <Button variant="secondary" className="min-h-9 px-3 py-1 text-xs" onClick={onAlerts}>View Alerts</Button>
+      <Button variant="secondary" className="min-h-9 px-3 py-1 text-xs" onClick={onRecommendations}>View Recommendations</Button>
+    </>}
+  </div>;
+}
+
+export function MonitoringAttentionBanner({ aquarium, attention, onRecommendations, onAssessment, onAlerts }: {
   aquarium: MonitoringAquarium; attention: MonitoringAttentionState; onRecommendations: () => void; onAssessment: () => void;
+  onAlerts?: () => void;
 }) {
   if (!attention.live) return <div role="status" className="rounded-lg border border-slate-600/40 bg-slate-800/35 p-4 text-sm text-slate-200">
-    {aquarium.telemetryState === 'offline' ? 'Device offline.' : 'Fresh monitoring data is unavailable.'} Current water conditions cannot be confirmed. This is a connection/data issue, not evidence of a water problem.
+    {aquarium.telemetryState === 'offline' ? 'Device offline.' : isViewerRealtimeConnectionLost() ? 'Your connection to live data was lost.' : 'Fresh monitoring data is unavailable.'} Current water conditions cannot be confirmed. This is a connection/data issue, not evidence of a water problem.
   </div>;
   if (!attention.findings.length && !attention.faults.length) {
     return aquarium.assessment.overallSeverity === 'unavailable' ? <p role="status" className="text-sm text-slate-300">Assessment unavailable. Wait for the current configuration and assessment to load.</p> : null;
@@ -50,7 +112,10 @@ export function MonitoringAttentionBanner({ aquarium, attention, onRecommendatio
         {hasFindings && attention.faults.length > 0 && <p className="mt-1 text-sm">Sensor issues are listed separately below.</p>}
       </div>
     </div>
-    <Button variant="secondary" onClick={hasFindings ? onRecommendations : onAssessment}>{hasFindings ? 'Check Recommendations' : 'Check Assessment'}</Button>
+    <div className="flex flex-wrap gap-2">
+      <Button variant="secondary" onClick={hasFindings ? onRecommendations : onAssessment}>{hasFindings ? 'Check Recommendations' : 'Check Assessment'}</Button>
+      {hasFindings && onAlerts && <Button variant="secondary" onClick={onAlerts}>View Alerts</Button>}
+    </div>
   </section>;
 }
 
@@ -66,16 +131,26 @@ function configuredRange(item: ParameterAssessment, thresholds?: EffectiveThresh
   return 'Configured limits unavailable.';
 }
 
-export function MonitoringProblemSummary({ attention, thresholds }: { attention: MonitoringAttentionState; thresholds?: EffectiveThresholds | null }) {
+const updatedFormatter = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Manila' });
+
+export function MonitoringProblemSummary({ attention, thresholds, aquarium }: {
+  attention: MonitoringAttentionState; thresholds?: EffectiveThresholds | null; aquarium?: MonitoringAquarium;
+}) {
   if (!attention.live || (!attention.findings.length && !attention.faults.length)) return null;
+  const updated = aquarium?.lastUpdatedAt ? `${updatedFormatter.format(aquarium.lastUpdatedAt)} (UTC+8)` : '';
   return <div className="space-y-4">
     {attention.findings.length > 0 && <Card>
-      <CardHeader><h3 className="font-semibold text-white">Readings needing attention</h3><p className="mt-1 text-xs text-slate-400">Current assessment findings, with critical conditions first. Check Recommendations for available approved guidance.</p></CardHeader>
+      <CardHeader><h3 className="font-semibold text-white">Readings needing attention{aquarium ? `: ${aquarium.name}` : ''}</h3><p className="mt-1 text-xs text-slate-400">Current assessment findings, with critical conditions first. Check Recommendations for available approved guidance.</p></CardHeader>
       <CardContent><ul className="space-y-3">{attention.findings.map(item => <li key={item.parameter} className="rounded-lg border border-slate-600/30 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium text-white">{item.label}</p><ParameterStatusBadge item={item} /></div>
         <p className="mt-1 text-sm text-slate-200">Assessed value: {item.value}{typeof item.value === 'number' && item.unit ? `${item.unit === '%' ? '' : ' '}${item.unit}` : ''}</p>
         {configuredRange(item, thresholds) && <p className="mt-1 text-xs text-slate-300">{configuredRange(item, thresholds)}</p>}
-        <p className="mt-1 text-sm text-slate-300">{item.message}</p>
+        <p className="mt-1 text-sm text-slate-300"><span className="font-medium text-slate-200">Reason: </span>{item.message}</p>
+        {/* The action text comes only from the matched, approved IF-THEN rule (assessment.parameters[].recommendation). */}
+        {item.recommendation
+          ? <p className="mt-1 text-sm text-teal-100"><span className="font-medium">Recommended action: </span>{item.recommendation}</p>
+          : <p className="mt-1 text-xs text-slate-400">No rule-based action is attached to this reading. Check Recommendations and Alerts for details.</p>}
+        {updated && <p className="mt-1 text-xs text-slate-400">Last updated: {updated}</p>}
       </li>)}</ul></CardContent>
     </Card>}
     {attention.faults.length > 0 && <Card>

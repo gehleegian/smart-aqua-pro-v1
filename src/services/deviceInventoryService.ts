@@ -18,6 +18,7 @@ export function subscribeToDeviceInventory(onData: (data: DeviceInventorySnapsho
   let devices: InventoryDevice[] = [];
   let tanks: { id: string; name: string; ownerId: string; ownerName: string }[] = [];
   let users: { id: string; name: string; email: string }[] = [];
+  let organizations: { id: string; name: string }[] = [];
   let connected = false;
   let clockOffset = 0;
   const telemetry: DeviceInventorySnapshot['telemetry'] = {};
@@ -26,7 +27,7 @@ export function subscribeToDeviceInventory(onData: (data: DeviceInventorySnapsho
   const subscriptions: (() => void)[] = [];
   const deviceSubscriptions = new Map<string, () => void>();
   const emit = () => {
-    if (!closed && ready.size === 3) onData({ rows: joinInventory(devices, tanks, users),
+    if (!closed && ready.size === 3) onData({ rows: joinInventory(devices, tanks, users, organizations),
       telemetry: { ...telemetry }, errors: { ...errors }, connected, clockOffset });
   };
   const close = () => {
@@ -96,6 +97,13 @@ export function subscribeToDeviceInventory(onData: (data: DeviceInventorySnapsho
         return { id: doc.id, name: string(data.full_name) || string(data.name), email: string(data.email) };
       }); ready.add('users'); emit();
     }, fail));
+    // Organization names are a label only: a failed read leaves rows showing
+    // "Organization record unavailable" instead of closing the whole inventory.
+    subscriptions.push(onSnapshot(collection(db, 'organizations'), snapshot => {
+      if (closed) return;
+      organizations = snapshot.docs.map(doc => ({ id: doc.id, name: string(doc.data().name) || doc.id }));
+      emit();
+    }, () => { organizations = []; emit(); }));
   })().catch(fail);
   return close;
 }

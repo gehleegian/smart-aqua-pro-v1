@@ -98,13 +98,13 @@ export default function Sidebar({
 
   const renderBrand = (showText: boolean) => (
     <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15 ring-1 ring-teal-300/30">
-        <Waves className="h-6 w-6 text-teal-200" aria-hidden="true" />
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-teal-600">
+        <Waves className="h-5 w-5 text-teal-950" aria-hidden="true" />
       </div>
       {showText && (
         <div>
-          <p className="text-lg font-bold text-white">SmartAqua</p>
-          <p className="text-xs text-teal-300">AquariTech Solutions</p>
+          <p className="text-base font-semibold text-white">SmartAqua</p>
+          <p className="text-xs text-slate-400">AquariTech Solutions</p>
         </div>
       )}
     </div>
@@ -134,16 +134,16 @@ export default function Sidebar({
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={item.label}
                   title={showLabels ? undefined : item.label}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-200 ${insetFocus} ${
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-150 ${insetFocus} ${
                     showLabels ? '' : 'justify-center'
                   } ${
                     isActive
-                      ? 'bg-teal-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800/65 hover:text-white'
+                      ? 'bg-teal-600 font-semibold text-white'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {showLabels && <span className="text-sm font-medium">{item.label}</span>}
+                  <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                  {showLabels && <span className="text-sm">{item.label}</span>}
                 </button>
               );
             })}
@@ -159,7 +159,7 @@ export default function Sidebar({
       onClick={onLogout}
       aria-label="Log out"
       title="Log out"
-      className={`flex w-full items-center gap-3 px-6 py-4 text-rose-300 transition-colors hover:bg-rose-500/10 ${insetFocus} ${
+      className={`flex w-full items-center gap-3 px-6 py-4 text-slate-400 transition-colors hover:bg-slate-800 hover:text-rose-300 ${insetFocus} ${
         showLabel ? '' : 'justify-center'
       }`}
     >
@@ -172,11 +172,11 @@ export default function Sidebar({
     <>
       <aside
         inert={!isOpen}
-        className={`fixed left-0 top-0 z-50 flex h-full w-64 flex-col border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-transform duration-300 lg:hidden ${
+        className={`fixed left-0 top-0 z-50 flex h-full w-64 flex-col border-r border-slate-700 bg-slate-900 transition-transform duration-300 lg:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between border-b border-slate-600/30 px-4 py-5">
+        <div className="flex items-center justify-between border-b border-slate-700 px-4 py-5">
           {renderBrand(true)}
           <button
             type="button"
@@ -188,24 +188,24 @@ export default function Sidebar({
           </button>
         </div>
         {renderNav(true)}
-        <div className="border-t border-slate-600/30">{renderLogout(true)}</div>
+        <div className="border-t border-slate-700">{renderLogout(true)}</div>
       </aside>
 
       <aside
-        className={`fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-slate-600/30 bg-slate-900/95 shadow-xl shadow-slate-950/20 backdrop-blur transition-all duration-300 lg:flex ${
+        className={`fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-slate-700 bg-slate-900 transition-all duration-300 lg:flex ${
           collapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="border-b border-slate-600/30 px-5 py-5">{renderBrand(!collapsed)}</div>
+        <div className="border-b border-slate-700 px-5 py-5">{renderBrand(!collapsed)}</div>
         {renderNav(!collapsed)}
-        <div className="border-t border-slate-600/30">
+        <div className="border-t border-slate-700">
           {renderLogout(!collapsed)}
           <button
             type="button"
             onClick={onToggleCollapsed}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
-            className={`flex w-full items-center justify-center border-t border-slate-600/30 py-4 text-slate-300 transition-colors hover:text-white ${insetFocus}`}
+            className={`flex w-full items-center justify-center border-t border-slate-700 py-4 text-slate-300 transition-colors hover:text-white ${insetFocus}`}
           >
             {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>

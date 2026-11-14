@@ -9,7 +9,7 @@ import {
 import { getDashboardData } from '../services/dashboardService';
 import type { AquariumDirectoryEntry } from '../types/aquarium';
 import type { DashboardAquarium } from '../types/dashboard';
-import type { DeviceShadow } from '../types/device';
+import { isViewerRealtimeConnectionLost, VIEWER_CONNECTION_LOST_TEXT, type DeviceShadow } from '../types/device';
 import type { UserData, UserRole } from '../types/user';
 import {
   buildAdminSummaryCards,
@@ -194,7 +194,8 @@ export function useDashboardController(page = 'dashboard') {
     }),
     error,
     liveAquariums,
-    liveDataError: Object.values(deviceSubscriptionErrors).find(Boolean) || '',
+    liveDataError: Object.values(deviceSubscriptionErrors).find(Boolean)
+      || (userRole !== 'Admin' && isViewerRealtimeConnectionLost() ? `${VIEWER_CONNECTION_LOST_TEXT}. Reconnecting...` : ''),
     loading,
     selectedTank,
     selectedTankId: selectedTank?.id || '',

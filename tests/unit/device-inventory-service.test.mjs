@@ -58,6 +58,10 @@ test('inventory only reads metadata and bound telemetry; synchronizes and releas
   assert.equal(h.data.length, 1);
   assert.equal(h.data.at(-1).rows.length, 2);
   assert.equal(h.data.at(-1).rows[0].ownerName, 'Owner');
+  // Organization names are optional labels: a denied read must not close the inventory.
+  h.listeners.get('organizations').fail(new Error('permission denied'));
+  assert.equal(h.errors.length, 0);
+  assert.equal(h.data.at(-1).rows[0].orgName, 'Not recorded');
   h.rtdb('.info/connected', true);
   h.rtdb('.info/serverTimeOffset', 1234);
   h.rtdb('devices/tank1/telemetry', { online: true, updatedAt: Date.now(), phReadingValid: false, ph: 0 });

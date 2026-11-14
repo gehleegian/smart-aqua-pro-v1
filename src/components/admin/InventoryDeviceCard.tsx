@@ -14,6 +14,7 @@ export function InventoryDeviceCard({ row, index, status, sensors, updatedAt, er
         <p className="text-xs text-slate-400"><span aria-label={`Device index ${index}`}>#{index}</span> · {row.id}</p>
         <h4 id={headingId} className="break-words text-base font-semibold text-white">{row.aquariumName || (row.registration === 'claimed' ? 'Aquarium record unavailable' : 'Unassigned device')}</h4>
         <p className="text-sm text-slate-300">Owner: {row.ownerName}</p>
+        <p className="text-sm text-slate-300">Organization: {row.orgName}</p>
       </div>
       <div className="space-y-1 text-right">
         <Badge variant={status === 'Online' ? 'success' : status === 'Offline' ? 'warning' : 'default'}>{status}</Badge>
@@ -50,6 +51,7 @@ export function InventoryDeviceCard({ row, index, status, sensors, updatedAt, er
         <div><dt className="text-xs text-slate-400">Registration</dt><dd className="mt-1 capitalize text-slate-200">{row.registration}</dd></div>
         <div><dt className="text-xs text-slate-400">Equipment (not sensors)</dt><dd className="mt-1 text-slate-200">{row.equipment ? row.equipment.join(', ') || 'None confirmed' : 'Not recorded'}</dd></div>
         <div><dt className="text-xs text-slate-400">Inventory source</dt><dd className="mt-1 text-slate-200">{row.sensorSource === 'owner-confirmed' ? 'Owner-confirmed installation' : row.sensorSource === 'registry' ? 'Registry inventory' : 'Reported types only; quantities unverified'}</dd></div>
+        {row.orgId && <div className="sm:col-span-2"><dt className="text-xs text-slate-400">Organization ID</dt><dd className="mt-1 break-all text-slate-200">{row.orgId}</dd></div>}
         {row.registration === 'claimed' && <div className="sm:col-span-2"><dt className="text-xs text-slate-400">Aquarium ID</dt><dd className="mt-1 break-all text-slate-200">{row.aquariumId}</dd></div>}
       </dl>
     </details>

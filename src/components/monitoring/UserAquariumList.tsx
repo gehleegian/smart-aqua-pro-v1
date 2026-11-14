@@ -5,7 +5,7 @@ import { getAutomationSettings } from '../../utils/monitoringHelpers';
 import { nextScheduledText } from '../../utils/schedule';
 import { useNow } from '../../hooks/useNow';
 import Button from '../ui/Button';
-import Badge from '../ui/Badge';
+import { AquariumConditionBadge } from './MonitoringAttention';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
 interface UserAquariumListProps {
@@ -52,19 +52,7 @@ export function UserAquariumList({
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium text-white">{aquarium.name}</p>
-                <Badge
-                  variant={
-                    aquarium.assessment.overallSeverity === 'normal'
-                      ? 'success'
-                      : aquarium.assessment.overallSeverity === 'critical'
-                        ? 'danger'
-                        : aquarium.assessment.overallSeverity === 'warning'
-                          ? 'warning'
-                          : 'default'
-                  }
-                >
-                  {aquarium.telemetrySource} · {aquarium.assessment.overallSeverity}
-                </Badge>
+                <AquariumConditionBadge aquarium={aquarium} />
               </div>
               <p className="mt-2 text-sm text-slate-400">
                 {aquarium.hasFreshTelemetry
@@ -82,3 +70,4 @@ export function UserAquariumList({
     </Card>
   );
 }
+

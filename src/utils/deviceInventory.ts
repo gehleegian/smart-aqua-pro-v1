@@ -8,7 +8,7 @@ export const INVENTORY_SENSOR_TYPES = {
 } as const;
 type SensorType = keyof typeof INVENTORY_SENSOR_TYPES;
 export type InventoryDevice = {
-  id: string; aquariumId: string; ownerId: string; registration: string;
+  id: string; aquariumId: string; ownerId: string; orgId: string; registration: string;
   sensors: { type: SensorType; count: number }[] | null;
   sensorSource: 'registry' | 'owner-confirmed' | null;
   equipment: string[] | null;
@@ -20,7 +20,7 @@ export type InventoryTelemetry = {
 export type SensorSignal = { status: 'Reporting' | 'Fault' | 'Unknown'; reason: string };
 export type InventoryDeviceStatus = 'Unassigned' | 'Unavailable' | 'Not reporting' | 'Online' | 'Offline';
 export type InventoryRow = InventoryDevice & {
-  aquariumName: string; ownerName: string; ownerEmail: string;
+  aquariumName: string; ownerName: string; ownerEmail: string; orgName: string;
 };
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
@@ -44,7 +44,7 @@ export function inventoryDevice(id: string, raw: Record<string, unknown>): Inven
     ? CONFIRMED_DEVICE_HARDWARE[id as keyof typeof CONFIRMED_DEVICE_HARDWARE] : null;
   const sensorSource = sensors ? 'registry' : hardware ? 'owner-confirmed' : null;
   return { id, aquariumId: text(raw.aquariumId),
-    ownerId: text(raw.ownerUid) || text(raw.claimedBy), registration,
+    ownerId: text(raw.ownerUid) || text(raw.claimedBy), orgId: text(raw.orgId), registration,
     sensors: sensors || (hardware ? hardware.sensors.map(sensor => ({ ...sensor })) : null),
     sensorSource, equipment: Array.isArray(raw.equipmentInventory) && raw.equipmentInventory.every(type => EQUIPMENT_OPTIONS.some(option => option.type === type))
       ? EQUIPMENT_OPTIONS.filter(option => (raw.equipmentInventory as unknown[]).includes(option.type)).map(option => option.label)
@@ -106,15 +106,34 @@ export function inventoryStatus(device: InventoryDevice, telemetry: InventoryTel
 
 export function joinInventory(devices: InventoryDevice[], aquariums: {
   id: string; name: string; ownerId: string; ownerName: string;
-}[], users: { id: string; name: string; email: string }[]): InventoryRow[] {
+}[], users: { id: string; name: string; email: string }[],
+  organizations: { id: string; name: string }[] = []): InventoryRow[] {
   const tanks = new Map(aquariums.map(tank => [tank.id, tank]));
   const owners = new Map(users.map(user => [user.id, user]));
+  const orgs = new Map(organizations.map(org => [org.id, org.name]));
   return devices.map(device => {
     const tank = device.registration === 'claimed' ? tanks.get(device.aquariumId) : undefined;
     const ownerId = tank?.ownerId || (device.registration === 'claimed' ? device.ownerId : '');
     const owner = owners.get(ownerId);
-    return { ...device, ownerId, aquariumName: tank?.name || '',
+    // The organization comes from the registry binding written by claimDevice; never inferred.
+    const orgId = device.registration === 'claimed' ? device.orgId : '';
+    return { ...device, ownerId, orgId, aquariumName: tank?.name || '',
+      orgName: orgId ? orgs.get(orgId) || 'Organization record unavailable'
+        : device.registration === 'claimed' ? 'Not recorded' : 'Unassigned',
       ownerName: owner?.name || tank?.ownerName || (ownerId ? 'Owner record unavailable' : 'Unassigned'),
       ownerEmail: owner?.email || '' };
   }).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Fleet totals shared by Device Inventory and the Admin Dashboard so both always agree. */
+export function inventoryCounts(rows: InventoryDevice[], telemetry: Record<string, InventoryTelemetry | null>,
+  connected: boolean, now: number, errors: Record<string, string> = {}) {
+  const statuses = rows.map(row => inventoryStatus(row, telemetry[row.aquariumId], connected, now, errors[row.aquariumId]));
+  return {
+    registered: rows.length,
+    assigned: rows.filter(row => row.registration === 'claimed' && row.aquariumId).length,
+    online: statuses.filter(status => status === 'Online').length,
+    offline: statuses.filter(status => status === 'Offline').length,
+    notReporting: statuses.filter(status => status === 'Not reporting' || status === 'Unavailable').length,
+  };
 }

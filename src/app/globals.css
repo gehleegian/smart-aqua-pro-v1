@@ -1,18 +1,34 @@
 @import "tailwindcss";
 
 @theme {
-  --color-slate-50: #f2fbfa;
-  --color-slate-100: #def3f0;
-  --color-slate-200: #bfe4df;
-  --color-slate-300: #93cbc4;
-  --color-slate-400: #66aea9;
-  /* Sprint 5 a11y: #3f9290 was 3.8:1 on cards; this is 4.9:1 (WCAG AA). */
-  --color-slate-500: #52a6a3;
-  --color-slate-600: #2b7478;
-  --color-slate-700: #205963;
-  --color-slate-800: #173f4b;
-  --color-slate-900: #102f3a;
-  --color-slate-950: #08212b;
+  /* Dark mode (default): true black page, near-black surfaces, neutral text.
+     The whole app is styled with slate-* utilities, so these tokens are the
+     single place the neutral palette is defined. */
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f5;
+  --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8;
+  --color-slate-400: #a1a1aa;
+  --color-slate-500: #8e8e98;
+  --color-slate-600: #3f3f46;
+  --color-slate-700: #2a2a30;
+  --color-slate-800: #1c1c21;
+  --color-slate-900: #121215;
+  --color-slate-950: #000000;
+  /* Accent: sky blue. Components use teal-* utilities; they render as sky. */
+  --color-teal-50: #f0f9fe;
+  --color-teal-100: #dcf1fd;
+  --color-teal-200: #b9e2fa;
+  --color-teal-300: #8fd0f7;
+  --color-teal-400: #6cc2f4;
+  /* Brand sky blue (#54b6f2). Filled sky surfaces use dark navy text for contrast. */
+  --color-teal-500: #3ea6e6;
+  --color-teal-600: #54b6f2;
+  --color-teal-700: #1e88c7;
+  --color-teal-800: #176a9c;
+  --color-teal-900: #0f4c71;
+  --color-teal-950: #082f49;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 @layer base {
@@ -34,37 +50,42 @@ html {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2b7478 #08212b;
+  scrollbar-color: #3f3f46 #000000;
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background:
-    radial-gradient(circle at 18% 8%, rgba(45, 212, 191, 0.09), transparent 28rem),
-    linear-gradient(180deg, #0b2833 0%, #08212b 48%, #071c25 100%);
-  color: #f2fbfa;
+  font-family: var(--font-sans);
+  background: #000000;
+  color: #f4f4f5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Text on the bright sky blue is dark navy (6:1), in both themes. */
+:is(.bg-teal-600, .bg-teal-500, .hover\:bg-teal-500:hover).text-white,
+.smart-aqua-app[data-theme='light'] :is(.bg-teal-600, .bg-teal-500).text-white {
+  color: #082f49;
 }
 
 .formal-input {
   width: 100%;
   min-height: 48px;
-  border: 1px solid rgba(71, 85, 105, 0.9);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #f8fafc;
+  border: 1px solid #2a2a30;
+  border-radius: 10px;
+  background: #121215;
+  color: #f4f4f5;
   font-size: 14px;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .formal-input::placeholder {
-  color: #64748b;
+  color: #8e8e98;
 }
 
 .formal-input:focus {
-  border-color: rgba(34, 211, 238, 0.72);
-  background: rgba(15, 23, 42, 0.92);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  border-color: #38bdf8;
+  background: #121215;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
 }
 
 .smart-aqua-app {
@@ -74,64 +95,64 @@ body {
 
 .smart-aqua-app[data-theme='light'] {
   color-scheme: light;
-  /* Muted, low-glare surfaces; keep foregrounds dark rather than fading text. */
-  --color-slate-50: #1d3437;
-  --color-slate-100: #243b3e;
-  --color-slate-200: #2d4749;
-  --color-slate-300: #3e595a;
-  --color-slate-400: #4c6364;
-  --color-slate-500: #4c6364;
-  --color-slate-600: #6b837d;
-  --color-slate-700: #bfd3ce;
-  --color-slate-800: #d3dfdc;
-  --color-slate-900: #e7eeeb;
-  --color-slate-950: #dce5e3;
-  --color-teal-600: #17685f;
-  --color-teal-500: #12574f;
-  --color-rose-600: #a3344a;
-  --color-rose-500: #8e293e;
-  --color-red-600: #a3344a;
-  --color-red-500: #8e293e;
-  background: #dce5e3;
-  color: #243b3e;
+  /* White and sky blue: white cards on a very light page, dark readable text. */
+  --color-slate-50: #020617;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #526075;
+  /* Sky-tinted borders and secondary surfaces; cards stay white. */
+  --color-slate-600: #8fb3cc;
+  --color-slate-700: #cfe6f5;
+  --color-slate-800: #e8f4fc;
+  --color-slate-900: #ffffff;
+  --color-slate-950: #eef7fd;
+  --color-teal-600: #54b6f2;
+  --color-teal-500: #3ea6e6;
+  --color-rose-600: #be123c;
+  --color-rose-500: #9f1239;
+  --color-red-600: #be123c;
+  --color-red-500: #9f1239;
+  background: #eef7fd;
+  color: #0f172a;
 }
 
 .smart-aqua-app[data-theme='light'] * {
-  scrollbar-color: #6b837d #dce5e3;
+  scrollbar-color: #8fb3cc #eef7fd;
 }
 
 .smart-aqua-app[data-theme='light'] input,
 .smart-aqua-app[data-theme='light'] select,
 .smart-aqua-app[data-theme='light'] textarea {
   color-scheme: light;
-  caret-color: #243b3e;
+  caret-color: #0f172a;
 }
 
 .smart-aqua-app[data-theme='light'] .formal-input {
-  background: #e7eeeb;
-  color: #243b3e;
-  border-color: #6b837d;
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cfe6f5;
 }
 
 .smart-aqua-app[data-theme='light'] .formal-input::placeholder {
-  color: #4c6364;
+  color: #526075;
 }
 
 .smart-aqua-app[data-theme='light'] .formal-input:focus {
-  background: #e7eeeb;
-  border-color: #17685f;
-  box-shadow: 0 0 0 3px rgb(23 104 95 / 18%);
+  background: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgb(2 132 199 / 18%);
 }
 
 .smart-aqua-app[data-theme='light'] :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline-color: #17685f;
+  outline-color: #0284c7;
 }
 
 .smart-aqua-app[data-theme='light'] .text-white {
-  color: #243b3e;
+  color: #0f172a;
 }
 
-.smart-aqua-app[data-theme='light'] .bg-teal-600.text-white,
 .smart-aqua-app[data-theme='light'] .bg-rose-600.text-white,
 .smart-aqua-app[data-theme='light'] .bg-red-600.text-white,
 .smart-aqua-app[data-theme='light'] .bg-red-500.text-white,
@@ -139,41 +160,37 @@ body {
   color: #ffffff;
 }
 
-.smart-aqua-app[data-theme='light'] .shadow-slate-950\/10,
-.smart-aqua-app[data-theme='light'] .shadow-slate-950\/20,
-.smart-aqua-app[data-theme='light'] .shadow-slate-950\/30,
-.smart-aqua-app[data-theme='light'] .shadow-slate-950\/35,
-.smart-aqua-app[data-theme='light'] .shadow-slate-950\/50 {
-  --tw-shadow-color: rgba(15, 23, 42, 0.12);
+.smart-aqua-app[data-theme='light'] :is(.shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl) {
+  --tw-shadow-color: rgba(15, 23, 42, 0.06);
 }
 
 .auth-input:-webkit-autofill,
 .auth-input:-webkit-autofill:hover,
 .auth-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #f2fbfa;
-  caret-color: #f2fbfa;
-  -webkit-box-shadow: 0 0 0 1000px #08212b inset;
+  -webkit-text-fill-color: #f4f4f5;
+  caret-color: #f4f4f5;
+  -webkit-box-shadow: 0 0 0 1000px #121215 inset;
   transition: background-color 9999s ease-out;
 }
 
 .smart-aqua-app[data-theme='light'] :is(.text-teal-50, .text-teal-100, .text-teal-200, .text-teal-300, .text-teal-400) {
-  color: #17685f;
+  color: #0369a1;
 }
 
 .smart-aqua-app[data-theme='light'] :is(.text-rose-50, .text-rose-100, .text-rose-200, .text-rose-300, .text-rose-400, .text-red-100, .text-red-200, .text-red-300, .text-red-400) {
-  color: #a3344a;
+  color: #be123c;
 }
 
 .smart-aqua-app[data-theme='light'] :is(.text-amber-50, .text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-yellow-200, .text-yellow-300, .text-yellow-400) {
-  color: #80520c;
+  color: #92400e;
 }
 
 .smart-aqua-app[data-theme='light'] :is(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400) {
-  color: #236747;
+  color: #047857;
 }
 
-.smart-aqua-app[data-theme='light'] :is(.text-green-300, .text-green-400) { color: #236747; }
-.smart-aqua-app[data-theme='light'] :is(.text-sky-300, .text-cyan-300) { color: #17685f; }
+.smart-aqua-app[data-theme='light'] :is(.text-green-300, .text-green-400) { color: #047857; }
+.smart-aqua-app[data-theme='light'] :is(.text-sky-300, .text-cyan-300) { color: #0369a1; }
 
 @keyframes swim {
   0%, 100% { transform: translateX(0) scaleX(1); }
@@ -233,8 +250,8 @@ body {
   top: -3rem;
   z-index: 100;
   border-radius: 0.5rem;
-  background: #0f766e;
-  color: #ffffff;
+  background: #54b6f2;
+  color: #082f49;
   padding: 0.5rem 1rem;
   font-weight: 600;
 }
