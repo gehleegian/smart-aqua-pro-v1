@@ -8,7 +8,7 @@ import { inventoryDevice, inventoryTelemetry, joinInventory,
 
 export type DeviceInventorySnapshot = {
   rows: InventoryRow[]; telemetry: Record<string, InventoryTelemetry | null>;
-  errors: Record<string, string>; connected: boolean; clockOffset: number;
+  errors: Record<string, string>; connected: boolean; clockOffset: number; observedAt: number;
 };
 
 /** Admin-only, read-only. Never subscribe to commands, controls, or history. */
@@ -28,7 +28,7 @@ export function subscribeToDeviceInventory(onData: (data: DeviceInventorySnapsho
   const deviceSubscriptions = new Map<string, () => void>();
   const emit = () => {
     if (!closed && ready.size === 3) onData({ rows: joinInventory(devices, tanks, users, organizations),
-      telemetry: { ...telemetry }, errors: { ...errors }, connected, clockOffset });
+      telemetry: { ...telemetry }, errors: { ...errors }, connected, clockOffset, observedAt: Date.now() });
   };
   const close = () => {
     closed = true;

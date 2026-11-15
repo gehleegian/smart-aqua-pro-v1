@@ -66,14 +66,21 @@ export function inventoryTelemetry(value: unknown): InventoryTelemetry | null {
     turbidity: 'turbidityReadingValid', waterLevel: 'waterLevelReadingValid',
   };
   const validity = evaluateTelemetryValidity(raw, { requireFlags: true });
+  // Existing firmware reports a categorical Clear/Cloudy state without a
+  // validity flag. Accept that established contract only for turbidity; an
+  // explicit invalid flag or malformed numeric value must still take priority.
+  const categoricalTurbidity = (raw.turbidityState === 'Clear' || raw.turbidityState === 'Cloudy') &&
+    (raw.turbidityReadingValid === undefined || raw.turbidityReadingValid === null) &&
+    evaluateTelemetryValidity(raw, { requireFlags: false }).turbidity.status === 'valid';
   const sensorTypes = (Object.keys(fields) as SensorType[]).filter(type => fields[type].some(key => Object.hasOwn(raw, key)));
   const sensors: InventoryTelemetry['sensors'] = {};
   for (const type of sensorTypes) {
     const flag = flags[type];
     sensors[type] = flag && raw[flag] === false
       ? { status: 'Fault', reason: 'The device explicitly marked this sensor sample invalid.' }
-      : flag && raw[flag] === true && type !== 'ammonia' && validity[type].status === 'valid'
-        ? { status: 'Reporting', reason: 'The latest device sample is flagged valid. This does not verify accuracy or electrical power.' }
+      : (type === 'turbidity' && categoricalTurbidity) ||
+        (flag && raw[flag] === true && type !== 'ammonia' && validity[type].status === 'valid')
+        ? { status: 'Reporting', reason: 'The latest device sample contains a valid supported reading. This does not verify accuracy or electrical power.' }
         : { status: 'Unknown', reason: 'A complete, valid sensor diagnostic was not reported.' };
   }
   return {
