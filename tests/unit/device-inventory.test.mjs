@@ -271,7 +271,7 @@ test('shared temperature diagnostics never invent separate probe statuses or dis
     phReadingValid: true, ph: 8.372, tdsReadingValid: false, tdsPpm: 321.234 });
   const view = h.render(Table, { ...props, data: { ...props.data, rows: joinInventory([row], [], []), telemetry: { tank1: telemetry } } });
   assert.match(view.html, /Temperature × 2/);
-  assert.match(view.html, /Shared channel only; individual probe status unknown/);
+  assert.doesNotMatch(view.html, /Shared channel only; individual probe status unknown/);
   assert.match(view.html, />Reporting<\/span>/);
   assert.match(view.html, />Fault<\/span>/);
   assert.match(view.html, /<details/);
