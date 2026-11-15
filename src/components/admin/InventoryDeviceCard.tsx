@@ -1,11 +1,11 @@
 import { ChevronDown } from 'lucide-react';
 import Badge from '../ui/Badge';
-import type { InventoryRow, inventorySensorStatuses, inventoryStatus } from '../../utils/deviceInventory';
+import type { InventoryRow, inventoryEquipmentStatuses, inventorySensorStatuses, inventoryStatus } from '../../utils/deviceInventory';
 
 type SensorRow = ReturnType<typeof inventorySensorStatuses>[number];
-export function InventoryDeviceCard({ row, index, status, sensors, updatedAt, error }: {
+export function InventoryDeviceCard({ row, index, status, sensors, equipment, updatedAt, error }: {
   row: InventoryRow; index: number; status: ReturnType<typeof inventoryStatus>;
-  sensors: SensorRow[]; updatedAt?: number; error?: string;
+  sensors: SensorRow[]; equipment: ReturnType<typeof inventoryEquipmentStatuses>; updatedAt?: number; error?: string;
 }) {
   const headingId = `device-heading-${row.id}`;
   return <article aria-labelledby={headingId} className="rounded-xl border border-slate-600/35 bg-slate-900/25 p-4 sm:p-5">
@@ -41,6 +41,16 @@ export function InventoryDeviceCard({ row, index, status, sensors, updatedAt, er
         {sensor.count === null && <p className="mt-1 text-xs text-slate-400">Reported type; installed quantity not recorded.</p>}
       </li>)}
     </ul> : <p className="mt-2 text-sm text-slate-400">No sensor inventory or sensor types reported.</p>}
+    {equipment.length > 0 && <section className="mt-4" aria-label={`${row.id}: equipment status`}>
+      <h5 className="text-sm font-medium text-slate-200">Equipment status</h5>
+      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+        {equipment.map(item => <li key={item.type} className="flex items-center justify-between gap-2 rounded-lg border border-slate-600/30 p-3">
+          <span className="text-sm font-medium text-white">{item.label}</span>
+          <Badge variant={item.status === 'On' ? 'success' : 'default'}>{item.status}</Badge>
+        </li>)}
+      </ul>
+      <p className="mt-2 text-xs text-slate-400">Device-reported relay state, not verified physical operation. Unknown when telemetry is missing or stale.</p>
+    </section>}
     <details className="group mt-4 border-t border-slate-600/30 pt-3">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-2 text-sm font-medium text-teal-200 focus-visible:outline-2 focus-visible:outline-teal-300">
         Device details <span className="sr-only">for {row.id}</span><ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
