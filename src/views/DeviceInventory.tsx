@@ -8,7 +8,7 @@ import StatusMessage from '../components/ui/StatusMessage';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useNow } from '../hooks/useNow';
 import { subscribeToDeviceInventory, type DeviceInventorySnapshot } from '../services/deviceInventoryService';
-import { inventoryCounts, inventorySensorStatuses, inventoryStatus } from '../utils/deviceInventory';
+import { inventoryCounts, inventoryEquipmentStatuses, inventorySensorStatuses, inventoryStatus } from '../utils/deviceInventory';
 
 const statusOptions = ['All statuses', 'Online', 'Offline', 'Not reporting', 'Unavailable', 'Unassigned'];
 
@@ -23,6 +23,7 @@ export function DeviceInventoryTable({ data, now }: { data: DeviceInventorySnaps
   const rows = data.rows.map(row => ({ ...row,
     liveStatus: inventoryStatus(row, data.telemetry[row.aquariumId], data.connected, clock, data.errors[row.aquariumId]),
     sensorStatuses: inventorySensorStatuses(row, data.telemetry[row.aquariumId], data.connected, clock, data.errors[row.aquariumId]),
+    equipmentStatuses: inventoryEquipmentStatuses(row, data.telemetry[row.aquariumId], data.connected, clock, data.errors[row.aquariumId]),
   }));
   const query = search.trim().toLowerCase();
   const filtered = rows.filter(row => (statusFilter === 'All statuses' || row.liveStatus === statusFilter) &&
@@ -68,7 +69,7 @@ export function DeviceInventoryTable({ data, now }: { data: DeviceInventorySnaps
         </div>
         <div className="space-y-4">
           {page.items.map((row, index) => <InventoryDeviceCard key={row.id} row={row} index={page.startIndex + index + 1}
-            status={row.liveStatus} sensors={row.sensorStatuses} updatedAt={data.telemetry[row.aquariumId]?.updatedAt} error={data.errors[row.aquariumId]} />)}
+            status={row.liveStatus} sensors={row.sensorStatuses} equipment={row.equipmentStatuses} updatedAt={data.telemetry[row.aquariumId]?.updatedAt} error={data.errors[row.aquariumId]} />)}
           {filtered.length === 0 && <p role="status" className="py-6 text-sm text-slate-300">{rows.length ? 'No devices match your filters.' : 'No devices have been registered.'}</p>}
         </div>
         <Pagination {...page} label="Device inventory" itemLabel="devices" />

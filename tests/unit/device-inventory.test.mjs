@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inventoryCounts, inventoryDevice, inventoryTelemetry, inventoryStatus, inventorySensorStatuses, joinInventory } from '../../src/utils/deviceInventory.ts';
+import { inventoryCounts, inventoryDevice, inventoryTelemetry, inventoryStatus, inventorySensorStatuses, inventoryEquipmentStatuses, joinInventory } from '../../src/utils/deviceInventory.ts';
 import { paginationUiHarness } from '../helpers/paginationUiHarness.mjs';
 
 const now = Date.UTC(2026, 10, 14, 4);
@@ -261,6 +261,75 @@ test('each installed sensor remains visible, but all become Unknown when fresh c
   for (const [connected, time, error] of [[true, now + 60001], [false, now], [true, now, 'read denied']]) {
     sensors = inventorySensorStatuses(installed, live, connected, time, error);
     assert.ok(sensors.every(sensor => sensor.status === 'Unknown'));
+  }
+});
+
+test('inventory normalizes only device-reported equipment states and respects freshness and installation', () => {
+  const installed = inventoryDevice('SAQ-7K3M-9R2X', { status: 'claimed', aquariumId: 'tank1' });
+  const states = (raw, connected = true, time = now, error) => inventoryEquipmentStatuses(installed,
+    inventoryTelemetry({ online: true, updatedAt: now, ...raw }), connected, time, error);
+  assert.deepEqual(states({ lightState: 'On', filterState: 'Inactive' }), [
+    { type: 'lights', label: 'Lights', status: 'On' }, { type: 'filter', label: 'Filter', status: 'Off' },
+  ]);
+  assert.deepEqual(states({ lightState: 'Off', filterState: 'Active' }).map(item => item.status), ['Off', 'On']);
+  for (const raw of [{}, { lightState: true, filterState: false }, { lightState: 'on', filterState: 'On' },
+    { lightState: 'Fault', filterState: 'Fault' }]) {
+    assert.ok(states(raw).every(item => item.status === 'Unknown'));
+  }
+  const raw = { lightState: 'On', filterState: 'Active' };
+  assert.ok(states(raw, true, now + 60000).every(item => item.status === 'On'));
+  for (const [connected, time, error] of [[false, now], [true, now + 60001], [true, now - 1001],
+    [true, now, 'permission denied']]) {
+    assert.ok(states(raw, connected, time, error).every(item => item.status === 'Unknown'));
+  }
+  assert.ok(states({ ...raw, online: false }).every(item => item.status === 'Unknown'));
+  const telemetry = inventoryTelemetry({ ...raw, online: true, updatedAt: now, ph: 7, phReadingValid: false, secret: 'NEVER-KEEP' });
+  assert.deepEqual(inventoryEquipmentStatuses(installed, telemetry, true, now).map(item => item.status), ['On', 'On']);
+  assert.doesNotMatch(JSON.stringify(telemetry), /NEVER-KEEP|lightState|filterState/);
+  assert.deepEqual(inventoryEquipmentStatuses({ ...installed, equipment: [] }, telemetry, true, now), []);
+  assert.equal(inventoryEquipmentStatuses({ ...installed, equipment: ['Lighting'] }, telemetry, true, now).length, 1);
+  assert.ok(inventoryEquipmentStatuses({ ...installed, registration: 'unclaimed' }, telemetry, true, now).every(item => item.status === 'Unknown'));
+  assert.deepEqual(inventoryEquipmentStatuses(device, inventoryTelemetry({ online: true, updatedAt: now }), true, now), []);
+});
+
+test('equipment status UI stays aquarium-specific, read-only and separate from physical sensor count', () => {
+  const { harness: h, DeviceInventoryTable: Table, props } = tableHarness();
+  const rows = joinInventory([
+    inventoryDevice('SAQ-7K3M-9R2X', { status: 'claimed', aquariumId: 'tank1' }),
+    inventoryDevice('SAQ-HGCA-SJRS', { status: 'claimed', aquariumId: 'tank2' }),
+  ], [], []);
+  const data = { ...props.data, rows, telemetry: {
+    tank1: inventoryTelemetry({ online: true, updatedAt: now, lightState: 'On', filterState: 'Inactive' }),
+    tank2: inventoryTelemetry({ online: true, updatedAt: now, lightState: 'Off', filterState: 'Active' }),
+  } };
+  const view = h.render(Table, { ...props, data });
+  for (const id of ['SAQ-7K3M-9R2X', 'SAQ-HGCA-SJRS']) {
+    const section = view.nodes.find(node => node.type === 'section' && node.props['aria-label'] === id + ': equipment status');
+    assert.ok(section);
+  }
+  assert.equal((view.html.match(/6 configured sensors/g) || []).length, 2);
+  assert.equal((view.html.match(/>On<\/span>/g) || []).length, 2);
+  assert.equal((view.html.match(/>Off<\/span>/g) || []).length, 2);
+  assert.match(view.html, /Device-reported relay state, not verified physical operation/);
+  assert.doesNotMatch(view.html, /Turn on|Turn off|Toggle|LIGHT ON|FILTER ON/);
+  const stale = h.render(Table, { ...props, data, now: now + 60001 });
+  assert.doesNotMatch(stale.html, />On<\/span>|>Off<\/span>/);
+});
+
+test('mobile and web equipment inventory status contracts match', async t => {
+  const { existsSync } = await import('node:fs');
+  const url = new URL('../../../smart-aqua-mobile/src/utils/deviceInventory.ts', import.meta.url);
+  if (!existsSync(url)) { t.skip('Mobile checkout is not present'); return; }
+  const mobile = await import(url.href);
+  const installed = inventoryDevice('SAQ-HGCA-SJRS', { status: 'claimed', aquariumId: 'tank2' });
+  for (const extra of [{ lightState: 'On', filterState: 'Active' }, { lightState: 'Off', filterState: 'Inactive' },
+    { lightState: 'bad', filterState: true }, {}]) {
+    const raw = { online: true, updatedAt: now, ...extra };
+    assert.deepEqual(mobile.inventoryTelemetry(raw), inventoryTelemetry(raw));
+    for (const connected of [true, false]) for (const time of [now, now + 60001]) {
+      assert.deepEqual(mobile.inventoryEquipmentStatuses(installed, mobile.inventoryTelemetry(raw), connected, time),
+        inventoryEquipmentStatuses(installed, inventoryTelemetry(raw), connected, time));
+    }
   }
 });
 

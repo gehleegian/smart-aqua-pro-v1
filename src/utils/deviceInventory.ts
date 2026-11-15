@@ -16,6 +16,7 @@ export type InventoryDevice = {
 export type InventoryTelemetry = {
   updatedAt?: number; online?: boolean; sensorTypes: SensorType[];
   sensors: Partial<Record<SensorType, SensorSignal>>;
+  equipment: Partial<Record<'lights' | 'filter', 'On' | 'Off' | 'Unknown'>>;
 };
 export type SensorSignal = { status: 'Reporting' | 'Fault' | 'Unknown'; reason: string };
 export type InventoryDeviceStatus = 'Unassigned' | 'Unavailable' | 'Not reporting' | 'Online' | 'Offline';
@@ -88,6 +89,14 @@ export function inventoryTelemetry(value: unknown): InventoryTelemetry | null {
       ? raw.updatedAt : undefined,
     online: typeof raw.online === 'boolean' ? raw.online : undefined,
     sensorTypes, sensors,
+    equipment: {
+      ...(Object.hasOwn(raw, 'lightState') ? {
+        lights: raw.lightState === 'On' || raw.lightState === 'Off' ? raw.lightState : 'Unknown',
+      } : {}),
+      ...(Object.hasOwn(raw, 'filterState') ? {
+        filter: raw.filterState === 'Active' ? 'On' : raw.filterState === 'Inactive' ? 'Off' : 'Unknown',
+      } : {}),
+    },
   };
 }
 
@@ -100,6 +109,22 @@ export function inventorySensorStatuses(device: InventoryDevice, telemetry: Inve
     ...(live ? telemetry?.sensors?.[sensor.type] || { status: 'Unknown' as const, reason: 'No diagnostic for this installed sensor was reported.' }
       : { status: 'Unknown' as const, reason: 'A fresh device connection is required to determine sensor status.' }),
   }));
+}
+
+/** Device-reported relay output only: never infer physical light/flow feedback. */
+export function inventoryEquipmentStatuses(device: InventoryDevice, telemetry: InventoryTelemetry | null | undefined,
+  connected: boolean, now: number, error?: string) {
+  const live = inventoryStatus(device, telemetry, connected, now, error) === 'Online';
+  const options = [
+    { type: 'lights' as const, label: 'Lights', inventoryLabel: 'Lighting' },
+    { type: 'filter' as const, label: 'Filter', inventoryLabel: 'Filtration' },
+  ];
+  return options.filter(item => device.equipment !== null
+    ? device.equipment.includes(item.inventoryLabel)
+    : Object.hasOwn(telemetry?.equipment || {}, item.type))
+    .map(({ type, label }) => ({ type, label,
+      status: live ? telemetry?.equipment?.[type] ?? 'Unknown' : 'Unknown' as const,
+    }));
 }
 
 export function inventoryStatus(device: InventoryDevice, telemetry: InventoryTelemetry | null | undefined,
