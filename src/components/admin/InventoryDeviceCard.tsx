@@ -38,7 +38,6 @@ export function InventoryDeviceCard({ row, index, status, sensors, updatedAt, er
           <span title={sensor.reason}><Badge variant={sensor.status === 'Reporting' ? 'success' : sensor.status === 'Fault' ? 'danger' : 'default'}>{sensor.status}</Badge></span>
         </div>
         <p className="mt-1 text-xs text-slate-400">{sensor.reason}</p>
-        {sensor.count !== null && sensor.count > 1 && <p className="mt-1 text-xs text-amber-200">Shared channel only; individual probe status unknown.</p>}
         {sensor.count === null && <p className="mt-1 text-xs text-slate-400">Reported type; installed quantity not recorded.</p>}
       </li>)}
     </ul> : <p className="mt-2 text-sm text-slate-400">No sensor inventory or sensor types reported.</p>}
