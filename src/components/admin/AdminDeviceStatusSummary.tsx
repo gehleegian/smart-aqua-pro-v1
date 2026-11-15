@@ -10,7 +10,8 @@ import { inventoryCounts } from '../../utils/deviceInventory';
 export function AdminDeviceStatusCards({ data, now, onOpenInventory }: {
   data: DeviceInventorySnapshot; now: number; onOpenInventory: () => void;
 }) {
-  const counts = inventoryCounts(data.rows, data.telemetry, data.connected, now + data.clockOffset, data.errors);
+  const clock = Math.max(now, data.observedAt) + data.clockOffset;
+  const counts = inventoryCounts(data.rows, data.telemetry, data.connected, clock, data.errors);
   const cards: [string, number][] = [
     ['Registered devices', counts.registered], ['Online', counts.online],
     ['Offline', counts.offline], ['Not reporting / unavailable', counts.notReporting],

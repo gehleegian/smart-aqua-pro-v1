@@ -16,16 +16,20 @@ export function DeviceInventoryTable({ data, now }: { data: DeviceInventorySnaps
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All statuses');
   const [sensorFilter, setSensorFilter] = useState('All sensors');
+  // A telemetry callback can arrive after the last five-second clock tick.
+  // Use its local receipt time, not its device timestamp, to avoid false
+  // future-data failures without relaxing freshness or clock-skew validation.
+  const clock = Math.max(now, data.observedAt) + data.clockOffset;
   const rows = data.rows.map(row => ({ ...row,
-    liveStatus: inventoryStatus(row, data.telemetry[row.aquariumId], data.connected, now + data.clockOffset, data.errors[row.aquariumId]),
-    sensorStatuses: inventorySensorStatuses(row, data.telemetry[row.aquariumId], data.connected, now + data.clockOffset, data.errors[row.aquariumId]),
+    liveStatus: inventoryStatus(row, data.telemetry[row.aquariumId], data.connected, clock, data.errors[row.aquariumId]),
+    sensorStatuses: inventorySensorStatuses(row, data.telemetry[row.aquariumId], data.connected, clock, data.errors[row.aquariumId]),
   }));
   const query = search.trim().toLowerCase();
   const filtered = rows.filter(row => (statusFilter === 'All statuses' || row.liveStatus === statusFilter) &&
     (sensorFilter === 'All sensors' || row.sensorStatuses.some(sensor => sensor.status === (sensorFilter === 'Sensor faults' ? 'Fault' : 'Unknown'))) &&
     [row.id, row.ownerName, row.ownerEmail, row.aquariumName, row.aquariumId, row.orgName].some(value => value.toLowerCase().includes(query)));
   const page = useClientPagination(filtered, JSON.stringify([query, statusFilter, sensorFilter]));
-  const counts = inventoryCounts(data.rows, data.telemetry, data.connected, now + data.clockOffset, data.errors);
+  const counts = inventoryCounts(data.rows, data.telemetry, data.connected, clock, data.errors);
   return <div className="space-y-6">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {[

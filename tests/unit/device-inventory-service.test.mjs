@@ -67,6 +67,8 @@ test('inventory only reads metadata and bound telemetry; synchronizes and releas
   h.rtdb('devices/tank1/telemetry', { online: true, updatedAt: Date.now(), phReadingValid: false, ph: 0 });
   assert.equal(h.data.at(-1).connected, true);
   assert.equal(h.data.at(-1).clockOffset, 1234);
+  assert.ok(Number.isFinite(h.data.at(-1).observedAt));
+  assert.ok(Math.abs(h.data.at(-1).observedAt - Date.now()) < 1000);
   assert.deepEqual(h.data.at(-1).telemetry.tank1.sensorTypes, ['ph']);
   assert.doesNotMatch(JSON.stringify(h.data), /NEVER-EXPOSE/);
   assert.ok(!h.reads.some(path => /commands|control|history|reserved/.test(path)));

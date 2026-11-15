@@ -106,12 +106,14 @@ test('current aquarium ownership wins over historical claimant; no guessing uncl
 function tableHarness() {
   const harness = paginationUiHarness({ mocks: {
     '../services/deviceInventoryService': { subscribeToDeviceInventory() { throw new Error('No subscriptions in table rendering'); } },
+    '../../services/deviceInventoryService': { subscribeToDeviceInventory() { throw new Error('No subscriptions in card rendering'); } },
     '../hooks/useNow': { useNow: () => now },
+    '../../hooks/useNow': { useNow: () => now },
   } });
   const { DeviceInventoryTable } = harness.load(new URL('../../src/views/DeviceInventory.tsx', import.meta.url));
   const rows = joinInventory(Array.from({ length: 12 }, (_, index) => ({ ...device, id: `SAQ-TEST-${String(index).padStart(4, '0')}` })),
     [{ id: 'tank1', name: 'Tank', ownerId: 'owner', ownerName: 'Owner' }], []);
-  const props = { now, data: { rows, telemetry: { tank1: heartbeat }, errors: {}, connected: true, clockOffset: 0 } };
+  const props = { now, data: { rows, telemetry: { tank1: heartbeat }, errors: {}, connected: true, clockOffset: 0, observedAt: now } };
   return { harness, DeviceInventoryTable, props };
 }
 
@@ -181,6 +183,70 @@ test('sensor diagnostics are reduced to status only, with explicit invalid flags
   for (const raw of [{ phReadingValid: true }, { phReadingValid: true, ph: -20 }, { phReadingValid: 'false', ph: 8 }, { ammoniaPpm: 1 }]) {
     const unknown = inventoryTelemetry(raw);
     assert.ok(Object.values(unknown.sensors).every(sensor => sensor.status === 'Unknown'));
+  }
+});
+
+test('categorical turbidity reports without a legacy firmware validity flag, but never overrides faults', () => {
+  for (const turbidityState of ['Clear', 'Cloudy']) {
+    const raw = { online: true, updatedAt: now, turbidityState };
+    const parsed = inventoryTelemetry(raw);
+    assert.equal(parsed.sensors.turbidity.status, 'Reporting');
+    assert.doesNotMatch(JSON.stringify(parsed), /Clear|Cloudy/);
+    assert.equal(inventoryTelemetry({ ...raw, turbidityReadingValid: false }).sensors.turbidity.status, 'Fault');
+    for (const extra of [{ turbidityReadingValid: 'true' }, { turbidityReadingValid: 1 },
+      { turbidity: -1 }, { turbidity: 'bad' }, { turbidity: Infinity }]) {
+      assert.equal(inventoryTelemetry({ ...raw, ...extra }).sensors.turbidity.status, 'Unknown');
+    }
+  }
+  for (const turbidityState of ['Unknown', 'clear', 'cloudy', '', null, 1]) {
+    assert.equal(inventoryTelemetry({ turbidityState }).sensors.turbidity.status, 'Unknown');
+  }
+  // Numeric-only readings and other sensors still require explicit diagnostics.
+  assert.equal(inventoryTelemetry({ turbidity: 10 }).sensors.turbidity.status, 'Unknown');
+  assert.equal(inventoryTelemetry({ ph: 7 }).sensors.ph.status, 'Unknown');
+});
+
+test('fresh callbacks between clock ticks do not flicker sensor statuses or admin fleet counts', () => {
+  const { harness: h, DeviceInventoryTable: Table, props } = tableHarness();
+  const { AdminDeviceStatusCards } = h.load(new URL('../../src/components/admin/AdminDeviceStatusSummary.tsx', import.meta.url));
+  const rows = joinInventory([
+    inventoryDevice('SAQ-7K3M-9R2X', { status: 'claimed', aquariumId: 'tank1' }),
+    inventoryDevice('SAQ-HGCA-SJRS', { status: 'claimed', aquariumId: 'tank2' }),
+  ], [], []);
+  const renderData = (time, connected = true) => ({ ...props.data, rows, connected, observedAt: time,
+    clockOffset: 2000, telemetry: Object.fromEntries(['tank1', 'tank2'].map(id => [id,
+      inventoryTelemetry({ online: true, updatedAt: time + 2000, ph: 7, phReadingValid: true,
+        turbidityState: id === 'tank1' ? 'Clear' : 'Cloudy' })])) });
+  for (const elapsed of [0, 1500, 4500, 15000]) {
+    const data = renderData(now + elapsed);
+    const view = h.render(Table, { ...props, data });
+    assert.equal((view.html.match(/>Reporting<\/span>/g) || []).length, 4);
+    assert.equal((view.html.match(/>Online<\/span>/g) || []).length, 2);
+    const cards = h.render(AdminDeviceStatusCards, { data, now, onOpenInventory() {} });
+    assert.match(cards.html, /Online<\/p><p[^>]*>2<\/p>/);
+  }
+  const data = renderData(now + 4500);
+  for (const changed of [
+    { data, now: now + 4500 + 60001 },
+    { data: { ...data, connected: false }, now },
+    { data: { ...data, errors: { tank1: 'read denied', tank2: 'read denied' } }, now },
+    { data: { ...data, observedAt: now }, now }, // Genuinely future-dated samples stay unknown.
+  ]) {
+    const view = h.render(Table, { ...props, ...changed });
+    assert.doesNotMatch(view.html, />Reporting<\/span>/);
+  }
+});
+
+test('mobile keeps the categorical turbidity inventory contract in parity', async t => {
+  const { existsSync } = await import('node:fs');
+  const url = new URL('../../../smart-aqua-mobile/src/utils/deviceInventory.ts', import.meta.url);
+  if (!existsSync(url)) { t.skip('Mobile checkout is not present'); return; }
+  const mobile = await import(url.href);
+  for (const extra of [{ turbidityState: 'Clear' }, { turbidityState: 'Cloudy' },
+    { turbidityState: 'Unknown' }, { turbidityState: 'Cloudy', turbidityReadingValid: false },
+    { turbidityState: 'Clear', turbidity: -1 }, { turbidity: 2, turbidityReadingValid: true }]) {
+    const raw = { online: true, updatedAt: now, ...extra };
+    assert.deepEqual(mobile.inventoryTelemetry(raw), inventoryTelemetry(raw));
   }
 });
 
