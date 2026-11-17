@@ -46,7 +46,10 @@ test('critical banner guides users to recommendations and shows only affected re
   assert.match(view.html, /Assessed value: 9.1/);
   assert.match(view.html, /pH: existing assessment explanation/);
   const start = view.html.indexOf('Readings needing attention');
-  assert.ok(start > view.html.indexOf('Equipment Diagnostic'));
+  assert.ok(start > view.html.indexOf('Estimated Bioload'));
+  assert.doesNotMatch(view.html, /Equipment Diagnostic|Device-reported diagnostic; not physical verification/);
+  assert.match(view.html, /Filtration Output/);
+  assert.match(view.html, /Lighting Output/);
   assert.ok(start < view.html.indexOf('Aquarium Profile'));
   const summary = view.html.slice(start, view.html.indexOf('Aquarium Profile'));
   assert.ok(summary.indexOf('pH') < summary.indexOf('TDS'));

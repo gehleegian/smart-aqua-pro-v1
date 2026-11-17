@@ -302,20 +302,6 @@ export function AquariumDetailsView({
               }
             />
             <Reading
-              label="Equipment Diagnostic"
-              attention={attention.findings.find(item => item.parameter === 'equipment')}
-              value={
-                aquarium.telemetryState === "live"
-                  ? (aquarium.reportedEquipmentStatus ?? "--")
-                  : "--"
-              }
-              status={
-                aquarium.telemetryState === "live"
-                  ? "Device-reported diagnostic; not physical verification"
-                  : "Waiting for live telemetry"
-              }
-            />
-            <Reading
               label="Estimated Bioload"
               value={formatEstimatedBioload(aquarium.estimatedBioloadGL)}
               status={
